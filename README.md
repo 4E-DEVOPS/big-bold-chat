@@ -3,7 +3,7 @@
 <sub><b>[</b> A.K.A. BBC — Big Bold Chat <b>]</b></sub>
 
 <p align="center">
-  <img src="images/logo-big.png" alt="ChatXL Logo" width="328">
+  <img src="images/LOGO-Big.png" alt="ChatXL Logo" width="328">
 </p>
 
 > **ChatXL** is a RuneLite plugin that makes the Old School RuneScape chatbox easier to read by letting you use larger and alternative in-game fonts while keeping the familiar RuneScape chat experience.
