@@ -18,8 +18,8 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.util.Text;
 
 /**
@@ -592,14 +592,15 @@ public final class ChatDiagnostics
 
         collectWidgetTree(
                 client.getWidget(
-                        WidgetInfo.CHATBOX_MESSAGE_LINES),
+                        InterfaceID.Chatbox.SCROLLAREA),
                 Surface.CHATBOX,
                 result,
                 visited);
 
         collectWidgetTree(
                 client.getWidget(
-                        WidgetInfo.PRIVATE_CHAT_MESSAGE),
+                        InterfaceID.PM_CHAT,
+                        0),
                 Surface.SPLIT_PRIVATE,
                 result,
                 visited);

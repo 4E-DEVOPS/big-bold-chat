@@ -12,8 +12,8 @@ import java.util.List;
 import net.runelite.api.Client;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetInfo;
 
 /**
  * Production Chat XL layout service.
@@ -873,7 +873,7 @@ public final class FontLayoutService
 
         final Widget chatMessageLines =
                 client.getWidget(
-                        WidgetInfo.CHATBOX_MESSAGE_LINES);
+                        InterfaceID.Chatbox.SCROLLAREA);
 
         if (chatMessageLines == null)
         {
@@ -1043,9 +1043,10 @@ public final class FontLayoutService
         final Widget root =
                 surface == Surface.SPLIT_PRIVATE
                         ? client.getWidget(
-                        WidgetInfo.PRIVATE_CHAT_MESSAGE)
+                        InterfaceID.PM_CHAT,
+                        0)
                         : client.getWidget(
-                        WidgetInfo.CHATBOX_MESSAGE_LINES);
+                        InterfaceID.Chatbox.SCROLLAREA);
 
         if (root == null)
         {
@@ -1343,7 +1344,7 @@ public final class FontLayoutService
 
         final Widget root =
                 client.getWidget(
-                        WidgetInfo.CHATBOX_MESSAGE_LINES);
+                        InterfaceID.Chatbox.SCROLLAREA);
 
         if (root == null)
         {
@@ -1475,7 +1476,8 @@ public final class FontLayoutService
 
         final Widget splitPrivate =
                 client.getWidget(
-                        WidgetInfo.PRIVATE_CHAT_MESSAGE);
+                        InterfaceID.PM_CHAT,
+                        0);
 
         if (splitPrivate != null
                 && parentWidgetId

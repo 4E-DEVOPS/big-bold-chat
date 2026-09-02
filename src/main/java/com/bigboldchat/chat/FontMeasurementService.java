@@ -11,8 +11,8 @@ import java.util.Locale;
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
 import net.runelite.api.FontTypeFace;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.util.Text;
 
 /**
@@ -694,7 +694,8 @@ public final class FontMeasurementService
 
         final Widget splitPrivate =
                 client.getWidget(
-                        WidgetInfo.PRIVATE_CHAT_MESSAGE);
+                        InterfaceID.PM_CHAT,
+                        0);
 
         return splitPrivate != null
                 && parentWidgetId
@@ -1003,7 +1004,7 @@ public final class FontMeasurementService
     {
         final Widget probe =
                 client.getWidget(
-                        WidgetInfo.CHATBOX_INPUT);
+                        InterfaceID.Chatbox.INPUT);
 
         if (probe == null)
         {
