@@ -152,7 +152,7 @@ For layout issues, a screenshot showing the surrounding chatbox is especially he
   <img src="src/main/resources/com/bigboldchat/media/Verdana13Bold.jpg" alt="Verdana 13 Bold" width="500">
 </p>
 
-- <b>NOTE:</b> Verdana 13 Bold <u>purposefully</u> replaces colons (":") with hyphens ("-") due to a Jagex glyph-rendering issue.
+- <b>NOTE:</b> Verdana 13 Bold <u><i>purposefully</i></u> replaces malformed colons (":") with hyphens ("-") due to a Jagex glyph-rendering issue.
 
 ---
 
