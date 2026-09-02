@@ -3,7 +3,7 @@
 <sub><b>[</b> A.K.A. BBC — Big Bold Chat <b>]</b></sub>
 
 <p align="center">
-  <img src="src/main/resources/com/bigboldchat/media/logo-big.png" alt="ChatXL Logo" width="328">
+  <img src="images/logo-big.png" alt="ChatXL Logo" width="328">
 </p>
 
 > **ChatXL** is a RuneLite plugin that makes the Old School RuneScape chatbox easier to read by letting you use larger and alternative in-game fonts while keeping the familiar RuneScape chat experience.
@@ -11,7 +11,7 @@
 > Whether you want bigger text, a bolder font, or simply something easier on the eyes, **ChatXL** automatically adjusts chat spacing, wrapping, usernames, icons, and message rows to fit your selected font.
 
 <p align="left">
-  <img src="src/main/resources/com/bigboldchat/media/Barbarian.jpg" alt="Barbarian Font" width="500">
+  <img src="images/Barbarian.jpg" alt="Barbarian Font" width="500">
 </p>
 
 ---
@@ -53,15 +53,15 @@ Available fonts include:
 Each font is individually adjusted so that chat remains readable and properly aligned.
 
 <p align="left">
-  <img src="src/main/resources/com/bigboldchat/media/Plain11.jpg" alt="Plain 11" width="500">
+  <img src="images/Plain11.jpg" alt="Plain 11" width="500">
 </p>
 
 <p align="left">
-  <img src="src/main/resources/com/bigboldchat/media/Bold12.jpg" alt="Bold 12" width="500">
+  <img src="images/Bold12.jpg" alt="Bold 12" width="500">
 </p>
 
 <p align="left">
-  <img src="src/main/resources/com/bigboldchat/media/Verdana15.jpg" alt="Verdana 15" width="500">
+  <img src="images/Verdana15.jpg" alt="Verdana 15" width="500">
 </p>
 
 ---
@@ -84,7 +84,7 @@ ChatXL is designed to work throughout the RuneScape chatbox, including:
 ChatXL also preserves the icons and labels normally shown alongside messages, including clan ranks and account/build icons where applicable.
 
 <p align="left">
-  <img src="src/main/resources/com/bigboldchat/media/QuillMedium.jpg" alt="Quill Medium" width="500">
+  <img src="images/QuillMedium.jpg" alt="Quill Medium" width="500">
 </p>
 
 ---
@@ -113,7 +113,7 @@ After installing the plugin:
 There is no need to restart RuneLite when changing fonts.
 
 <p align="left">
-  <img src="src/main/resources/com/bigboldchat/media/Configurations.jpg" alt="Configurations" width="225">
+  <img src="images/Configurations.jpg" alt="Configurations" width="225">
 </p>
 
 ---
@@ -149,7 +149,7 @@ If something does not look right, please open a GitHub issue and include:
 For layout issues, a screenshot showing the surrounding chatbox is especially helpful.
 
 <p align="left">
-  <img src="src/main/resources/com/bigboldchat/media/Verdana13Bold.jpg" alt="Verdana 13 Bold" width="500">
+  <img src="images/Verdana13Bold.jpg" alt="Verdana 13 Bold" width="500">
 </p>
 
 - <b>NOTE:</b> Verdana 13 Bold <u><i>purposefully</i></u> replaces malformed colons (":") with hyphens ("-") due to a Jagex glyph-rendering issue.
