@@ -2,6 +2,7 @@ package com.bigboldchat.chat;
 
 import com.bigboldchat.Configurations;
 import com.bigboldchat.config.ChatFont;
+import com.bigboldchat.debug.PerformanceMetrics;
 import com.bigboldchat.fonts.ChatFontProfile;
 import com.bigboldchat.fonts.ChatFontRegistry;
 
@@ -62,6 +63,10 @@ public final class FontLayoutService
     private final Client client;
     private final Configurations config;
     private final FontMeasurementService measurementService;
+    private final ChatTextNormalizer textNormalizer;
+
+    // TODO: Record layout performance during development.
+    private final PerformanceMetrics performanceMetrics;
 
     /*
      * One exact PRE -> POST construction pair.
@@ -91,6 +96,36 @@ public final class FontLayoutService
             Configurations config,
             FontMeasurementService measurementService)
     {
+        this(
+                client,
+                config,
+                measurementService,
+                new ChatTextNormalizer(),
+                null);
+    }
+
+    public FontLayoutService(
+            Client client,
+            Configurations config,
+            FontMeasurementService measurementService,
+            PerformanceMetrics performanceMetrics)
+    {
+        this(
+                client,
+                config,
+                measurementService,
+                new ChatTextNormalizer(
+                        performanceMetrics),
+                performanceMetrics);
+    }
+
+    public FontLayoutService(
+            Client client,
+            Configurations config,
+            FontMeasurementService measurementService,
+            ChatTextNormalizer textNormalizer,
+            PerformanceMetrics performanceMetrics)
+    {
         this.client =
                 client;
 
@@ -99,6 +134,15 @@ public final class FontLayoutService
 
         this.measurementService =
                 measurementService;
+
+        this.textNormalizer =
+                textNormalizer != null
+                        ? textNormalizer
+                        : new ChatTextNormalizer(
+                        performanceMetrics);
+
+        this.performanceMetrics =
+                performanceMetrics;
     }
 
     /*
@@ -163,11 +207,24 @@ public final class FontLayoutService
             return;
         }
 
+        // TODO: Measure construction measurement during development.
+        final long measurementStarted =
+                performanceMetrics != null
+                        ? System.nanoTime()
+                        : 0L;
+
         final FontMeasurementService.ConstructionMeasurement measurement =
                 measurementService.measure(
                         scriptId,
                         selectedChatFont,
                         fontProfile);
+
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordMeasurement(
+                    System.nanoTime()
+                            - measurementStarted);
+        }
 
         if (measurement == null)
         {
@@ -426,7 +483,7 @@ public final class FontLayoutService
             }
 
             final String semantic =
-                    measurementService.normalizeSemantic(
+                    textNormalizer.normalizeSemantic(
                             widget.getText());
 
             if (semantic == null
@@ -679,7 +736,7 @@ public final class FontLayoutService
         }
 
         final String semantic =
-                measurementService.normalizeSemantic(
+                textNormalizer.normalizeSemantic(
                         widget.getText());
 
         if (semantic == null
@@ -769,7 +826,7 @@ public final class FontLayoutService
              */
             if (!pendingOffset.matches(
                     widget,
-                    measurementService))
+                    textNormalizer))
             {
                 continue;
             }
@@ -828,7 +885,7 @@ public final class FontLayoutService
         }
 
         final String semanticPrefix =
-                measurementService.normalizeSemantic(
+                textNormalizer.normalizeSemantic(
                         state.rawPrefixComponents.get(
                                 0));
 
@@ -1040,6 +1097,12 @@ public final class FontLayoutService
             return matches;
         }
 
+        // TODO: Count broad chat-surface searches during development.
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordSurfaceSearch();
+        }
+
         final Widget root =
                 surface == Surface.SPLIT_PRIVATE
                         ? client.getWidget(
@@ -1109,8 +1172,15 @@ public final class FontLayoutService
             return;
         }
 
+        // TODO: Count widgets examined during correlation.
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordWidgetsExamined(
+                    1);
+        }
+
         final String semantic =
-                measurementService.normalizeSemantic(
+                textNormalizer.normalizeSemantic(
                         widget.getText());
 
         if (semantic == null
@@ -1152,7 +1222,7 @@ public final class FontLayoutService
         }
 
         final String lineSemantic =
-                measurementService.normalizeSemantic(
+                textNormalizer.normalizeSemantic(
                         lineWidget.getText());
 
         if (lineSemantic != null
@@ -1167,7 +1237,7 @@ public final class FontLayoutService
         for (String rawComponent : rawPrefixComponents)
         {
             final String semanticComponent =
-                    measurementService.normalizeSemantic(
+                    textNormalizer.normalizeSemantic(
                             rawComponent);
 
             if (semanticComponent == null
@@ -1277,7 +1347,7 @@ public final class FontLayoutService
         for (String rawComponent : rawPrefixComponents)
         {
             final String component =
-                    measurementService.normalizeSemantic(
+                    textNormalizer.normalizeSemantic(
                             rawComponent);
 
             if (component != null
@@ -1310,7 +1380,7 @@ public final class FontLayoutService
             }
 
             final String widgetText =
-                    measurementService.normalizeSemantic(
+                    textNormalizer.normalizeSemantic(
                             widget.getText());
 
             if (widgetText != null
@@ -1351,6 +1421,12 @@ public final class FontLayoutService
             return null;
         }
 
+        // TODO: Count rank-icon searches during development.
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordRankSearch();
+        }
+
         return findRankIconWidget(
                 root,
                 nativeLayout,
@@ -1376,6 +1452,13 @@ public final class FontLayoutService
         visited.put(
                 widget,
                 Boolean.TRUE);
+
+        // TODO: Count rank-tree nodes examined during development.
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordRankNodesExamined(
+                    1);
+        }
 
         /*
          * Strict native-row matching is important.
@@ -1556,10 +1639,10 @@ public final class FontLayoutService
 
         private boolean matches(
                 Widget widget,
-                FontMeasurementService measurementService)
+                ChatTextNormalizer textNormalizer)
         {
             if (widget == null
-                    || measurementService == null)
+                    || textNormalizer == null)
             {
                 return false;
             }
@@ -1576,7 +1659,7 @@ public final class FontLayoutService
             }
 
             final String currentSemanticText =
-                    measurementService.normalizeSemantic(
+                    textNormalizer.normalizeSemantic(
                             widget.getText());
 
             return currentSemanticText != null

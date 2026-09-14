@@ -14,7 +14,7 @@ repositories {
 }
 
 def runeLiteVersion = 'latest.release'
-def pluginMainClass = 'com.bigboldchat.ChatXLTest'
+def pluginMainClass = 'com.bigboldchat.ChatXLLauncher'
 
 dependencies {
 	compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
@@ -23,16 +23,22 @@ dependencies {
 	annotationProcessor 'org.projectlombok:lombok:1.18.30'
 
 	testImplementation 'junit:junit:4.12'
+	testImplementation 'org.mockito:mockito-core:4.11.0'
 	testImplementation group: 'net.runelite', name:'client', version: runeLiteVersion
 	testImplementation group: 'net.runelite', name:'jshell', version: runeLiteVersion
 }
 
 group = 'com.bigboldchat'
+version = '1.1.0'
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
 	options.release.set(11)
 }
+
+/*
+ * RUN BIGBOLDCHAT
+ */
 
 tasks.register('run', JavaExec) {
 	classpath = sourceSets.test.runtimeClasspath
@@ -66,4 +72,84 @@ tasks.register('shadowJar', Jar) {
 	group = BasePlugin.BUILD_GROUP
 	archiveClassifier.set('shadow')
 	archiveFileName.set("${rootProject.name}-${project.version}-all.jar")
+}
+
+/*
+ * TEST TASKS
+ */
+
+tasks.withType(Test).configureEach {
+	testLogging {
+		showStandardStreams = true
+	}
+}
+
+tasks.register('testAll') {
+	group = 'verification'
+	description = 'Runs all BigBoldChat deterministic test suites.'
+
+	dependsOn(
+			'testChat',
+			'testConfig',
+			'testFonts',
+	)
+}
+
+tasks.register('testChat', Test) {
+	group = 'verification'
+	description = 'Tests BigBoldChat supported chat-construction scripts and semantic text normalization behavior.'
+
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+
+	useJUnit()
+
+	filter {
+		includeTestsMatching 'com.bigboldchat.chat.ChatTextNormalizerTest'
+		includeTestsMatching 'com.bigboldchat.chat.FontMeasurementServiceTest'
+	}
+
+	testLogging {
+		events 'passed', 'skipped', 'failed'
+		exceptionFormat 'full'
+	}
+}
+
+tasks.register('testConfig', Test) {
+	group = 'verification'
+	description = 'Tests BigBoldChat player-facing font names and RuneScape FontID mappings.'
+
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+
+	useJUnit()
+
+	filter {
+		includeTestsMatching 'com.bigboldchat.config.ChatFontTest'
+	}
+
+	testLogging {
+		events 'passed', 'skipped', 'failed'
+		exceptionFormat 'full'
+	}
+}
+
+tasks.register('testFonts', Test) {
+	group = 'verification'
+	description = 'Tests BigBoldChat font registry resolution, default fallback behavior, and tuned font-profile geometry and spacing values.'
+
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+
+	useJUnit()
+
+	filter {
+		includeTestsMatching 'com.bigboldchat.fonts.ChatFontRegistryTest'
+		includeTestsMatching 'com.bigboldchat.fonts.ChatFontProfileTest'
+	}
+
+	testLogging {
+		events 'passed', 'skipped', 'failed'
+		exceptionFormat 'full'
+	}
 }

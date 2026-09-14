@@ -131,8 +131,13 @@ ChatXL is intended for players who want:
 - Better readability while keeping the game interface familiar.
 
 ## Coming Soon
-
-<b>V2</b>: Integrated Resizeable Chatbox
+<b>V1.0.1</b>: Performance and production hardening
+<b>V1.1</b>: Break the two large services into focused components
+<b>V1.2</b>: Regression tests and a real compatibility matrix
+<b>V1.3</b>: GIM channel support
+<b>V2.0</b>: Integrated resizeable chatbox
+<b>V2.1</b>: Resize UX polish
+<b>V2.2</b>: Accessibility and player-facing improvements
 
 ---
 

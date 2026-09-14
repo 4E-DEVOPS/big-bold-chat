@@ -1,8 +1,10 @@
 package com.bigboldchat;
 
+import com.bigboldchat.chat.ChatTextNormalizer;
 import com.bigboldchat.chat.FontLayoutService;
 import com.bigboldchat.chat.FontMeasurementService;
 import com.bigboldchat.debug.ChatDiagnostics;
+import com.bigboldchat.debug.PerformanceMetrics;
 
 import com.google.inject.Provides;
 
@@ -31,6 +33,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 public class ChatXL extends Plugin
 {
 	private static final boolean DIAGNOSTICS_ENABLED = false;
+	private static final boolean PERFORMANCE_METRICS = true;
 
 	@Inject
 	private Client client;
@@ -41,50 +44,50 @@ public class ChatXL extends Plugin
 	@Inject
 	private Configurations config;
 
+	/*
+	 * Diagnostics and Performance.
+	 */
 	private ChatDiagnostics chatDiagnostics;
+	private PerformanceMetrics performanceMetrics;
+
 	/*
 	 * Production chat-font pipeline.
-	 *
-	 * FontMeasurementService determines the geometry required for
-	 * the configured font.
-	 *
-	 * FontLayoutService owns the PRE -> POST construction lifecycle
-	 * and applies the measured geometry to RuneScape's chat widgets.
 	 */
+	private ChatTextNormalizer textNormalizer;
 	private FontMeasurementService fontMeasurementService;
 	private FontLayoutService fontLayoutService;
 
 	@Override
 	protected void startUp()
 	{
-		fontMeasurementService =
-				new FontMeasurementService(
-						client);
+		if (PERFORMANCE_METRICS)
+		{
+			performanceMetrics = new PerformanceMetrics();
+		}
 
-		fontLayoutService =
-				new FontLayoutService(
-						client,
-						config,
-						fontMeasurementService);
+		textNormalizer = new ChatTextNormalizer(performanceMetrics);
+		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
+		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);
 
+		/*
+		 * DIAGNOSTICS & PERFORMANCE METRICS
+		 */
 		if (DIAGNOSTICS_ENABLED)
 		{
-			chatDiagnostics =
-					new ChatDiagnostics(
-							client,
-							config);
+			chatDiagnostics = new ChatDiagnostics(client, config);
+		}
+		if (performanceMetrics != null)
+		{
+			performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.STARTUP);
 		}
 
 		/*
 		 * Rebuild already-existing chat rows through the production
-		 * layout pipeline so the currently configured font is applied
-		 * immediately.
+		 * layout pipeline so the currently configured font is updated.
 		 */
-		clientThread.invokeLater(
-				client::refreshChat);
+		clientThread.invokeLater(client::refreshChat);
 
-		log.debug(
-				"[Chat XL] Plugin Initiated.");
+		log.debug("[Chat XL] Plugin Initiated.");
 	}
 
 	@Override
@@ -120,11 +123,25 @@ public class ChatXL extends Plugin
 		fontMeasurementService =
 				null;
 
-		clientThread.invokeLater(
-				client::refreshChat);
+		textNormalizer =
+				null;
 
-		log.debug(
-				"[Chat XL] Plugin Terminated.");
+		if (performanceMetrics != null)
+		{
+			performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.SHUTDOWN);
+		}
+
+		clientThread.invokeLater(client::refreshChat);
+
+		if (performanceMetrics != null)
+		{
+			performanceMetrics.reportNow();
+		}
+
+		performanceMetrics = null;
+
+
+		log.debug("[Chat XL] Plugin Terminated.");
 	}
 
 	/*
@@ -177,7 +194,21 @@ public class ChatXL extends Plugin
 			return;
 		}
 
+		// Measure production PRE processing during development.
+		final long started =
+				performanceMetrics != null
+						? System.nanoTime()
+						: 0L;
+
 		fontLayoutService.onScriptPreFired(event);
+
+		if (performanceMetrics != null && event != null)
+		{
+			performanceMetrics.recordPre(
+					event.getScriptId(),
+					System.nanoTime()
+							- started);
+		}
 	}
 
 	@Subscribe
@@ -186,13 +217,31 @@ public class ChatXL extends Plugin
 	{
 		if (fontLayoutService != null)
 		{
+			final long started =
+					performanceMetrics != null
+							? System.nanoTime()
+							: 0L;
+
 			fontLayoutService.onScriptPostFired(event);
+
+			if (performanceMetrics != null
+					&& event != null)
+			{
+				performanceMetrics.recordPost(
+						event.getScriptId(),
+						System.nanoTime()
+								- started);
+			}
 		}
 
-		/*
-		 * Diagnostic observes the completed production presentation.
-		 */
+		// Diagnostic observes the completed production presentation.
 		runDiagnosticPost(event);
+
+		// Report performance measurements during development.
+		if (performanceMetrics != null)
+		{
+			performanceMetrics.reportIfDue();
+		}
 	}
 
 	/*
@@ -230,6 +279,12 @@ public class ChatXL extends Plugin
 			if (chatDiagnostics != null)
 			{
 				chatDiagnostics.reset();
+			}
+
+			if (performanceMetrics != null)
+			{
+				performanceMetrics.recordRefreshChat(
+						PerformanceMetrics.RefreshReason.FONT_CHANGED);
 			}
 
 			clientThread.invokeLater(client::refreshChat);

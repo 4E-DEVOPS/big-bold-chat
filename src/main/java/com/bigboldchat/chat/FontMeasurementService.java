@@ -1,19 +1,21 @@
 package com.bigboldchat.chat;
 
 import com.bigboldchat.config.ChatFont;
+import com.bigboldchat.debug.PerformanceMetrics;
 import com.bigboldchat.fonts.ChatFontProfile;
 import com.bigboldchat.fonts.ChatFontRegistry;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
 import net.runelite.api.FontTypeFace;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.client.util.Text;
 
 /**
  * Owns Chat XL text and geometry measurement.
@@ -42,30 +44,65 @@ public final class FontMeasurementService
     static final int CHANNEL_BODY_SCRIPT = 4483;
 
     /*
-     * Native RuneScape separation between:
-     *
-     *     prefix / username -> message body
+     * Native OS separation between:
+     *      [username] -> [message body]
      */
     private static final int BODY_GAP = 3;
 
     /*
      * Native Script 4483 rank-icon geometry:
-     *
-     *     channel title
-     *     + 1px
-     *     + icon
-     *     + 1px
-     *     + username
+     *      [channel] +1px [icon] +1px [username]:
      */
     private static final int RANK_ICON_GAP = 1;
 
     private final Client client;
+    private final ChatTextNormalizer textNormalizer;
+
+    // TODO: Record measurement performance during development.
+    private final PerformanceMetrics performanceMetrics;
+
+    /*
+     * Cache resolved fonts for the current plugin session.
+     * Failed resolutions are retried on the next request.
+     */
+    private final Map<Integer, FontTypeFace> fontCache = new HashMap<>();
 
     public FontMeasurementService(
             Client client)
     {
+        this(
+                client,
+                new ChatTextNormalizer(),
+                null);
+    }
+
+    public FontMeasurementService(
+            Client client,
+            PerformanceMetrics performanceMetrics)
+    {
+        this(
+                client,
+                new ChatTextNormalizer(
+                        performanceMetrics),
+                performanceMetrics);
+    }
+
+    public FontMeasurementService(
+            Client client,
+            ChatTextNormalizer textNormalizer,
+            PerformanceMetrics performanceMetrics)
+    {
         this.client =
                 client;
+
+        this.textNormalizer =
+                textNormalizer != null
+                        ? textNormalizer
+                        : new ChatTextNormalizer(
+                        performanceMetrics);
+
+        this.performanceMetrics =
+                performanceMetrics;
     }
 
     boolean supportsScript(
@@ -109,7 +146,7 @@ public final class FontMeasurementService
         }
 
         final String semanticBody =
-                normalizeSemantic(
+                textNormalizer.normalizeSemantic(
                         rawBody);
 
         if (semanticBody == null
@@ -134,11 +171,19 @@ public final class FontMeasurementService
                         rawBody)
                         : rawBody;
 
-        final String selectedSemanticBody =
-                replaceMalformedColons
-                        ? replaceVerdana13BoldColons(
-                        semanticBody)
-                        : semanticBody;
+        // Preserve inline images while measuring wrapping.
+        final String measurementBody =
+                textNormalizer.measureSemantic(
+                        rawBody);
+
+        final String selectedMeasurementBody =
+                textNormalizer.measureSemantic(
+                        selectedRawBodyText);
+
+        if (measurementBody == null || selectedMeasurementBody == null)
+        {
+            return null;
+        }
 
         final int[] intStack =
                 client.getIntStack();
@@ -443,13 +488,13 @@ public final class FontMeasurementService
         final int nativeLines =
                 calculateWrappedLineCount(
                         nativeFont,
-                        semanticBody,
+                        measurementBody,
                         nativeBodyWidth);
 
         final int selectedLines =
                 calculateWrappedLineCount(
                         selectedFont,
-                        selectedSemanticBody,
+                        selectedMeasurementBody,
                         selectedBodyWidth);
 
         if (nativeLines <= 0
@@ -739,7 +784,7 @@ public final class FontMeasurementService
                         : "";
 
         layout.titleText =
-                normalizeSemantic(
+                textNormalizer.normalizeSemantic(
                         rawTitleText);
 
         layout.renderedTitleText =
@@ -758,7 +803,7 @@ public final class FontMeasurementService
          * Preserve the native sender semantic for correlation.
          */
         layout.senderText =
-                normalizeSemantic(
+                textNormalizer.normalizeSemantic(
                         rawSenderText);
 
         /*
@@ -951,17 +996,12 @@ public final class FontMeasurementService
         }
         else if (layout.hasTitle)
         {
-            /*
-             * Title-only Clan / Guest Clan system message.
-             */
+            // Title-only Clan / Guest Clan system message.
             cursor +=
                     BODY_GAP;
         }
 
-        /*
-         * If both title and sender are empty, the body naturally
-         * begins at lineX.
-         */
+        // If both title and sender are empty, the body naturally begins at lineX.
         layout.bodyX =
                 cursor;
 
@@ -999,32 +1039,78 @@ public final class FontMeasurementService
      * FONT RESOLUTION
      * ================================================================
      */
+
     private FontTypeFace resolveFont(
             int fontId)
     {
-        final Widget probe =
-                client.getWidget(
-                        InterfaceID.Chatbox.INPUT);
+        final FontTypeFace cachedFont =
+                fontCache.get(
+                        fontId);
 
-        if (probe == null)
+        if (cachedFont != null)
         {
-            return null;
+            // TODO: Count font-cache hits during development.
+            if (performanceMetrics != null)
+            {
+                performanceMetrics.recordFontCacheHit();
+            }
+
+            return cachedFont;
         }
 
-        final int originalFontId =
-                probe.getFontId();
+        // TODO: Measure uncached font resolution during development.
+        final long started =
+                performanceMetrics != null
+                        ? System.nanoTime()
+                        : 0L;
 
         try
         {
-            probe.setFontId(
-                    fontId);
+            final Widget probe =
+                    client.getWidget(
+                            InterfaceID.Chatbox.INPUT);
 
-            return probe.getFont();
+            if (probe == null)
+            {
+                return null;
+            }
+
+            final int originalFontId =
+                    probe.getFontId();
+
+            final FontTypeFace resolvedFont;
+
+            try
+            {
+                probe.setFontId(
+                        fontId);
+
+                resolvedFont =
+                        probe.getFont();
+            }
+            finally
+            {
+                probe.setFontId(
+                        originalFontId);
+            }
+
+            if (resolvedFont != null)
+            {
+                fontCache.put(
+                        fontId,
+                        resolvedFont);
+            }
+
+            return resolvedFont;
         }
         finally
         {
-            probe.setFontId(
-                    originalFontId);
+            if (performanceMetrics != null)
+            {
+                performanceMetrics.recordFontCacheMiss(
+                        System.nanoTime()
+                                - started);
+            }
         }
     }
 
@@ -1064,7 +1150,7 @@ public final class FontMeasurementService
                     (String) value;
 
             final String semantic =
-                    normalizeSemantic(
+                    textNormalizer.normalizeSemantic(
                             raw);
 
             if (semantic == null
@@ -1115,7 +1201,7 @@ public final class FontMeasurementService
                     (String) value;
 
             final String semantic =
-                    normalizeSemantic(
+                    textNormalizer.normalizeSemantic(
                             raw);
 
             if (semantic == null)
@@ -1287,7 +1373,7 @@ public final class FontMeasurementService
             String rawPrefix)
     {
         final String semanticPrefix =
-                normalizeSemantic(
+                textNormalizer.normalizeSemantic(
                         rawPrefix);
 
         if (semanticPrefix == null
@@ -1311,30 +1397,6 @@ public final class FontMeasurementService
      * TEXT NORMALIZATION
      * ================================================================
      */
-    String normalizeSemantic(
-            String text)
-    {
-        if (text == null)
-        {
-            return null;
-        }
-
-        /*
-         * Preserve explicit RuneScape line breaks before removing the
-         * remaining markup.
-         */
-        final String withLineBreaks =
-                text.replaceAll(
-                        "(?i)<br\\s*/?>",
-                        "\n");
-
-        return Text.removeTags(
-                        withLineBreaks)
-                .replace(
-                        '\u00A0',
-                        ' ')
-                .trim();
-    }
 
     private String normalizeRawForMeasurement(
             String text)

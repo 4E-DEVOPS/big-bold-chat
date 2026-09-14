@@ -76,8 +76,7 @@ public final class ChatDiagnostics
     private static final int INT_STACK_TAIL_SIZE = 16;
     private static final int MAX_LOGGED_STRING_LENGTH = 200;
 
-    private static final String REVISION =
-            "Diagnostics_REV-01";
+    private static final String REVISION = "Diagnostics_REV-01";
 
     private final Client client;
     private final Configurations config;
