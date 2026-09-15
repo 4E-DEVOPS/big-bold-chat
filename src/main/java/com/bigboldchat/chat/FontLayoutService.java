@@ -1129,7 +1129,7 @@ public final class FontLayoutService
      * vertical offset is applied.
      */
     @SuppressWarnings("deprecation")
-    private void applySynchronizedYOffset(
+    void applySynchronizedYOffset(
             Widget widget,
             int yOffset)
     {
@@ -1139,17 +1139,30 @@ public final class FontLayoutService
             return;
         }
 
+        final RowKey previousRow =
+                RowKey.of(
+                        widget);
+
         final int adjustedY =
                 widget.getOriginalY()
                         + yOffset;
 
-        setOriginalYIfChanged(
-                widget,
-                adjustedY);
+        boolean changed =
+                setOriginalYIfChanged(
+                        widget,
+                        adjustedY);
 
-        setRelativeYIfChanged(
-                widget,
-                adjustedY);
+        changed |=
+                setRelativeYIfChanged(
+                        widget,
+                        adjustedY);
+
+        if (changed)
+        {
+            notifyIndexedWidgetGeometryChanged(
+                    widget,
+                    previousRow);
+        }
     }
 
     /*
@@ -1363,6 +1376,12 @@ public final class FontLayoutService
      *
      * The scan domain intentionally matches the former collectRow() exactly:
      * root + immediate dynamic/static/nested children, without recursion.
+     *
+     * Full surface builds are now only the correctness fallback. Normal
+     * recycling is repaired locally by retaining both RowKey -> widgets and
+     * Widget -> RowKey mappings. Widgets moved by Chat XL's delayed Y
+     * correction are additionally watched for a return to their previous
+     * native row so RuneScape can move them back without forcing a rebuild.
      */
     private final class RowCorrelationIndex
     {
@@ -1371,6 +1390,14 @@ public final class FontLayoutService
         private Widget indexedRoot;
 
         private Map<RowKey, List<Widget>> widgetsByRow;
+
+        private IdentityHashMap<Widget, RowKey> rowByWidget;
+
+        private final IdentityHashMap<Widget, WatchedRowMove> watchedMoves =
+                new IdentityHashMap<>();
+
+        private final Map<RowKey, List<Widget>> watchedWidgetsByPreviousRow =
+                new HashMap<>();
 
         private RowCorrelationIndex(
                 Surface surface)
@@ -1409,7 +1436,11 @@ public final class FontLayoutService
             boolean rebuilt =
                     false;
 
+            boolean repaired =
+                    false;
+
             if (widgetsByRow == null
+                    || rowByWidget == null
                     || indexedRoot != root)
             {
                 build(
@@ -1418,41 +1449,73 @@ public final class FontLayoutService
                 rebuilt =
                         true;
             }
+            else
+            {
+                /*
+                 * First repair any widget Chat XL deliberately moved away from
+                 * this native row. RuneScape may have moved it back since the
+                 * previous Script 72 finalization.
+                 */
+                repaired |=
+                        repairWatchedWidgetsForRow(
+                                targetRow);
+
+                final RowKey indexedAnchorRow =
+                        rowByWidget.get(
+                                lineWidget);
+
+                if (indexedAnchorRow == null)
+                {
+                    /*
+                     * A new line-widget object appeared after the last index
+                     * build. We cannot discover its sibling candidates without
+                     * enumerating the surface once.
+                     */
+                    build(
+                            root);
+
+                    rebuilt =
+                            true;
+                }
+                else if (!indexedAnchorRow.equals(
+                        targetRow))
+                {
+                    /*
+                     * RuneScape moved/recycled this already-known logical row.
+                     * Repair only the old bucket; all siblings which moved with
+                     * the anchor are re-keyed at the same time.
+                     */
+                    repaired |=
+                            repairRow(
+                                    indexedAnchorRow);
+                }
+            }
+
+            if (!rebuilt)
+            {
+                /*
+                 * Validate only the requested bucket. Outgoing recycled
+                 * candidates are moved to their current row without touching
+                 * unrelated rows or walking the complete surface.
+                 */
+                repaired |=
+                        repairRow(
+                                targetRow);
+            }
 
             List<Widget> candidates =
                     widgetsByRow.get(
                             targetRow);
 
             /*
-             * Recycled chat widgets can retain their object identity while
-             * RuneScape moves them to a different row. Validate the requested
-             * bucket before reuse. A stale candidate means the geometry map is
-             * no longer authoritative, so rebuild the surface once.
+             * The exact line widget must be present in its requested bucket.
+             * If not, local knowledge is insufficient and one complete build
+             * remains the conservative correctness fallback.
              */
             if (!rebuilt
-                    && !isCurrentRow(
+                    && !containsIdentity(
                     candidates,
-                    targetRow))
-            {
-                build(
-                        root);
-
-                rebuilt =
-                        true;
-
-                candidates =
-                        widgetsByRow.get(
-                                targetRow);
-            }
-
-            /*
-             * An absent row may represent newly-created/recycled widgets that
-             * were not present at the last build. Refresh once before treating
-             * the row as empty.
-             */
-            if (!rebuilt
-                    && (candidates == null
-                    || candidates.isEmpty()))
+                    lineWidget))
             {
                 build(
                         root);
@@ -1471,6 +1534,10 @@ public final class FontLayoutService
                 {
                     performanceMetrics.recordRowIndexBuild();
                 }
+                else if (repaired)
+                {
+                    performanceMetrics.recordRowIndexRepair();
+                }
                 else
                 {
                     performanceMetrics.recordRowIndexReuse();
@@ -1482,28 +1549,410 @@ public final class FontLayoutService
                     : Collections.emptyList();
         }
 
-        private boolean isCurrentRow(
-                List<Widget> candidates,
-                RowKey expectedRow)
+        private boolean repairRow(
+                RowKey indexedRow)
         {
-            if (candidates == null
-                    || candidates.isEmpty())
+            if (indexedRow == null
+                    || widgetsByRow == null
+                    || rowByWidget == null)
             {
-                return true;
+                return false;
             }
 
-            for (Widget widget : candidates)
+            final List<Widget> indexedWidgets =
+                    widgetsByRow.get(
+                            indexedRow);
+
+            if (indexedWidgets == null
+                    || indexedWidgets.isEmpty())
             {
-                if (widget == null
-                        || !expectedRow.equals(
-                        RowKey.of(
-                                widget)))
+                return false;
+            }
+
+            final List<Widget> snapshot =
+                    new ArrayList<>(
+                            indexedWidgets);
+
+            boolean repaired =
+                    false;
+
+            for (Widget widget : snapshot)
+            {
+                if (widget == null)
                 {
-                    return false;
+                    continue;
+                }
+
+                recordRowWidgetExamined();
+
+                final RowKey currentRow =
+                        RowKey.of(
+                                widget);
+
+                final RowKey recordedRow =
+                        rowByWidget.get(
+                                widget);
+
+                if (recordedRow == null)
+                {
+                    /*
+                     * This should not occur for a healthy index. Keep the
+                     * reverse mapping internally consistent without a scan.
+                     */
+                    rowByWidget.put(
+                            widget,
+                            currentRow);
+
+                    if (!indexedRow.equals(
+                            currentRow))
+                    {
+                        removeWidgetFromRow(
+                                widget,
+                                indexedRow);
+
+                        addWidgetToRow(
+                                widget,
+                                currentRow);
+
+                        repaired =
+                                true;
+                    }
+
+                    continue;
+                }
+
+                if (!recordedRow.equals(
+                        currentRow))
+                {
+                    moveIndexedWidget(
+                            widget,
+                            recordedRow,
+                            currentRow);
+
+                    reconcileWatchedMoveAfterExternalGeometryChange(
+                            widget,
+                            currentRow);
+
+                    repaired =
+                            true;
                 }
             }
 
-            return true;
+            return repaired;
+        }
+
+        private boolean repairWatchedWidgetsForRow(
+                RowKey requestedRow)
+        {
+            if (requestedRow == null
+                    || rowByWidget == null)
+            {
+                return false;
+            }
+
+            final List<Widget> watchedWidgets =
+                    watchedWidgetsByPreviousRow.get(
+                            requestedRow);
+
+            if (watchedWidgets == null
+                    || watchedWidgets.isEmpty())
+            {
+                return false;
+            }
+
+            final List<Widget> snapshot =
+                    new ArrayList<>(
+                            watchedWidgets);
+
+            boolean repaired =
+                    false;
+
+            for (Widget widget : snapshot)
+            {
+                if (widget == null)
+                {
+                    continue;
+                }
+
+                final WatchedRowMove watchedMove =
+                        watchedMoves.get(
+                                widget);
+
+                if (watchedMove == null
+                        || !requestedRow.equals(
+                        watchedMove.previousRow))
+                {
+                    removeWatchedMove(
+                            widget);
+                    continue;
+                }
+
+                final RowKey recordedRow =
+                        rowByWidget.get(
+                                widget);
+
+                if (recordedRow == null)
+                {
+                    removeWatchedMove(
+                            widget);
+                    continue;
+                }
+
+                recordRowWidgetExamined();
+
+                final RowKey currentRow =
+                        RowKey.of(
+                                widget);
+
+                if (!recordedRow.equals(
+                        currentRow))
+                {
+                    moveIndexedWidget(
+                            widget,
+                            recordedRow,
+                            currentRow);
+
+                    repaired =
+                            true;
+                }
+
+                /*
+                 * Keep watching only while the widget remains exactly at the
+                 * Chat XL-adjusted row. Returning to the previous native row,
+                 * or moving elsewhere because RuneScape recycled it, completes
+                 * the watch.
+                 */
+                if (!watchedMove.adjustedRow.equals(
+                        currentRow))
+                {
+                    removeWatchedMove(
+                            widget);
+                }
+            }
+
+            return repaired;
+        }
+
+        private void onWidgetGeometryChangedByChatXl(
+                Widget widget,
+                RowKey previousRow)
+        {
+            if (widget == null
+                    || previousRow == null
+                    || rowByWidget == null)
+            {
+                return;
+            }
+
+            final RowKey recordedRow =
+                    rowByWidget.get(
+                            widget);
+
+            if (recordedRow == null)
+            {
+                return;
+            }
+
+            final RowKey adjustedRow =
+                    RowKey.of(
+                            widget);
+
+            if (!recordedRow.equals(
+                    adjustedRow))
+            {
+                moveIndexedWidget(
+                        widget,
+                        recordedRow,
+                        adjustedRow);
+            }
+
+            if (!previousRow.equals(
+                    adjustedRow))
+            {
+                watchMove(
+                        widget,
+                        previousRow,
+                        adjustedRow);
+            }
+        }
+
+        private void moveIndexedWidget(
+                Widget widget,
+                RowKey oldRow,
+                RowKey newRow)
+        {
+            if (widget == null
+                    || newRow == null
+                    || rowByWidget == null
+                    || widgetsByRow == null)
+            {
+                return;
+            }
+
+            if (oldRow != null)
+            {
+                removeWidgetFromRow(
+                        widget,
+                        oldRow);
+            }
+
+            addWidgetToRow(
+                    widget,
+                    newRow);
+
+            rowByWidget.put(
+                    widget,
+                    newRow);
+        }
+
+        private void addWidgetToRow(
+                Widget widget,
+                RowKey row)
+        {
+            if (widget == null
+                    || row == null
+                    || widgetsByRow == null)
+            {
+                return;
+            }
+
+            final List<Widget> widgets =
+                    widgetsByRow.computeIfAbsent(
+                            row,
+                            ignored -> new ArrayList<>());
+
+            if (!containsIdentity(
+                    widgets,
+                    widget))
+            {
+                widgets.add(
+                        widget);
+            }
+        }
+
+        private void removeWidgetFromRow(
+                Widget widget,
+                RowKey row)
+        {
+            if (widget == null
+                    || row == null
+                    || widgetsByRow == null)
+            {
+                return;
+            }
+
+            final List<Widget> widgets =
+                    widgetsByRow.get(
+                            row);
+
+            if (widgets == null)
+            {
+                return;
+            }
+
+            removeIdentity(
+                    widgets,
+                    widget);
+
+            if (widgets.isEmpty())
+            {
+                widgetsByRow.remove(
+                        row);
+            }
+        }
+
+        private void watchMove(
+                Widget widget,
+                RowKey previousRow,
+                RowKey adjustedRow)
+        {
+            if (widget == null
+                    || previousRow == null
+                    || adjustedRow == null)
+            {
+                return;
+            }
+
+            removeWatchedMove(
+                    widget);
+
+            watchedMoves.put(
+                    widget,
+                    new WatchedRowMove(
+                            previousRow,
+                            adjustedRow));
+
+            final List<Widget> watchedWidgets =
+                    watchedWidgetsByPreviousRow.computeIfAbsent(
+                            previousRow,
+                            ignored -> new ArrayList<>());
+
+            if (!containsIdentity(
+                    watchedWidgets,
+                    widget))
+            {
+                watchedWidgets.add(
+                        widget);
+            }
+        }
+
+        private void reconcileWatchedMoveAfterExternalGeometryChange(
+                Widget widget,
+                RowKey currentRow)
+        {
+            final WatchedRowMove watchedMove =
+                    watchedMoves.get(
+                            widget);
+
+            if (watchedMove == null
+                    || currentRow == null)
+            {
+                return;
+            }
+
+            if (!watchedMove.adjustedRow.equals(
+                    currentRow))
+            {
+                removeWatchedMove(
+                        widget);
+            }
+        }
+
+        private void removeWatchedMove(
+                Widget widget)
+        {
+            if (widget == null)
+            {
+                return;
+            }
+
+            final WatchedRowMove watchedMove =
+                    watchedMoves.remove(
+                            widget);
+
+            if (watchedMove == null)
+            {
+                return;
+            }
+
+            final List<Widget> watchedWidgets =
+                    watchedWidgetsByPreviousRow.get(
+                            watchedMove.previousRow);
+
+            if (watchedWidgets == null)
+            {
+                return;
+            }
+
+            removeIdentity(
+                    watchedWidgets,
+                    widget);
+
+            if (watchedWidgets.isEmpty())
+            {
+                watchedWidgetsByPreviousRow.remove(
+                        watchedMove.previousRow);
+            }
         }
 
         private void build(
@@ -1514,6 +1963,9 @@ public final class FontLayoutService
 
             widgetsByRow =
                     new HashMap<>();
+
+            rowByWidget =
+                    new IdentityHashMap<>();
 
             indexWidget(
                     root);
@@ -1526,6 +1978,8 @@ public final class FontLayoutService
 
             indexWidgets(
                     root.getNestedChildren());
+
+            pruneWatchedMovesAfterBuild();
         }
 
         private void indexWidgets(
@@ -1551,26 +2005,51 @@ public final class FontLayoutService
                 return;
             }
 
-            if (performanceMetrics != null)
-            {
-                performanceMetrics.recordWidgetsExamined(
-                        1);
-            }
+            recordRowWidgetExamined();
 
             final RowKey row =
                     RowKey.of(
                             widget);
 
-            final List<Widget> widgets =
-                    widgetsByRow.computeIfAbsent(
-                            row,
-                            ignored -> new ArrayList<>());
+            addWidgetToRow(
+                    widget,
+                    row);
 
-            if (!widgets.contains(
-                    widget))
+            rowByWidget.put(
+                    widget,
+                    row);
+        }
+
+        private void pruneWatchedMovesAfterBuild()
+        {
+            if (watchedMoves.isEmpty()
+                    || rowByWidget == null)
             {
-                widgets.add(
-                        widget);
+                return;
+            }
+
+            final List<Widget> watchedWidgets =
+                    new ArrayList<>(
+                            watchedMoves.keySet());
+
+            for (Widget widget : watchedWidgets)
+            {
+                final WatchedRowMove watchedMove =
+                        watchedMoves.get(
+                                widget);
+
+                final RowKey indexedRow =
+                        rowByWidget.get(
+                                widget);
+
+                if (watchedMove == null
+                        || indexedRow == null
+                        || !watchedMove.adjustedRow.equals(
+                        indexedRow))
+                {
+                    removeWatchedMove(
+                            widget);
+                }
             }
         }
 
@@ -1581,6 +2060,105 @@ public final class FontLayoutService
 
             widgetsByRow =
                     null;
+
+            rowByWidget =
+                    null;
+
+            watchedMoves.clear();
+            watchedWidgetsByPreviousRow.clear();
+        }
+    }
+
+    private void notifyIndexedWidgetGeometryChanged(
+            Widget widget,
+            RowKey previousRow)
+    {
+        if (widget == null
+                || previousRow == null
+                || rowIndexes.isEmpty())
+        {
+            return;
+        }
+
+        for (RowCorrelationIndex rowIndex : rowIndexes.values())
+        {
+            if (rowIndex != null)
+            {
+                rowIndex.onWidgetGeometryChangedByChatXl(
+                        widget,
+                        previousRow);
+            }
+        }
+    }
+
+    private void recordRowWidgetExamined()
+    {
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordWidgetsExamined(
+                    1);
+        }
+    }
+
+    private boolean containsIdentity(
+            List<Widget> widgets,
+            Widget target)
+    {
+        if (widgets == null
+                || target == null)
+        {
+            return false;
+        }
+
+        for (Widget widget : widgets)
+        {
+            if (widget == target)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void removeIdentity(
+            List<Widget> widgets,
+            Widget target)
+    {
+        if (widgets == null
+                || target == null)
+        {
+            return;
+        }
+
+        for (int i = widgets.size() - 1;
+             i >= 0;
+             i--)
+        {
+            if (widgets.get(
+                    i) == target)
+            {
+                widgets.remove(
+                        i);
+            }
+        }
+    }
+
+    private static final class WatchedRowMove
+    {
+        private final RowKey previousRow;
+
+        private final RowKey adjustedRow;
+
+        private WatchedRowMove(
+                RowKey previousRow,
+                RowKey adjustedRow)
+        {
+            this.previousRow =
+                    previousRow;
+
+            this.adjustedRow =
+                    adjustedRow;
         }
     }
 

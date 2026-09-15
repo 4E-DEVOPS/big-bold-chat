@@ -73,8 +73,10 @@ public final class PerformanceMetrics
     // Number of row-candidates searches.
     private long rowCandidates;
 
-    // Count persistent row-index builds and successful reuses.
+    // Count persistent row-index full builds, local repairs, and direct reuses.
     private long rowIndexBuilds;
+
+    private long rowIndexRepairs;
 
     private long rowIndexReuses;
 
@@ -207,6 +209,11 @@ public final class PerformanceMetrics
     public void recordRowIndexBuild()
     {
         rowIndexBuilds++;
+    }
+
+    public void recordRowIndexRepair()
+    {
+        rowIndexRepairs++;
     }
 
     public void recordRowIndexReuse()
@@ -389,6 +396,7 @@ public final class PerformanceMetrics
                         + " | RowSearches={}"
                         + " | RowCandidates={}"
                         + " | RowIndexBuilds={}"
+                        + " | RowIndexRepairs={}"
                         + " | RowIndexReuses={}"
                         + " | SurfaceSearches={}"
                         + " | FallbackSearches={}"
@@ -401,6 +409,7 @@ public final class PerformanceMetrics
                 rowSearches,
                 rowCandidates,
                 rowIndexBuilds,
+                rowIndexRepairs,
                 rowIndexReuses,
                 surfaceSearches,
                 fallbackSearches,
@@ -526,6 +535,9 @@ public final class PerformanceMetrics
                 0L;
 
         rowIndexBuilds =
+                0L;
+
+        rowIndexRepairs =
                 0L;
 
         rowIndexReuses =

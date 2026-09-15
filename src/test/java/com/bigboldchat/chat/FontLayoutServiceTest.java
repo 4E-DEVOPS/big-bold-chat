@@ -825,7 +825,7 @@ public class FontLayoutServiceTest
     }
 
     @Test
-    public void movedCachedWidgetForcesIndexRebuild()
+    public void movedCachedWidgetRepairsIndexWithoutFullRebuild()
     {
         final Widget root =
                 mock(
@@ -876,7 +876,8 @@ public class FontLayoutServiceTest
                         bodyWidget));
 
         /*
-         * Simulate RuneScape recycling/repositioning the same Widget object.
+         * Simulate RuneScape moving/recycling one candidate while retaining
+         * the same Widget object.
          */
         bodyOriginalY.set(
                 43);
@@ -891,14 +892,100 @@ public class FontLayoutServiceTest
                         bodyWidget));
 
         /*
-         * Current implementation treats one stale candidate as a complete
-         * surface-index rebuild. This characterization is expected to change
-         * when local row repair is introduced.
+         * The stale candidate must be repaired from the local bucket rather
+         * than triggering another complete surface enumeration.
          */
         verify(
                 root,
                 times(
-                        2))
+                        1))
+                .getDynamicChildren();
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    public void chatXlYOffsetReturningToNativeRowRepairsWithoutFullRebuild()
+    {
+        final Widget root =
+                mock(
+                        Widget.class);
+
+        final Widget lineWidget =
+                rowWidget(
+                        42,
+                        84);
+
+        final Widget bodyWidget =
+                mutableRowWidget(
+                        42,
+                        84);
+
+        when(root.getDynamicChildren())
+                .thenReturn(
+                        new Widget[]
+                                {
+                                        lineWidget,
+                                        bodyWidget
+                                });
+
+        when(client.getWidget(
+                InterfaceID.Chatbox.SCROLLAREA))
+                .thenReturn(
+                        root);
+
+        final List<Widget> first =
+                service.collectRow(
+                        lineWidget,
+                        FontLayoutService.Surface.CHATBOX);
+
+        assertTrue(
+                first.contains(
+                        bodyWidget));
+
+        /*
+         * Chat XL moves the presentation widget away from its native row.
+         * The row index should immediately re-key the known widget and retain
+         * enough information to recognize its eventual native return.
+         */
+        service.applySynchronizedYOffset(
+                bodyWidget,
+                5);
+
+        assertEquals(
+                47,
+                bodyWidget.getOriginalY());
+
+        assertEquals(
+                47,
+                bodyWidget.getRelativeY());
+
+        /*
+         * Simulate RuneScape restoring the widget's native geometry before a
+         * later construction.
+         */
+        bodyWidget.setOriginalY(
+                42);
+
+        bodyWidget.setRelativeY(
+                84);
+
+        final List<Widget> second =
+                service.collectRow(
+                        lineWidget,
+                        FontLayoutService.Surface.CHATBOX);
+
+        assertTrue(
+                second.contains(
+                        bodyWidget));
+
+        /*
+         * Returning to native geometry must be repaired from the watched
+         * widget locally. The complete surface is still enumerated only once.
+         */
+        verify(
+                root,
+                times(
+                        1))
                 .getDynamicChildren();
     }
 
@@ -1019,6 +1106,64 @@ public class FontLayoutServiceTest
         when(widget.getRelativeY())
                 .thenReturn(
                         relativeY);
+
+        return widget;
+    }
+
+    @SuppressWarnings("deprecation")
+    private Widget mutableRowWidget(
+            int originalY,
+            int relativeY)
+    {
+        final Widget widget =
+                mock(
+                        Widget.class);
+
+        final AtomicInteger currentOriginalY =
+                new AtomicInteger(
+                        originalY);
+
+        final AtomicInteger currentRelativeY =
+                new AtomicInteger(
+                        relativeY);
+
+        when(widget.getOriginalY())
+                .thenAnswer(
+                        ignored ->
+                                currentOriginalY.get());
+
+        when(widget.getRelativeY())
+                .thenAnswer(
+                        ignored ->
+                                currentRelativeY.get());
+
+        doAnswer(
+                invocation ->
+                {
+                    currentOriginalY.set(
+                            (Integer) invocation.getArgument(
+                                    0));
+
+                    return null;
+                })
+                .when(
+                        widget)
+                .setOriginalY(
+                        org.mockito.ArgumentMatchers.anyInt());
+
+        doAnswer(
+                invocation ->
+                {
+                    currentRelativeY.set(
+                            (Integer) invocation.getArgument(
+                                    0));
+
+                    return null;
+                })
+                .when(
+                        widget)
+                .setRelativeY(
+                        org.mockito.ArgumentMatchers.anyInt());
 
         return widget;
     }
