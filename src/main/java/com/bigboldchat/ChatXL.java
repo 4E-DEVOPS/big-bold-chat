@@ -33,7 +33,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 public class ChatXL extends Plugin
 {
 	private static final boolean DIAGNOSTICS_ENABLED = false;
-	private static final boolean PERFORMANCE_METRICS = true;
+	private static final boolean PERFORMANCE_METRICS = false;
 
 	@Inject
 	private Client client;
