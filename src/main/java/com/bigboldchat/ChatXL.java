@@ -12,9 +12,13 @@ import javax.inject.Inject;
 
 import lombok.extern.slf4j.Slf4j;
 
+import net.runelite.api.ChatLineBuffer;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.MessageNode;
+import net.runelite.api.ScriptID;
+import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
@@ -43,8 +47,8 @@ public class ChatXL extends Plugin
 	private static final String CONFIG_GROUP = "bigboldchat";
 	private static final String VERSION_CONFIG_KEY = "lastNotifiedVersion";
 
-	private static final String UPDATE_MESSAGE = "Performance Improvements";
-	private static final String UNINSTALL_MESSAGE = "Thank you for using ChatXL! Please submit a review/issue report on Github of your experience.";
+	private static final String UPDATE_MESSAGE = "Performance Improvements, Version Update Messages, a `::clear' / `::cls' command to clear chat history, and an emoji fix reported by Ms_Gizzy.";
+	private static final String UNINSTALL_MESSAGE = "Please submit a review/issue report on Github of your experience. Thanks!";
 
 	@Inject
 	private Client client;
@@ -150,15 +154,9 @@ public class ChatXL extends Plugin
 			}
 			client.refreshChat();
 
-			if (uninstalling
-					&& client.getGameState() == GameState.LOGGED_IN)
+			if (uninstalling && client.getGameState() == GameState.LOGGED_IN)
 			{
-				client.addChatMessage(
-						ChatMessageType.GAMEMESSAGE,
-						"",
-						"<col=ff981f>ChatXL:</col> "
-								+ UNINSTALL_MESSAGE,
-						null);
+				showUninstallMessage();
 			}
 
 			if (shutdownPerformanceMetrics != null)
@@ -272,6 +270,98 @@ public class ChatXL extends Plugin
 
 	/*
 	 * ================================================================
+	 * GAME STATE
+	 * ================================================================
+	 */
+	@Subscribe
+	public void onGameStateChanged(GameStateChanged event)
+	{
+		if (event == null || event.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+
+		showUpdateMessage();
+	}
+
+	/*
+	 * ================================================================
+	 * CHAT COMMANDS
+	 * ================================================================
+	 */
+	@Subscribe
+	public void onCommandExecuted(CommandExecuted event)
+	{
+		if (event == null)
+		{
+			return;
+		}
+
+		final String command = event.getCommand();
+
+		if ("clear".equalsIgnoreCase(command) || "cls".equalsIgnoreCase(command))
+		{
+			clientThread.invokeLater(this::clearChatHistory);
+			return;
+		}
+
+		if ("chatxl-messages".equalsIgnoreCase(command))
+		{
+			clientThread.invokeLater(this::showMessageTests);
+		}
+	}
+
+	private void clearChatHistory()
+	{
+		boolean removed = false;
+
+		for (ChatMessageType messageType : ChatMessageType.values())
+		{
+			final ChatLineBuffer lineBuffer =
+					client.getChatLineMap().get(
+							messageType.getType());
+
+			if (lineBuffer == null)
+			{
+				continue;
+			}
+
+			final MessageNode[] lines = lineBuffer.getLines().clone();
+
+			for (MessageNode line : lines)
+			{
+				if (line == null)
+				{
+					continue;
+				}
+
+				lineBuffer.removeMessageNode(line);
+				removed = true;
+			}
+		}
+
+		if (removed)
+		{
+			client.runScript(ScriptID.SPLITPM_CHANGED);
+		}
+	}
+
+	private void showMessageTests()
+	{
+		showInstallMessage();
+
+		final String currentVersion = getCurrentVersion();
+
+		showVersionMessage(
+				currentVersion != null
+						? currentVersion
+						: "3.2.1");
+
+		showUninstallMessage();
+	}
+
+	/*
+	 * ================================================================
 	 * VERSION NOTIFICATION
 	 * ================================================================
 	 */
@@ -299,19 +389,6 @@ public class ChatXL extends Plugin
 						internalName);
 	}
 
-	@Subscribe
-	public void onGameStateChanged(
-			GameStateChanged event)
-	{
-		if (event == null
-				|| event.getGameState() != GameState.LOGGED_IN)
-		{
-			return;
-		}
-
-		showUpdateMessage();
-	}
-
 	private void showUpdateMessage()
 	{
 		final String previousVersion = configManager.getConfiguration(CONFIG_GROUP, VERSION_CONFIG_KEY);
@@ -324,32 +401,52 @@ public class ChatXL extends Plugin
 
 		if (previousVersion == null || previousVersion.isEmpty())
 		{
-			client.addChatMessage(
-					ChatMessageType.GAMEMESSAGE,
-					"",
-					"<col=ff981f>ChatXL:</col> Thank you for installing ChatXL! We're currently still in Beta. Report any issues you find to Github for review and resolution.",
-					null);
+			showInstallMessage();
 		} else {
-			client.addChatMessage(
-					ChatMessageType.GAMEMESSAGE,
-					"",
-					"<col=ff981f>ChatXL:</col> Updated to v"
-							+ currentVersion
-							+ "!",
-					null);
-
-			client.addChatMessage(
-					ChatMessageType.GAMEMESSAGE,
-					"",
-					"<col=ff981f>ChatXL:</col> "
-							+ UPDATE_MESSAGE,
-					null);
+			showVersionMessage(currentVersion);
 		}
 
 		configManager.setConfiguration(
 				CONFIG_GROUP,
 				VERSION_CONFIG_KEY,
 				currentVersion);
+	}
+
+	private void showInstallMessage()
+	{
+		client.addChatMessage(
+				ChatMessageType.GAMEMESSAGE,
+				"",
+				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> Thank you for installing ChatXL! Report any issues you find to Github.",
+				null);
+	}
+
+	private void showVersionMessage(String currentVersion)
+	{
+		client.addChatMessage(
+				ChatMessageType.GAMEMESSAGE,
+				"",
+				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> Updated to v"
+						+ currentVersion
+						+ "!",
+				null);
+
+		client.addChatMessage(
+				ChatMessageType.GAMEMESSAGE,
+				"",
+				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> "
+						+ UPDATE_MESSAGE,
+				null);
+	}
+
+	private void showUninstallMessage()
+	{
+		client.addChatMessage(
+				ChatMessageType.GAMEMESSAGE,
+				"",
+				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> "
+						+ UNINSTALL_MESSAGE,
+				null);
 	}
 
 	/*
