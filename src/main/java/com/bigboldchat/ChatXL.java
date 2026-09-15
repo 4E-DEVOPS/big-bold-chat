@@ -93,13 +93,15 @@ public class ChatXL extends Plugin
 	@Override
 	protected void shutDown()
 	{
+		final FontLayoutService shutdownLayoutService = fontLayoutService;
+		final PerformanceMetrics shutdownPerformanceMetrics = performanceMetrics;
+
 		/*
-		 * Clear any incomplete PRE -> POST construction state.
+		 * Stop all future Chat XL PRE / POST handling immediately.
 		 */
-		if (fontLayoutService != null)
-		{
-			fontLayoutService.reset();
-		}
+		fontLayoutService = null;
+		fontMeasurementService = null;
+		textNormalizer = null;
 
 		/*
 		 * Reset Diagnostic
@@ -110,36 +112,28 @@ public class ChatXL extends Plugin
 		}
 		chatDiagnostics = null;
 
-		/*
-		 * Disable our PRE / POST handling before requesting the native
-		 * refresh.
-		 *
-		 * RuneScape can then reconstruct the visible chat rows without
-		 * Chat XL reapplying its custom FontID or geometry.
-		 */
-		fontLayoutService =
-				null;
-
-		fontMeasurementService =
-				null;
-
-		textNormalizer =
-				null;
-
-		if (performanceMetrics != null)
+		if (shutdownPerformanceMetrics != null)
 		{
-			performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.SHUTDOWN);
+			shutdownPerformanceMetrics.recordRefreshChat(
+					PerformanceMetrics.RefreshReason.SHUTDOWN);
 		}
 
-		clientThread.invokeLater(client::refreshChat);
+		// Native presentation restoration must run on the client thread.
+		clientThread.invokeLater(() -> {
+			if (shutdownLayoutService != null)
+			{
+				shutdownLayoutService.restoreNativePresentation();
+				shutdownLayoutService.reset();
+			}
+			client.refreshChat();
 
-		if (performanceMetrics != null)
-		{
-			performanceMetrics.reportNow();
-		}
+			if (shutdownPerformanceMetrics != null)
+			{
+				shutdownPerformanceMetrics.reportNow();
+			}
+		});
 
 		performanceMetrics = null;
-
 
 		log.debug("[Chat XL] Plugin Terminated.");
 	}

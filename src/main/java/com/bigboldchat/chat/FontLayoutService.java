@@ -113,6 +113,18 @@ public final class FontLayoutService
             new IdentityHashMap<>();
 
     /*
+     * Native presentation values captured immediately before Chat XL first
+     * mutates a widget field.
+     *
+     * RuneScape recycles chat Widget objects. Each field therefore also tracks
+     * the last value applied by Chat XL. If RuneScape changes that field later,
+     * the next Chat XL mutation treats the current value as a new native
+     * baseline instead of restoring stale geometry from an older logical row.
+     */
+    private final IdentityHashMap<Widget, NativeWidgetState> nativeWidgetStates =
+            new IdentityHashMap<>();
+
+    /*
      * Persistent row indexes for each chat surface.
      *
      * RuneScape constructs many rows against the same surface. Rebuilding the
@@ -317,7 +329,6 @@ public final class FontLayoutService
 
         pendingFontProfile =
                 fontProfile;
-
     }
 
     /*
@@ -449,7 +460,6 @@ public final class FontLayoutService
                 state,
                 rankIconWidget,
                 fontProfile);
-
     }
 
     /*
@@ -1181,6 +1191,27 @@ public final class FontLayoutService
             return false;
         }
 
+        final NativeWidgetState state =
+                nativeState(
+                        widget);
+
+        final int currentFontId =
+                widget.getFontId();
+
+        if (!state.fontIdCaptured
+                || currentFontId
+                != state.appliedFontId)
+        {
+            state.nativeFontId =
+                    currentFontId;
+
+            state.fontIdCaptured =
+                    true;
+        }
+
+        state.appliedFontId =
+                fontId;
+
         widget.setFontId(
                 fontId);
 
@@ -1197,6 +1228,27 @@ public final class FontLayoutService
         {
             return false;
         }
+
+        final NativeWidgetState state =
+                nativeState(
+                        widget);
+
+        final int currentLineHeight =
+                widget.getLineHeight();
+
+        if (!state.lineHeightCaptured
+                || currentLineHeight
+                != state.appliedLineHeight)
+        {
+            state.nativeLineHeight =
+                    currentLineHeight;
+
+            state.lineHeightCaptured =
+                    true;
+        }
+
+        state.appliedLineHeight =
+                lineHeight;
 
         widget.setLineHeight(
                 lineHeight);
@@ -1217,6 +1269,28 @@ public final class FontLayoutService
             return false;
         }
 
+        final NativeWidgetState state =
+                nativeState(
+                        widget);
+
+        final String currentText =
+                widget.getText();
+
+        if (!state.textCaptured
+                || !sameText(
+                currentText,
+                state.appliedText))
+        {
+            state.nativeText =
+                    currentText;
+
+            state.textCaptured =
+                    true;
+        }
+
+        state.appliedText =
+                text;
+
         widget.setText(
                 text);
 
@@ -1234,6 +1308,27 @@ public final class FontLayoutService
             return false;
         }
 
+        final NativeWidgetState state =
+                nativeState(
+                        widget);
+
+        final int currentOriginalX =
+                widget.getOriginalX();
+
+        if (!state.originalXCaptured
+                || currentOriginalX
+                != state.appliedOriginalX)
+        {
+            state.nativeOriginalX =
+                    currentOriginalX;
+
+            state.originalXCaptured =
+                    true;
+        }
+
+        state.appliedOriginalX =
+                originalX;
+
         widget.setOriginalX(
                 originalX);
 
@@ -1250,6 +1345,27 @@ public final class FontLayoutService
         {
             return false;
         }
+
+        final NativeWidgetState state =
+                nativeState(
+                        widget);
+
+        final int currentOriginalY =
+                widget.getOriginalY();
+
+        if (!state.originalYCaptured
+                || currentOriginalY
+                != state.appliedOriginalY)
+        {
+            state.nativeOriginalY =
+                    currentOriginalY;
+
+            state.originalYCaptured =
+                    true;
+        }
+
+        state.appliedOriginalY =
+                originalY;
 
         widget.setOriginalY(
                 originalY);
@@ -1269,6 +1385,27 @@ public final class FontLayoutService
             return false;
         }
 
+        final NativeWidgetState state =
+                nativeState(
+                        widget);
+
+        final int currentRelativeY =
+                widget.getRelativeY();
+
+        if (!state.relativeYCaptured
+                || currentRelativeY
+                != state.appliedRelativeY)
+        {
+            state.nativeRelativeY =
+                    currentRelativeY;
+
+            state.relativeYCaptured =
+                    true;
+        }
+
+        state.appliedRelativeY =
+                relativeY;
+
         widget.setRelativeY(
                 relativeY);
 
@@ -1285,6 +1422,27 @@ public final class FontLayoutService
         {
             return false;
         }
+
+        final NativeWidgetState state =
+                nativeState(
+                        widget);
+
+        final int currentOriginalWidth =
+                widget.getOriginalWidth();
+
+        if (!state.originalWidthCaptured
+                || currentOriginalWidth
+                != state.appliedOriginalWidth)
+        {
+            state.nativeOriginalWidth =
+                    currentOriginalWidth;
+
+            state.originalWidthCaptured =
+                    true;
+        }
+
+        state.appliedOriginalWidth =
+                originalWidth;
 
         widget.setOriginalWidth(
                 originalWidth);
@@ -1303,11 +1461,50 @@ public final class FontLayoutService
             return false;
         }
 
+        final NativeWidgetState state =
+                nativeState(
+                        widget);
+
+        final int currentOriginalHeight =
+                widget.getOriginalHeight();
+
+        if (!state.originalHeightCaptured
+                || currentOriginalHeight
+                != state.appliedOriginalHeight)
+        {
+            state.nativeOriginalHeight =
+                    currentOriginalHeight;
+
+            state.originalHeightCaptured =
+                    true;
+        }
+
+        state.appliedOriginalHeight =
+                originalHeight;
+
         widget.setOriginalHeight(
                 originalHeight);
 
         recordWidgetMutation();
         return true;
+    }
+
+    private NativeWidgetState nativeState(
+            Widget widget)
+    {
+        return nativeWidgetStates.computeIfAbsent(
+                widget,
+                ignored -> new NativeWidgetState());
+    }
+
+    private boolean sameText(
+            String left,
+            String right)
+    {
+        return left == null
+                ? right == null
+                : left.equals(
+                right);
     }
 
     private void recordWidgetMutation()
@@ -2460,20 +2657,453 @@ public final class FontLayoutService
             return relativeYMatch;
         }
 
+        /*
+         * Final conservative fallback:
+         *
+         * exactly one semantic match on the entire surface.
+         */
         return matches.size() == 1
-                ? matches.get(
-                0)
+                ? matches.get(0)
                 : null;
     }
 
-    /**
-     * Lazy, per-POST fallback correlation index.
-     *
-     * Normal row correlation never pays for this structure. The first miss
-     * builds one semantic index for the selected chat surface; later misses in
-     * the same construction reuse it instead of rescanning and renormalizing
-     * the complete surface for each target string.
+    /*
+     * ================================================================
+     * PREFIX CORRELATION
+     * ================================================================
      */
+
+    private List<Widget> findPrefixWidgetsForLine(
+            List<String> rawPrefixComponents,
+            Widget lineWidget,
+            Surface surface,
+            Widget bodyWidget,
+            List<Widget> rowWidgets,
+            FallbackCorrelationContext fallbackContext)
+    {
+        if (rawPrefixComponents == null
+                || rawPrefixComponents.isEmpty()
+                || lineWidget == null
+                || surface == null
+                || bodyWidget == null
+                || fallbackContext == null)
+        {
+            return Collections.emptyList();
+        }
+
+        final List<Widget> result =
+                new ArrayList<>();
+
+        for (String rawPrefix : rawPrefixComponents)
+        {
+            final String targetText =
+                    textNormalizer.normalizeSemantic(
+                            rawPrefix);
+
+            if (targetText == null
+                    || targetText.isEmpty())
+            {
+                continue;
+            }
+
+            final Widget rowMatch =
+                    matchRow(
+                            rowWidgets,
+                            targetText,
+                            bodyWidget);
+
+            if (rowMatch != null
+                    && !containsIdentity(
+                    result,
+                    rowMatch))
+            {
+                result.add(
+                        rowMatch);
+
+                continue;
+            }
+
+            final List<Widget> matches =
+                    fallbackContext.findMatches(
+                            targetText);
+
+            if (matches.isEmpty())
+            {
+                continue;
+            }
+
+            Widget selected =
+                    null;
+
+            /*
+             * Prefer the exact body row.
+             */
+            for (Widget candidate : matches)
+            {
+                if (candidate == bodyWidget
+                        || containsIdentity(
+                        result,
+                        candidate))
+                {
+                    continue;
+                }
+
+                if (candidate.getOriginalY()
+                        == bodyWidget.getOriginalY()
+                        && candidate.getRelativeY()
+                        == bodyWidget.getRelativeY())
+                {
+                    if (selected != null)
+                    {
+                        selected =
+                                null;
+                        break;
+                    }
+
+                    selected =
+                            candidate;
+                }
+            }
+
+            if (selected == null)
+            {
+                /*
+                 * Then prefer a unique OriginalY match.
+                 */
+                int originalYMatches =
+                        0;
+
+                for (Widget candidate : matches)
+                {
+                    if (candidate == bodyWidget
+                            || containsIdentity(
+                            result,
+                            candidate))
+                    {
+                        continue;
+                    }
+
+                    if (candidate.getOriginalY()
+                            == bodyWidget.getOriginalY())
+                    {
+                        selected =
+                                candidate;
+
+                        originalYMatches++;
+                    }
+                }
+
+                if (originalYMatches != 1)
+                {
+                    selected =
+                            null;
+                }
+            }
+
+            if (selected == null)
+            {
+                /*
+                 * Then prefer a unique RelativeY match.
+                 */
+                int relativeYMatches =
+                        0;
+
+                for (Widget candidate : matches)
+                {
+                    if (candidate == bodyWidget
+                            || containsIdentity(
+                            result,
+                            candidate))
+                    {
+                        continue;
+                    }
+
+                    if (candidate.getRelativeY()
+                            == bodyWidget.getRelativeY())
+                    {
+                        selected =
+                                candidate;
+
+                        relativeYMatches++;
+                    }
+                }
+
+                if (relativeYMatches != 1)
+                {
+                    selected =
+                            null;
+                }
+            }
+
+            if (selected == null)
+            {
+                /*
+                 * Final conservative fallback:
+                 *
+                 * exactly one remaining semantic match.
+                 */
+                Widget onlyRemaining =
+                        null;
+
+                int remaining =
+                        0;
+
+                for (Widget candidate : matches)
+                {
+                    if (candidate == bodyWidget
+                            || containsIdentity(
+                            result,
+                            candidate))
+                    {
+                        continue;
+                    }
+
+                    onlyRemaining =
+                            candidate;
+
+                    remaining++;
+                }
+
+                if (remaining == 1)
+                {
+                    selected =
+                            onlyRemaining;
+                }
+            }
+
+            if (selected != null
+                    && !containsIdentity(
+                    result,
+                    selected))
+            {
+                result.add(
+                        selected);
+            }
+        }
+
+        return result;
+    }
+
+    /*
+     * ================================================================
+     * RANK ICON CORRELATION
+     * ================================================================
+     */
+
+    Widget findRankIconWidget(
+            FontMeasurementService.ChannelPrefixLayout nativeLayout,
+            Widget rowAnchor,
+            List<Widget> rowWidgets)
+    {
+        if (nativeLayout == null
+                || rowAnchor == null
+                || nativeLayout.rankIconSpriteId < 0)
+        {
+            return null;
+        }
+
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordRankSearch();
+        }
+
+        /*
+         * First inspect the already-collected row.
+         *
+         * This is the common path. The exact same native criteria used by the
+         * recursive matcher are preserved:
+         *
+         *     sprite ID
+         *     OriginalX
+         *     row OriginalY OR RelativeY
+         */
+        if (rowWidgets != null
+                && !rowWidgets.isEmpty())
+        {
+            final Widget rowMatch =
+                    findRankIconWidgetInRow(
+                            nativeLayout,
+                            rowAnchor,
+                            rowWidgets);
+
+            if (rowMatch != null)
+            {
+                return rowMatch;
+            }
+        }
+
+        /*
+         * Preserve the old recursive search as the correctness fallback.
+         */
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordRankFallback();
+        }
+
+        final Widget root =
+                client.getWidget(
+                        InterfaceID.Chatbox.SCROLLAREA);
+
+        if (root == null)
+        {
+            return null;
+        }
+
+        return findRankIconWidgetRecursive(
+                root,
+                nativeLayout.rankIconSpriteId,
+                nativeLayout.rankIconX,
+                rowAnchor.getOriginalY(),
+                rowAnchor.getRelativeY());
+    }
+
+    private Widget findRankIconWidgetInRow(
+            FontMeasurementService.ChannelPrefixLayout nativeLayout,
+            Widget rowAnchor,
+            List<Widget> rowWidgets)
+    {
+        for (Widget widget : rowWidgets)
+        {
+            if (widget == null)
+            {
+                continue;
+            }
+
+            if (performanceMetrics != null)
+            {
+                performanceMetrics.recordRankNodesExamined(1);
+            }
+
+            if (widget.getSpriteId()
+                    != nativeLayout.rankIconSpriteId)
+            {
+                continue;
+            }
+
+            if (widget.getOriginalX()
+                    != nativeLayout.rankIconX)
+            {
+                continue;
+            }
+
+            if (widget.getOriginalY()
+                    != rowAnchor.getOriginalY()
+                    && widget.getRelativeY()
+                    != rowAnchor.getRelativeY())
+            {
+                continue;
+            }
+
+            return widget;
+        }
+
+        return null;
+    }
+
+    private Widget findRankIconWidgetRecursive(
+            Widget widget,
+            int spriteId,
+            int originalX,
+            int originalY,
+            int relativeY)
+    {
+        if (widget == null)
+        {
+            return null;
+        }
+
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordRankNodesExamined(1);
+        }
+
+        if (widget.getSpriteId()
+                == spriteId
+                && widget.getOriginalX()
+                == originalX
+                && (widget.getOriginalY()
+                == originalY
+                || widget.getRelativeY()
+                == relativeY))
+        {
+            return widget;
+        }
+
+        final Widget[] dynamicChildren =
+                widget.getDynamicChildren();
+
+        if (dynamicChildren != null)
+        {
+            for (Widget child : dynamicChildren)
+            {
+                final Widget result =
+                        findRankIconWidgetRecursive(
+                                child,
+                                spriteId,
+                                originalX,
+                                originalY,
+                                relativeY);
+
+                if (result != null)
+                {
+                    return result;
+                }
+            }
+        }
+
+        final Widget[] staticChildren =
+                widget.getStaticChildren();
+
+        if (staticChildren != null)
+        {
+            for (Widget child : staticChildren)
+            {
+                final Widget result =
+                        findRankIconWidgetRecursive(
+                                child,
+                                spriteId,
+                                originalX,
+                                originalY,
+                                relativeY);
+
+                if (result != null)
+                {
+                    return result;
+                }
+            }
+        }
+
+        final Widget[] nestedChildren =
+                widget.getNestedChildren();
+
+        if (nestedChildren != null)
+        {
+            for (Widget child : nestedChildren)
+            {
+                final Widget result =
+                        findRankIconWidgetRecursive(
+                                child,
+                                spriteId,
+                                originalX,
+                                originalY,
+                                relativeY);
+
+                if (result != null)
+                {
+                    return result;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /*
+     * ================================================================
+     * FALLBACK CORRELATION
+     * ================================================================
+     */
+
     final class FallbackCorrelationContext
     {
         private final Surface surface;
@@ -2531,11 +3161,6 @@ public final class FontLayoutService
             widgetsBySemantic =
                     new HashMap<>();
 
-            if (performanceMetrics != null)
-            {
-                performanceMetrics.recordSurfaceSearch();
-            }
-
             final Widget root =
                     surface == Surface.SPLIT_PRIVATE
                             ? client.getWidget(
@@ -2547,6 +3172,11 @@ public final class FontLayoutService
             if (root == null)
             {
                 return;
+            }
+
+            if (performanceMetrics != null)
+            {
+                performanceMetrics.recordSurfaceSearch();
             }
 
             indexWidget(
@@ -2598,6 +3228,11 @@ public final class FontLayoutService
                         1);
             }
 
+            /*
+             * A complete fallback scan has already paid the enumeration cost.
+             * Teach the persistent row index about every widget encountered,
+             * including textless sprite widgets such as channel rank icons.
+             */
             observeWidgetFromSurfaceScan(
                     surface,
                     root,
@@ -2613,470 +3248,21 @@ public final class FontLayoutService
                 return;
             }
 
-            final String key =
-                    semanticKey(
-                            semantic);
-
-            final List<Widget> matches =
-                    widgetsBySemantic.computeIfAbsent(
-                            key,
-                            ignored -> new ArrayList<>());
-
-            if (!matches.contains(
-                    widget))
-            {
-                matches.add(
-                        widget);
-            }
+            widgetsBySemantic
+                    .computeIfAbsent(
+                            semanticKey(
+                                    semantic),
+                            ignored -> new ArrayList<>())
+                    .add(
+                            widget);
         }
 
         private String semanticKey(
-                String semantic)
+                String text)
         {
-            return semantic.toLowerCase(
+            return text.toLowerCase(
                     Locale.ROOT);
         }
-    }
-
-    /*
-     * ================================================================
-     * PREFIX / USERNAME CORRELATION
-     * ================================================================
-     */
-
-    private List<Widget> findPrefixWidgetsForLine(
-            List<String> rawPrefixComponents,
-            Widget lineWidget,
-            Surface surface,
-            Widget bodyWidget,
-            List<Widget> rowWidgets,
-            FallbackCorrelationContext fallbackContext)
-    {
-        final List<Widget> result =
-                new ArrayList<>();
-
-        if (rawPrefixComponents == null
-                || rawPrefixComponents.isEmpty()
-                || lineWidget == null
-                || surface == null)
-        {
-            return result;
-        }
-
-        final String lineSemantic =
-                textNormalizer.normalizeSemantic(
-                        lineWidget.getText());
-
-        if (lineSemantic != null
-                && matchesAnyPrefixComponent(
-                lineSemantic,
-                rawPrefixComponents))
-        {
-            result.add(
-                    lineWidget);
-        }
-
-        for (String rawComponent : rawPrefixComponents)
-        {
-            final String semanticComponent =
-                    textNormalizer.normalizeSemantic(
-                            rawComponent);
-
-            if (semanticComponent == null
-                    || semanticComponent.isEmpty())
-            {
-                continue;
-            }
-
-            if (containsSemanticWidget(
-                    result,
-                    semanticComponent))
-            {
-                continue;
-            }
-
-            final Widget match =
-                    findWidgetOnRow(
-                            semanticComponent,
-                            lineWidget,
-                            surface,
-                            bodyWidget,
-                            rowWidgets,
-                            fallbackContext);
-
-            if (match != null
-                    && !result.contains(
-                    match))
-            {
-                result.add(
-                        match);
-            }
-        }
-
-        return result;
-    }
-
-    private Widget findWidgetOnRow(
-            String targetText,
-            Widget lineWidget,
-            Surface surface,
-            Widget excludedBodyWidget,
-            List<Widget> rowWidgets,
-            FallbackCorrelationContext fallbackContext)
-    {
-        final Widget rowMatch =
-                matchRow(
-                        rowWidgets,
-                        targetText,
-                        excludedBodyWidget);
-
-        if (rowMatch != null)
-        {
-            return rowMatch;
-        }
-
-        if (fallbackContext == null)
-        {
-            return null;
-        }
-
-        final List<Widget> matches =
-                fallbackContext.findMatches(
-                        targetText);
-
-        if (matches.isEmpty())
-        {
-            return null;
-        }
-
-        for (Widget widget : matches)
-        {
-            if (widget == excludedBodyWidget)
-            {
-                continue;
-            }
-
-            if (widget.getOriginalY()
-                    == lineWidget.getOriginalY()
-                    && widget.getRelativeY()
-                    == lineWidget.getRelativeY())
-            {
-                return widget;
-            }
-        }
-
-        Widget unique =
-                null;
-
-        int count =
-                0;
-
-        for (Widget widget : matches)
-        {
-            if (widget == excludedBodyWidget)
-            {
-                continue;
-            }
-
-            if (widget.getOriginalY()
-                    == lineWidget.getOriginalY()
-                    || widget.getRelativeY()
-                    == lineWidget.getRelativeY())
-            {
-                unique =
-                        widget;
-
-                count++;
-            }
-        }
-
-        return count == 1
-                ? unique
-                : null;
-    }
-
-    private boolean matchesAnyPrefixComponent(
-            String semanticText,
-            List<String> rawPrefixComponents)
-    {
-        if (semanticText == null
-                || rawPrefixComponents == null)
-        {
-            return false;
-        }
-
-        for (String rawComponent : rawPrefixComponents)
-        {
-            final String component =
-                    textNormalizer.normalizeSemantic(
-                            rawComponent);
-
-            if (component != null
-                    && !component.isEmpty()
-                    && semanticText.equalsIgnoreCase(
-                    component))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private boolean containsSemanticWidget(
-            List<Widget> widgets,
-            String semanticText)
-    {
-        if (widgets == null
-                || semanticText == null)
-        {
-            return false;
-        }
-
-        for (Widget widget : widgets)
-        {
-            if (widget == null)
-            {
-                continue;
-            }
-
-            final String widgetText =
-                    textNormalizer.normalizeSemantic(
-                            widget.getText());
-
-            if (widgetText != null
-                    && widgetText.equalsIgnoreCase(
-                    semanticText))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /*
-     * ================================================================
-     * RANK ICON CORRELATION
-     * ================================================================
-     */
-
-    Widget findRankIconWidget(
-            FontMeasurementService.ChannelPrefixLayout nativeLayout,
-            Widget rowAnchor,
-            List<Widget> rowWidgets)
-    {
-        if (nativeLayout == null
-                || nativeLayout.rankIconSpriteId < 0
-                || nativeLayout.rankIconX < 0
-                || rowAnchor == null)
-        {
-            return null;
-        }
-
-        final Widget root =
-                client.getWidget(
-                        InterfaceID.Chatbox.SCROLLAREA);
-
-        if (root == null)
-        {
-            return null;
-        }
-
-        // TODO: Count rank-icon searches during development.
-        if (performanceMetrics != null)
-        {
-            performanceMetrics.recordRankSearch();
-        }
-
-        /*
-         * Rank icons share the same native row geometry used by the text
-         * correlation pass. Reuse those already-collected row candidates
-         * before walking the complete chat widget tree.
-         *
-         * This preserves the exact sprite / X / Y matcher. The recursive
-         * tree search remains as a correctness fallback for any RuneLite
-         * layout where the rank sprite is not present in rowWidgets.
-         */
-        final Widget rowMatch =
-                findRankIconWidgetOnRow(
-                        rowWidgets,
-                        nativeLayout,
-                        rowAnchor);
-
-        if (rowMatch != null)
-        {
-            return rowMatch;
-        }
-
-        if (performanceMetrics != null)
-        {
-            performanceMetrics.recordRankFallback();
-        }
-
-        return findRankIconWidget(
-                root,
-                nativeLayout,
-                rowAnchor,
-                new IdentityHashMap<>());
-    }
-
-
-    private Widget findRankIconWidgetOnRow(
-            List<Widget> rowWidgets,
-            FontMeasurementService.ChannelPrefixLayout nativeLayout,
-            Widget rowAnchor)
-    {
-        if (rowWidgets == null
-                || rowWidgets.isEmpty()
-                || nativeLayout == null
-                || rowAnchor == null)
-        {
-            return null;
-        }
-
-        for (Widget widget : rowWidgets)
-        {
-            if (widget == null)
-            {
-                continue;
-            }
-
-            if (performanceMetrics != null)
-            {
-                performanceMetrics.recordRankNodesExamined(
-                        1);
-            }
-
-            if (isStrictRankIconMatch(
-                    widget,
-                    nativeLayout,
-                    rowAnchor))
-            {
-                return widget;
-            }
-        }
-
-        return null;
-    }
-
-    private boolean isStrictRankIconMatch(
-            Widget widget,
-            FontMeasurementService.ChannelPrefixLayout nativeLayout,
-            Widget rowAnchor)
-    {
-        return widget != null
-                && nativeLayout != null
-                && rowAnchor != null
-                && widget.getSpriteId()
-                == nativeLayout.rankIconSpriteId
-                && widget.getOriginalX()
-                == nativeLayout.rankIconX
-                && (widget.getOriginalY()
-                == rowAnchor.getOriginalY()
-                || widget.getRelativeY()
-                == rowAnchor.getRelativeY());
-    }
-
-    private Widget findRankIconWidget(
-            Widget widget,
-            FontMeasurementService.ChannelPrefixLayout nativeLayout,
-            Widget rowAnchor,
-            IdentityHashMap<Widget, Boolean> visited)
-    {
-        if (widget == null
-                || nativeLayout == null
-                || rowAnchor == null
-                || visited.containsKey(
-                widget))
-        {
-            return null;
-        }
-
-        visited.put(
-                widget,
-                Boolean.TRUE);
-
-        // TODO: Count rank-tree nodes examined during development.
-        if (performanceMetrics != null)
-        {
-            performanceMetrics.recordRankNodesExamined(
-                    1);
-        }
-
-        /*
-         * Strict native-row matching is important.
-         *
-         * Chat widgets are aggressively recycled, so approximate
-         * canvas-Y matching can accidentally move another visible row's
-         * rank icon.
-         */
-        if (isStrictRankIconMatch(
-                widget,
-                nativeLayout,
-                rowAnchor))
-        {
-            return widget;
-        }
-
-        Widget match =
-                findRankIconWidget(
-                        widget.getDynamicChildren(),
-                        nativeLayout,
-                        rowAnchor,
-                        visited);
-
-        if (match != null)
-        {
-            return match;
-        }
-
-        match =
-                findRankIconWidget(
-                        widget.getStaticChildren(),
-                        nativeLayout,
-                        rowAnchor,
-                        visited);
-
-        if (match != null)
-        {
-            return match;
-        }
-
-        return findRankIconWidget(
-                widget.getNestedChildren(),
-                nativeLayout,
-                rowAnchor,
-                visited);
-    }
-
-    private Widget findRankIconWidget(
-            Widget[] widgets,
-            FontMeasurementService.ChannelPrefixLayout nativeLayout,
-            Widget rowAnchor,
-            IdentityHashMap<Widget, Boolean> visited)
-    {
-        if (widgets == null)
-        {
-            return null;
-        }
-
-        for (Widget widget : widgets)
-        {
-            final Widget match =
-                    findRankIconWidget(
-                            widget,
-                            nativeLayout,
-                            rowAnchor,
-                            visited);
-
-            if (match != null)
-            {
-                return match;
-            }
-        }
-
-        return null;
     }
 
     /*
@@ -3090,9 +3276,7 @@ public final class FontLayoutService
             int parentWidgetId)
     {
         if (scriptId
-                == FontMeasurementService.GAME_BODY_SCRIPT
-                || scriptId
-                == FontMeasurementService.CHANNEL_BODY_SCRIPT)
+                != FontMeasurementService.CHAT_BODY_SCRIPT)
         {
             return Surface.CHATBOX;
         }
@@ -3118,6 +3302,155 @@ public final class FontLayoutService
      * ================================================================
      */
 
+    @SuppressWarnings("deprecation")
+    public void restoreNativePresentation()
+    {
+        if (nativeWidgetStates.isEmpty())
+        {
+            return;
+        }
+
+        for (Map.Entry<Widget, NativeWidgetState> entry
+                : nativeWidgetStates.entrySet())
+        {
+            final Widget widget =
+                    entry.getKey();
+
+            final NativeWidgetState state =
+                    entry.getValue();
+
+            if (widget == null
+                    || state == null)
+            {
+                continue;
+            }
+
+            boolean changed =
+                    false;
+
+            /*
+             * Restore a field only when the widget still contains the exact value
+             * last applied by Chat XL.
+             *
+             * If RuneScape has already rewritten that field, leave the newer
+             * native value alone. This avoids restoring stale state when a Widget
+             * object has been recycled for another logical chat row.
+             */
+            if (state.fontIdCaptured
+                    && widget.getFontId()
+                    == state.appliedFontId
+                    && widget.getFontId()
+                    != state.nativeFontId)
+            {
+                widget.setFontId(
+                        state.nativeFontId);
+
+                changed =
+                        true;
+            }
+
+            if (state.lineHeightCaptured
+                    && widget.getLineHeight()
+                    == state.appliedLineHeight
+                    && widget.getLineHeight()
+                    != state.nativeLineHeight)
+            {
+                widget.setLineHeight(
+                        state.nativeLineHeight);
+
+                changed =
+                        true;
+            }
+
+            if (state.textCaptured
+                    && sameText(
+                    widget.getText(),
+                    state.appliedText)
+                    && !sameText(
+                    widget.getText(),
+                    state.nativeText))
+            {
+                widget.setText(
+                        state.nativeText);
+
+                changed =
+                        true;
+            }
+
+            if (state.originalXCaptured
+                    && widget.getOriginalX()
+                    == state.appliedOriginalX
+                    && widget.getOriginalX()
+                    != state.nativeOriginalX)
+            {
+                widget.setOriginalX(
+                        state.nativeOriginalX);
+
+                changed =
+                        true;
+            }
+
+            if (state.originalYCaptured
+                    && widget.getOriginalY()
+                    == state.appliedOriginalY
+                    && widget.getOriginalY()
+                    != state.nativeOriginalY)
+            {
+                widget.setOriginalY(
+                        state.nativeOriginalY);
+
+                changed =
+                        true;
+            }
+
+            if (state.relativeYCaptured
+                    && widget.getRelativeY()
+                    == state.appliedRelativeY
+                    && widget.getRelativeY()
+                    != state.nativeRelativeY)
+            {
+                widget.setRelativeY(
+                        state.nativeRelativeY);
+
+                changed =
+                        true;
+            }
+
+            if (state.originalWidthCaptured
+                    && widget.getOriginalWidth()
+                    == state.appliedOriginalWidth
+                    && widget.getOriginalWidth()
+                    != state.nativeOriginalWidth)
+            {
+                widget.setOriginalWidth(
+                        state.nativeOriginalWidth);
+
+                changed =
+                        true;
+            }
+
+            if (state.originalHeightCaptured
+                    && widget.getOriginalHeight()
+                    == state.appliedOriginalHeight
+                    && widget.getOriginalHeight()
+                    != state.nativeOriginalHeight)
+            {
+                widget.setOriginalHeight(
+                        state.nativeOriginalHeight);
+
+                changed =
+                        true;
+            }
+
+            if (changed)
+            {
+                widget.revalidate();
+            }
+        }
+
+        nativeWidgetStates.clear();
+    }
+
     public void reset()
     {
         pending =
@@ -3129,6 +3462,49 @@ public final class FontLayoutService
         pendingYOffsets.clear();
 
         rowIndexes.clear();
+    }
+
+    /*
+     * Exact native presentation values for one Widget identity.
+     *
+     * Each field is captured independently because Chat XL does not mutate every
+     * property on every widget. The paired applied value lets restoration detect
+     * whether RuneScape has rewritten/recycled the widget since Chat XL last
+     * touched that field.
+     */
+    private static final class NativeWidgetState
+    {
+        private boolean fontIdCaptured;
+        private int nativeFontId;
+        private int appliedFontId;
+
+        private boolean lineHeightCaptured;
+        private int nativeLineHeight;
+        private int appliedLineHeight;
+
+        private boolean textCaptured;
+        private String nativeText;
+        private String appliedText;
+
+        private boolean originalXCaptured;
+        private int nativeOriginalX;
+        private int appliedOriginalX;
+
+        private boolean originalYCaptured;
+        private int nativeOriginalY;
+        private int appliedOriginalY;
+
+        private boolean relativeYCaptured;
+        private int nativeRelativeY;
+        private int appliedRelativeY;
+
+        private boolean originalWidthCaptured;
+        private int nativeOriginalWidth;
+        private int appliedOriginalWidth;
+
+        private boolean originalHeightCaptured;
+        private int nativeOriginalHeight;
+        private int appliedOriginalHeight;
     }
 
     /*
@@ -3207,8 +3583,7 @@ public final class FontLayoutService
                 Widget widget,
                 ChatTextNormalizer textNormalizer)
         {
-            if (widget == null
-                    || textNormalizer == null)
+            if (widget == null)
             {
                 return false;
             }
