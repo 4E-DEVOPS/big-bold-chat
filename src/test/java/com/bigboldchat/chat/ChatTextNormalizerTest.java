@@ -87,6 +87,82 @@ public class ChatTextNormalizerTest
     }
 
     @Test
+    public void normalizeSemanticConvertsAtEscapeToVisibleCharacter()
+    {
+        assertEquals(
+                "@",
+                normalizer.normalizeSemantic(
+                        "<at>"));
+
+        assertEquals(
+                "@",
+                normalizer.normalizeSemantic(
+                        "<AT>"));
+    }
+
+    @Test
+    public void normalizeSemanticPreservesAtOnlyMessages()
+    {
+        assertEquals(
+                "@@@@@@@@@@@@@@",
+                normalizer.normalizeSemantic(
+                        "<at><at><at><at><at><at><at>"
+                                + "<at><at><at><at><at><at><at>"));
+    }
+
+    @Test
+    public void normalizeSemanticConvertsLeadingAtEscapeWithText()
+    {
+        assertEquals(
+                "@player",
+                normalizer.normalizeSemantic(
+                        "<at>player"));
+
+        assertEquals(
+                "@Player_Name",
+                normalizer.normalizeSemantic(
+                        "<at>Player_Name"));
+    }
+
+    @Test
+    public void normalizeSemanticConvertsInlineAtEscapeWithText()
+    {
+        assertEquals(
+                "Hello @player",
+                normalizer.normalizeSemantic(
+                        "Hello <at>player"));
+
+        assertEquals(
+                "Congrats @cr_zy92 !!!~~~~",
+                normalizer.normalizeSemantic(
+                        "Congrats <at>cr_zy92 !!!~~~~"));
+    }
+
+    @Test
+    public void measureSemanticConvertsAtEscapeToVisibleCharacter()
+    {
+        assertEquals(
+                "@",
+                normalizer.measureSemantic(
+                        "<at>"));
+
+        assertEquals(
+                "@player",
+                normalizer.measureSemantic(
+                        "<at>player"));
+
+        assertEquals(
+                "@@@",
+                normalizer.measureSemantic(
+                        "<at><at><at>"));
+
+        assertEquals(
+                "<col=ffffff>Hello @player</col>",
+                normalizer.measureSemantic(
+                        "<col=ffffff>Hello <at>player</col>"));
+    }
+
+    @Test
     public void measureSemanticPreservesInlineImages()
     {
         assertEquals(

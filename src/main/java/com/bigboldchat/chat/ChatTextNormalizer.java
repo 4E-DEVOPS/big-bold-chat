@@ -22,6 +22,11 @@ public final class ChatTextNormalizer
                     "<img=(\\d+)>",
                     Pattern.CASE_INSENSITIVE);
 
+    private static final Pattern AT_PATTERN =
+            Pattern.compile(
+                    "<at>",
+                    Pattern.CASE_INSENSITIVE);
+
     // TODO: Record normalization performance during development.
     private final PerformanceMetrics performanceMetrics;
 
@@ -75,9 +80,16 @@ public final class ChatTextNormalizer
                             .replaceAll(
                                     "\n");
 
+            final String withVisibleAtCharacters =
+                    AT_PATTERN
+                            .matcher(
+                                    withLineBreaks)
+                            .replaceAll(
+                                    "@");
+
             final String semantic =
                     Text.removeTags(
-                                    withLineBreaks)
+                                    withVisibleAtCharacters)
                             .replace(
                                     '\u00A0',
                                     ' ')
@@ -88,9 +100,9 @@ public final class ChatTextNormalizer
                 return semantic;
             }
 
-            // Keep image-only messages identifiable after markup is removed.
+// Keep image-only messages identifiable after markup is removed.
             return extractImages(
-                    withLineBreaks);
+                    withVisibleAtCharacters);
         }
         finally
         {
@@ -141,7 +153,14 @@ public final class ChatTextNormalizer
                             .replaceAll(
                                     "\n");
 
-            return withLineBreaks
+            final String withVisibleAtCharacters =
+                    AT_PATTERN
+                            .matcher(
+                                    withLineBreaks)
+                            .replaceAll(
+                                    "@");
+
+            return withVisibleAtCharacters
                     .replace(
                             '\u00A0',
                             ' ')

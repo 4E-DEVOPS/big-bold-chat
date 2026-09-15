@@ -1001,6 +1001,39 @@ public final class FontLayoutService
     }
 
     /*
+     * Package-private test seams.
+     *
+     * These expose only the state required by FontLayoutServiceTest and keep
+     * the test suite free of Java reflection. They do not alter runtime
+     * behavior or lifecycle ownership.
+     */
+    ChatFont activeChatFontForTesting()
+    {
+        return activeFontState != null
+                ? activeFontState.chatFont
+                : null;
+    }
+
+    ChatFontProfile activeFontProfileForTesting()
+    {
+        return activeFontState != null
+                ? activeFontState.fontProfile
+                : null;
+    }
+
+    ChatFontProfile pendingFontProfileForTesting()
+    {
+        return pendingFontProfile;
+    }
+
+    void setPendingFontProfileForTesting(
+            ChatFontProfile fontProfile)
+    {
+        pendingFontProfile =
+                fontProfile;
+    }
+
+    /*
      * Script 203 is shared by several chat surfaces.
      *
      * Friends Chat is identified by its single combined textual prefix:
@@ -1125,7 +1158,7 @@ public final class FontLayoutService
      * ================================================================
      */
 
-    private boolean setFontIdIfChanged(
+    boolean setFontIdIfChanged(
             Widget widget,
             int fontId)
     {
@@ -1230,7 +1263,7 @@ public final class FontLayoutService
         return true;
     }
 
-    private boolean setOriginalWidthIfChanged(
+    boolean setOriginalWidthIfChanged(
             Widget widget,
             int originalWidth)
     {
@@ -1272,7 +1305,7 @@ public final class FontLayoutService
         }
     }
 
-    private void revalidateWidgetIfChanged(
+    void revalidateWidgetIfChanged(
             Widget widget,
             boolean changed)
     {
@@ -1296,7 +1329,7 @@ public final class FontLayoutService
      * ================================================================
      */
 
-    private List<Widget> collectRow(
+    List<Widget> collectRow(
             Widget lineWidget,
             Surface surface)
     {
@@ -1670,7 +1703,7 @@ public final class FontLayoutService
      * ================================================================
      */
 
-    private Widget findTargetWidgetForLine(
+    Widget findTargetWidgetForLine(
             String targetText,
             Widget lineWidget,
             Surface surface,
@@ -1791,20 +1824,20 @@ public final class FontLayoutService
      * the same construction reuse it instead of rescanning and renormalizing
      * the complete surface for each target string.
      */
-    private final class FallbackCorrelationContext
+    final class FallbackCorrelationContext
     {
         private final Surface surface;
 
         private Map<String, List<Widget>> widgetsBySemantic;
 
-        private FallbackCorrelationContext(
+        FallbackCorrelationContext(
                 Surface surface)
         {
             this.surface =
                     surface;
         }
 
-        private List<Widget> findMatches(
+        List<Widget> findMatches(
                 String targetText)
         {
             if (targetText == null
@@ -2166,7 +2199,7 @@ public final class FontLayoutService
      * ================================================================
      */
 
-    private Widget findRankIconWidget(
+    Widget findRankIconWidget(
             FontMeasurementService.ChannelPrefixLayout nativeLayout,
             Widget rowAnchor,
             List<Widget> rowWidgets)
@@ -2539,7 +2572,7 @@ public final class FontLayoutService
         }
     }
 
-    private enum Surface
+    enum Surface
     {
         CHATBOX,
         SPLIT_PRIVATE
