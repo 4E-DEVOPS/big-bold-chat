@@ -106,6 +106,7 @@ tasks.register('testChat', Test) {
 
 	filter {
 		includeTestsMatching 'com.bigboldchat.chat.ChatTextNormalizerTest'
+		includeTestsMatching 'com.bigboldchat.chat.FontLayoutServiceTest'
 		includeTestsMatching 'com.bigboldchat.chat.FontMeasurementServiceTest'
 	}
 

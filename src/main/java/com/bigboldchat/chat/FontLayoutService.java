@@ -7,8 +7,12 @@ import com.bigboldchat.fonts.ChatFontProfile;
 import com.bigboldchat.fonts.ChatFontRegistry;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 import net.runelite.api.Client;
 import net.runelite.api.events.ScriptPostFired;
@@ -319,12 +323,25 @@ public final class FontLayoutService
                         lineWidget,
                         surface);
 
+        /*
+         * Row-first correlation should satisfy ordinary chat reconstruction.
+         *
+         * Keep the broad surface fallback completely lazy: no index is built
+         * unless a row lookup actually misses. If one miss does occur, the
+         * same normalized surface index is reused by every remaining body /
+         * prefix lookup in this exact POST construction.
+         */
+        final FallbackCorrelationContext fallbackContext =
+                new FallbackCorrelationContext(
+                        surface);
+
         final Widget bodyWidget =
                 findTargetWidgetForLine(
                         state.semanticBody,
                         lineWidget,
                         surface,
-                        rowWidgets);
+                        rowWidgets,
+                        fallbackContext);
 
         if (bodyWidget == null)
         {
@@ -341,7 +358,8 @@ public final class FontLayoutService
                         lineWidget,
                         surface,
                         bodyWidget,
-                        rowWidgets);
+                        rowWidgets,
+                        fallbackContext);
 
         final Widget rowAnchor =
                 !prefixWidgets.isEmpty()
@@ -1166,11 +1184,13 @@ public final class FontLayoutService
             String targetText,
             Widget lineWidget,
             Surface surface,
-            List<Widget> rowWidgets)
+            List<Widget> rowWidgets,
+            FallbackCorrelationContext fallbackContext)
     {
         if (targetText == null
                 || lineWidget == null
-                || surface == null)
+                || surface == null
+                || fallbackContext == null)
         {
             return null;
         }
@@ -1186,16 +1206,9 @@ public final class FontLayoutService
             return rowMatch;
         }
 
-// TODO: Count broad correlation fallbacks during development.
-        if (performanceMetrics != null)
-        {
-            performanceMetrics.recordFallbackSearch();
-        }
-
         final List<Widget> matches =
-                findAllTargetWidgets(
-                        targetText,
-                        surface);
+                fallbackContext.findMatches(
+                        targetText);
 
         if (matches.isEmpty())
         {
@@ -1280,117 +1293,163 @@ public final class FontLayoutService
                 : null;
     }
 
-    private List<Widget> findAllTargetWidgets(
-            String targetText,
-            Surface surface)
+    /**
+     * Lazy, per-POST fallback correlation index.
+     *
+     * Normal row correlation never pays for this structure. The first miss
+     * builds one semantic index for the selected chat surface; later misses in
+     * the same construction reuse it instead of rescanning and renormalizing
+     * the complete surface for each target string.
+     */
+    private final class FallbackCorrelationContext
     {
-        final List<Widget> matches =
-                new ArrayList<>();
+        private final Surface surface;
 
-        if (targetText == null
-                || surface == null)
+        private Map<String, List<Widget>> widgetsBySemantic;
+
+        private FallbackCorrelationContext(
+                Surface surface)
         {
-            return matches;
+            this.surface =
+                    surface;
         }
 
-        // TODO: Count broad chat-surface searches during development.
-        if (performanceMetrics != null)
+        private List<Widget> findMatches(
+                String targetText)
         {
-            performanceMetrics.recordSurfaceSearch();
+            if (targetText == null
+                    || targetText.isEmpty()
+                    || surface == null)
+            {
+                return Collections.emptyList();
+            }
+
+            if (performanceMetrics != null)
+            {
+                performanceMetrics.recordFallbackSearch();
+            }
+
+            if (widgetsBySemantic == null)
+            {
+                buildIndex();
+
+                if (performanceMetrics != null)
+                {
+                    performanceMetrics.recordFallbackBuild();
+                }
+            }
+            else if (performanceMetrics != null)
+            {
+                performanceMetrics.recordFallbackReuse();
+            }
+
+            final List<Widget> matches =
+                    widgetsBySemantic.get(
+                            semanticKey(
+                                    targetText));
+
+            return matches != null
+                    ? matches
+                    : Collections.emptyList();
         }
 
-        final Widget root =
-                surface == Surface.SPLIT_PRIVATE
-                        ? client.getWidget(
-                        InterfaceID.PM_CHAT,
-                        0)
-                        : client.getWidget(
-                        InterfaceID.Chatbox.SCROLLAREA);
-
-        if (root == null)
+        private void buildIndex()
         {
-            return matches;
+            widgetsBySemantic =
+                    new HashMap<>();
+
+            if (performanceMetrics != null)
+            {
+                performanceMetrics.recordSurfaceSearch();
+            }
+
+            final Widget root =
+                    surface == Surface.SPLIT_PRIVATE
+                            ? client.getWidget(
+                            InterfaceID.PM_CHAT,
+                            0)
+                            : client.getWidget(
+                            InterfaceID.Chatbox.SCROLLAREA);
+
+            if (root == null)
+            {
+                return;
+            }
+
+            indexWidget(
+                    root);
+
+            indexWidgets(
+                    root.getDynamicChildren());
+
+            indexWidgets(
+                    root.getStaticChildren());
+
+            indexWidgets(
+                    root.getNestedChildren());
         }
 
-        collectTargetWidget(
-                matches,
-                root,
-                targetText);
-
-        collectTargetWidgets(
-                matches,
-                root.getDynamicChildren(),
-                targetText);
-
-        collectTargetWidgets(
-                matches,
-                root.getStaticChildren(),
-                targetText);
-
-        collectTargetWidgets(
-                matches,
-                root.getNestedChildren(),
-                targetText);
-
-        return matches;
-    }
-
-    private void collectTargetWidgets(
-            List<Widget> matches,
-            Widget[] children,
-            String targetText)
-    {
-        if (matches == null
-                || children == null
-                || targetText == null)
+        private void indexWidgets(
+                Widget[] widgets)
         {
-            return;
+            if (widgets == null)
+            {
+                return;
+            }
+
+            for (Widget widget : widgets)
+            {
+                indexWidget(
+                        widget);
+            }
         }
 
-        for (Widget widget : children)
+        private void indexWidget(
+                Widget widget)
         {
-            collectTargetWidget(
-                    matches,
-                    widget,
-                    targetText);
+            if (widget == null)
+            {
+                return;
+            }
+
+            if (performanceMetrics != null)
+            {
+                performanceMetrics.recordWidgetsExamined(
+                        1);
+            }
+
+            final String semantic =
+                    textNormalizer.normalizeSemantic(
+                            widget.getText());
+
+            if (semantic == null
+                    || semantic.isEmpty())
+            {
+                return;
+            }
+
+            final String key =
+                    semanticKey(
+                            semantic);
+
+            final List<Widget> matches =
+                    widgetsBySemantic.computeIfAbsent(
+                            key,
+                            ignored -> new ArrayList<>());
+
+            if (!matches.contains(
+                    widget))
+            {
+                matches.add(
+                        widget);
+            }
         }
-    }
 
-    private void collectTargetWidget(
-            List<Widget> matches,
-            Widget widget,
-            String targetText)
-    {
-        if (matches == null
-                || widget == null
-                || targetText == null)
+        private String semanticKey(
+                String semantic)
         {
-            return;
-        }
-
-        // TODO: Count widgets examined during correlation.
-        if (performanceMetrics != null)
-        {
-            performanceMetrics.recordWidgetsExamined(
-                    1);
-        }
-
-        final String semantic =
-                textNormalizer.normalizeSemantic(
-                        widget.getText());
-
-        if (semantic == null
-                || !semantic.equalsIgnoreCase(
-                targetText))
-        {
-            return;
-        }
-
-        if (!matches.contains(
-                widget))
-        {
-            matches.add(
-                    widget);
+            return semantic.toLowerCase(
+                    Locale.ROOT);
         }
     }
 
@@ -1405,7 +1464,8 @@ public final class FontLayoutService
             Widget lineWidget,
             Surface surface,
             Widget bodyWidget,
-            List<Widget> rowWidgets)
+            List<Widget> rowWidgets,
+            FallbackCorrelationContext fallbackContext)
     {
         final List<Widget> result =
                 new ArrayList<>();
@@ -1456,7 +1516,8 @@ public final class FontLayoutService
                             lineWidget,
                             surface,
                             bodyWidget,
-                            rowWidgets);
+                            rowWidgets,
+                            fallbackContext);
 
             if (match != null
                     && !result.contains(
@@ -1475,7 +1536,8 @@ public final class FontLayoutService
             Widget lineWidget,
             Surface surface,
             Widget excludedBodyWidget,
-            List<Widget> rowWidgets)
+            List<Widget> rowWidgets,
+            FallbackCorrelationContext fallbackContext)
     {
         final Widget rowMatch =
                 matchRow(
@@ -1488,16 +1550,14 @@ public final class FontLayoutService
             return rowMatch;
         }
 
-        // TODO: Count broad correlation fallbacks during development.
-        if (performanceMetrics != null)
+        if (fallbackContext == null)
         {
-            performanceMetrics.recordFallbackSearch();
+            return null;
         }
 
         final List<Widget> matches =
-                findAllTargetWidgets(
-                        targetText,
-                        surface);
+                fallbackContext.findMatches(
+                        targetText);
 
         if (matches.isEmpty())
         {

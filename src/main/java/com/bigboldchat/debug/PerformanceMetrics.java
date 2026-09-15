@@ -73,8 +73,14 @@ public final class PerformanceMetrics
     // Number of row-candidates searches.
     private long rowCandidates;
 
-    // Count correlation fallback searches.
+    // Count correlation fallback requests.
     private long fallbackSearches;
+
+    // Count actual lazy fallback index builds.
+    private long fallbackBuilds;
+
+    // Count fallback requests served by an already-built per-POST index.
+    private long fallbackReuses;
 
     // Count rank-icon searches and examined nodes.
     private long rankSearches;
@@ -194,6 +200,16 @@ public final class PerformanceMetrics
     public void recordFallbackSearch()
     {
         fallbackSearches++;
+    }
+
+    public void recordFallbackBuild()
+    {
+        fallbackBuilds++;
+    }
+
+    public void recordFallbackReuse()
+    {
+        fallbackReuses++;
     }
 
     public void recordRankSearch()
@@ -352,6 +368,8 @@ public final class PerformanceMetrics
                         + " | RowCandidates={}"
                         + " | SurfaceSearches={}"
                         + " | FallbackSearches={}"
+                        + " | FallbackBuilds={}"
+                        + " | FallbackReuses={}"
                         + " | RankSearches={}"
                         + " | RankNodes={}",
                 widgetsExamined,
@@ -359,6 +377,8 @@ public final class PerformanceMetrics
                 rowCandidates,
                 surfaceSearches,
                 fallbackSearches,
+                fallbackBuilds,
+                fallbackReuses,
                 rankSearches,
                 rankNodesExamined);
 
@@ -481,6 +501,12 @@ public final class PerformanceMetrics
                 0L;
 
         fallbackSearches =
+                0L;
+
+        fallbackBuilds =
+                0L;
+
+        fallbackReuses =
                 0L;
 
         rankSearches =
