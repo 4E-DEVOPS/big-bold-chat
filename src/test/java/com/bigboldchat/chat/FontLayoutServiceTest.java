@@ -639,9 +639,7 @@ public class FontLayoutServiceTest
     }
 
     /*
-     * ================================================================
      * HELPERS
-     * ================================================================
      */
 
     private Object createFallbackContext()

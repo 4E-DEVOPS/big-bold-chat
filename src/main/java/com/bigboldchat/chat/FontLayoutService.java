@@ -450,10 +450,12 @@ public final class FontLayoutService
             return;
         }
 
-        bodyWidget.setFontId(
+        setFontIdIfChanged(
+                bodyWidget,
                 state.selectedFontId);
 
-        bodyWidget.setLineHeight(
+        setLineHeightIfChanged(
+                bodyWidget,
                 state.selectedLineHeight);
 
         /*
@@ -464,14 +466,17 @@ public final class FontLayoutService
                 && !state.selectedRawBodyText.equals(
                 bodyWidget.getText()))
         {
-            bodyWidget.setText(
+            setTextIfChanged(
+                    bodyWidget,
                     state.selectedRawBodyText);
         }
 
-        bodyWidget.setOriginalX(
+        setOriginalXIfChanged(
+                bodyWidget,
                 state.selectedBodyX);
 
-        bodyWidget.setOriginalWidth(
+        setOriginalWidthIfChanged(
+                bodyWidget,
                 state.selectedBodyWidth);
 
         /*
@@ -509,7 +514,8 @@ public final class FontLayoutService
                     bodyWidget);
         }
 
-        bodyWidget.revalidate();
+        revalidateWidget(
+                bodyWidget);
     }
 
     private void applyPrefixPresentation(
@@ -541,10 +547,12 @@ public final class FontLayoutService
                 continue;
             }
 
-            widget.setFontId(
+            setFontIdIfChanged(
+                    widget,
                     state.selectedFontId);
 
-            widget.setLineHeight(
+            setLineHeightIfChanged(
+                    widget,
                     state.selectedLineHeight);
 
             /*
@@ -555,7 +563,8 @@ public final class FontLayoutService
                     && prefixWidgets.size()
                     == 1)
             {
-                widget.setOriginalWidth(
+                setOriginalWidthIfChanged(
+                        widget,
                         state.selectedPrefixLayoutWidth);
 
                 /*
@@ -569,7 +578,8 @@ public final class FontLayoutService
                         && !state.selectedRawPrefixText.equals(
                         widget.getText()))
                 {
-                    widget.setText(
+                    setTextIfChanged(
+                            widget,
                             state.selectedRawPrefixText);
                 }
             }
@@ -594,10 +604,12 @@ public final class FontLayoutService
                         && semantic.equalsIgnoreCase(
                         channel.titleText))
                 {
-                    widget.setOriginalX(
+                    setOriginalXIfChanged(
+                            widget,
                             channel.titleX);
 
-                    widget.setOriginalWidth(
+                    setOriginalWidthIfChanged(
+                            widget,
                             channel.titleWidth);
 
                     if (channel.renderedTitleText != null
@@ -605,7 +617,8 @@ public final class FontLayoutService
                             && !channel.renderedTitleText.equals(
                             widget.getText()))
                     {
-                        widget.setText(
+                        setTextIfChanged(
+                                widget,
                                 channel.renderedTitleText);
                     }
 
@@ -624,10 +637,12 @@ public final class FontLayoutService
                         && semantic.equalsIgnoreCase(
                         channel.senderText))
                 {
-                    widget.setOriginalX(
+                    setOriginalXIfChanged(
+                            widget,
                             channel.senderX);
 
-                    widget.setOriginalWidth(
+                    setOriginalWidthIfChanged(
+                            widget,
                             channel.senderWidth);
 
                     /*
@@ -644,7 +659,8 @@ public final class FontLayoutService
                             && !channel.renderedSenderText.equals(
                             widget.getText()))
                     {
-                        widget.setText(
+                        setTextIfChanged(
+                                widget,
                                 channel.renderedSenderText);
                     }
 
@@ -692,11 +708,13 @@ public final class FontLayoutService
             if (widget.getOriginalHeight()
                     < state.selectedLineHeight)
             {
-                widget.setOriginalHeight(
+                setOriginalHeightIfChanged(
+                        widget,
                         state.selectedLineHeight);
             }
 
-            widget.revalidate();
+            revalidateWidget(
+                    widget);
         }
     }
 
@@ -723,13 +741,16 @@ public final class FontLayoutService
          * Per-font right-side spacing is already reflected in senderX and
          * bodyX. It does not move the icon itself.
          */
-        rankIconWidget.setOriginalX(
+        setOriginalXIfChanged(
+                rankIconWidget,
                 state.selectedChannelLayout.rankIconX);
 
-        rankIconWidget.setOriginalWidth(
+        setOriginalWidthIfChanged(
+                rankIconWidget,
                 state.selectedChannelLayout.rankIconWidth);
 
-        rankIconWidget.setOriginalHeight(
+        setOriginalHeightIfChanged(
+                rankIconWidget,
                 state.selectedChannelLayout.rankIconHeight);
 
         /*
@@ -758,7 +779,8 @@ public final class FontLayoutService
                     rankIconWidget);
         }
 
-        rankIconWidget.revalidate();
+        revalidateWidget(
+                rankIconWidget);
     }
 
     /*
@@ -1047,11 +1069,174 @@ public final class FontLayoutService
                 widget.getOriginalY()
                         + yOffset;
 
-        widget.setOriginalY(
+        setOriginalYIfChanged(
+                widget,
                 adjustedY);
 
-        widget.setRelativeY(
+        setRelativeYIfChanged(
+                widget,
                 adjustedY);
+    }
+
+    /*
+     * ================================================================
+     * IDEMPOTENT WIDGET MUTATION
+     * ================================================================
+     */
+
+    private void setFontIdIfChanged(
+            Widget widget,
+            int fontId)
+    {
+        if (widget == null
+                || widget.getFontId() == fontId)
+        {
+            return;
+        }
+
+        widget.setFontId(
+                fontId);
+
+        recordWidgetMutation();
+    }
+
+    private void setLineHeightIfChanged(
+            Widget widget,
+            int lineHeight)
+    {
+        if (widget == null
+                || widget.getLineHeight() == lineHeight)
+        {
+            return;
+        }
+
+        widget.setLineHeight(
+                lineHeight);
+
+        recordWidgetMutation();
+    }
+
+    private void setTextIfChanged(
+            Widget widget,
+            String text)
+    {
+        if (widget == null
+                || text == null
+                || text.equals(
+                widget.getText()))
+        {
+            return;
+        }
+
+        widget.setText(
+                text);
+
+        recordWidgetMutation();
+    }
+
+    private void setOriginalXIfChanged(
+            Widget widget,
+            int originalX)
+    {
+        if (widget == null
+                || widget.getOriginalX() == originalX)
+        {
+            return;
+        }
+
+        widget.setOriginalX(
+                originalX);
+
+        recordWidgetMutation();
+    }
+
+    private void setOriginalYIfChanged(
+            Widget widget,
+            int originalY)
+    {
+        if (widget == null
+                || widget.getOriginalY() == originalY)
+        {
+            return;
+        }
+
+        widget.setOriginalY(
+                originalY);
+
+        recordWidgetMutation();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void setRelativeYIfChanged(
+            Widget widget,
+            int relativeY)
+    {
+        if (widget == null
+                || widget.getRelativeY() == relativeY)
+        {
+            return;
+        }
+
+        widget.setRelativeY(
+                relativeY);
+
+        recordWidgetMutation();
+    }
+
+    private void setOriginalWidthIfChanged(
+            Widget widget,
+            int originalWidth)
+    {
+        if (widget == null
+                || widget.getOriginalWidth() == originalWidth)
+        {
+            return;
+        }
+
+        widget.setOriginalWidth(
+                originalWidth);
+
+        recordWidgetMutation();
+    }
+
+    private void setOriginalHeightIfChanged(
+            Widget widget,
+            int originalHeight)
+    {
+        if (widget == null
+                || widget.getOriginalHeight() == originalHeight)
+        {
+            return;
+        }
+
+        widget.setOriginalHeight(
+                originalHeight);
+
+        recordWidgetMutation();
+    }
+
+    private void recordWidgetMutation()
+    {
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordWidgetMutation();
+        }
+    }
+
+    private void revalidateWidget(
+            Widget widget)
+    {
+        if (widget == null)
+        {
+            return;
+        }
+
+        widget.revalidate();
+
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordRevalidate();
+        }
     }
 
     /*
