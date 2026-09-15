@@ -26,7 +26,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 @PluginDescriptor(
 		name = "Chat XL",
 		description = "Resize the chatbox and its text for improved readability.<br>"
-						+ "[A.K.A. BBC - Big Bold Chat]",
+				+ "[A.K.A. BBC - Big Bold Chat]",
 		tags = {"1877", "bbc", "big", "bold", "chat", "chatbox", "text", "font", "fonts", "size", "resize", "resizer", "resizing", "resizable", "magnify", "magnifier", "zoom", "scale", "large", "bigger", "small", "readability", "accessibility", "private", "pm", "messages"},
 		enabledByDefault = true
 )
@@ -263,6 +263,16 @@ public class ChatXL extends Plugin
 		if ("chatFont".equals(
 				event.getKey()))
 		{
+			/*
+			 * Resolve the newly selected font/profile once before rebuilding
+			 * retained rows. Every PRE -> POST construction created by the
+			 * refresh then consumes this same active state.
+			 */
+			if (fontLayoutService != null)
+			{
+				fontLayoutService.refreshActiveFontState();
+			}
+
 			/*
 			 * Font selection, wrapping, geometry, and row allocation must
 			 * always be recalculated together.

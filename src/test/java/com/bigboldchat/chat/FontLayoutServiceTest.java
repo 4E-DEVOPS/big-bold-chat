@@ -1,6 +1,10 @@
 package com.bigboldchat.chat;
 
+import com.bigboldchat.Configurations;
+import com.bigboldchat.config.ChatFont;
 import com.bigboldchat.debug.PerformanceMetrics;
+import com.bigboldchat.fonts.ChatFontProfile;
+import com.bigboldchat.fonts.ChatFontRegistry;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -16,26 +20,32 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Characterization tests for Chat XL widget correlation.
+ * Characterization tests for Chat XL widget correlation and active font state.
  *
- * These tests protect the row-first / lazy-fallback contract:
+ * These tests protect:
  *
- *  - a successful row match must not initialize fallback correlation;
- *  - the first fallback request builds one surface index;
- *  - later fallback requests in the same POST context reuse that index.
+ *  - the row-first / lazy-fallback text correlation contract;
+ *  - row-first rank correlation and its recursive correctness fallback;
+ *  - active font/profile initialization and refresh behavior;
+ *  - preservation of active state across reset();
+ *  - preservation of a pending PRE -> POST profile snapshot when the
+ *    configured active font changes.
  *
- * Reflection is intentionally limited to the private correlation helpers.
- * The behavior under test is internal implementation behavior that cannot be
- * reliably forced through RuneLite's normal chat-construction lifecycle.
+ * Reflection is intentionally limited to private implementation state and
+ * correlation helpers whose behavior cannot be reliably forced through
+ * RuneLite's normal chat-construction lifecycle in a unit test.
  */
 public class FontLayoutServiceTest
 {
     private Client client;
+
+    private Configurations config;
 
     private PerformanceMetrics performanceMetrics;
 
@@ -55,13 +65,21 @@ public class FontLayoutServiceTest
                 mock(
                         Client.class);
 
+        config =
+                mock(
+                        Configurations.class);
+
+        when(config.chatFont())
+                .thenReturn(
+                        ChatFont.PLAIN_12);
+
         performanceMetrics =
                 new PerformanceMetrics();
 
         service =
                 new FontLayoutService(
                         client,
-                        null,
+                        config,
                         new FontMeasurementService(
                                 client),
                         new ChatTextNormalizer(
@@ -83,7 +101,9 @@ public class FontLayoutServiceTest
     }
 
     /*
-     * TESTS
+     * ================================================================
+     * TEXT CORRELATION
+     * ================================================================
      */
 
     @Test
@@ -299,7 +319,329 @@ public class FontLayoutServiceTest
     }
 
     /*
+     * ================================================================
+     * RANK CORRELATION
+     * ================================================================
+     */
+
+    @Test
+    public void rankRowMatchDoesNotUseFallback()
+            throws Exception
+    {
+        final Widget root =
+                mock(
+                        Widget.class);
+
+        final Widget rowAnchor =
+                mock(
+                        Widget.class);
+
+        final Widget unrelatedWidget =
+                mock(
+                        Widget.class);
+
+        final Widget rankWidget =
+                mock(
+                        Widget.class);
+
+        when(client.getWidget(
+                InterfaceID.Chatbox.SCROLLAREA))
+                .thenReturn(
+                        root);
+
+        when(rowAnchor.getOriginalY())
+                .thenReturn(
+                        42);
+
+        when(rowAnchor.getRelativeY())
+                .thenReturn(
+                        84);
+
+        when(rankWidget.getSpriteId())
+                .thenReturn(
+                        1234);
+
+        when(rankWidget.getOriginalX())
+                .thenReturn(
+                        27);
+
+        when(rankWidget.getOriginalY())
+                .thenReturn(
+                        42);
+
+        final FontMeasurementService.ChannelPrefixLayout nativeLayout =
+                new FontMeasurementService.ChannelPrefixLayout();
+
+        nativeLayout.rankIconSpriteId =
+                1234;
+
+        nativeLayout.rankIconX =
+                27;
+
+        final Widget result =
+                findRankIconWidget(
+                        nativeLayout,
+                        rowAnchor,
+                        Arrays.asList(
+                                unrelatedWidget,
+                                rankWidget));
+
+        assertSame(
+                rankWidget,
+                result);
+
+        assertEquals(
+                1L,
+                metric(
+                        "rankSearches"));
+
+        assertEquals(
+                0L,
+                metric(
+                        "rankFallbacks"));
+
+        assertEquals(
+                2L,
+                metric(
+                        "rankNodesExamined"));
+    }
+
+    @Test
+    public void rankRowMissUsesRecursiveFallback()
+            throws Exception
+    {
+        final Widget root =
+                mock(
+                        Widget.class);
+
+        final Widget rowAnchor =
+                mock(
+                        Widget.class);
+
+        final Widget rowCandidate =
+                mock(
+                        Widget.class);
+
+        final Widget rankWidget =
+                mock(
+                        Widget.class);
+
+        when(client.getWidget(
+                InterfaceID.Chatbox.SCROLLAREA))
+                .thenReturn(
+                        root);
+
+        when(root.getDynamicChildren())
+                .thenReturn(
+                        new Widget[]
+                                {
+                                        rankWidget
+                                });
+
+        when(rowAnchor.getOriginalY())
+                .thenReturn(
+                        42);
+
+        when(rowAnchor.getRelativeY())
+                .thenReturn(
+                        84);
+
+        when(rankWidget.getSpriteId())
+                .thenReturn(
+                        1234);
+
+        when(rankWidget.getOriginalX())
+                .thenReturn(
+                        27);
+
+        when(rankWidget.getRelativeY())
+                .thenReturn(
+                        84);
+
+        final FontMeasurementService.ChannelPrefixLayout nativeLayout =
+                new FontMeasurementService.ChannelPrefixLayout();
+
+        nativeLayout.rankIconSpriteId =
+                1234;
+
+        nativeLayout.rankIconX =
+                27;
+
+        final Widget result =
+                findRankIconWidget(
+                        nativeLayout,
+                        rowAnchor,
+                        Arrays.asList(
+                                rowCandidate));
+
+        assertSame(
+                rankWidget,
+                result);
+
+        assertEquals(
+                1L,
+                metric(
+                        "rankSearches"));
+
+        assertEquals(
+                1L,
+                metric(
+                        "rankFallbacks"));
+
+        /*
+         * One row candidate was examined first, then the recursive fallback
+         * examined the root and matching dynamic child.
+         */
+        assertEquals(
+                3L,
+                metric(
+                        "rankNodesExamined"));
+    }
+
+    /*
+     * ================================================================
+     * ACTIVE FONT / PROFILE STATE
+     * ================================================================
+     */
+
+    @Test
+    public void activeFontStateInitializesFromConfiguration()
+            throws Exception
+    {
+        final Object activeState =
+                fieldValue(
+                        service,
+                        "activeFontState");
+
+        assertNotNull(
+                activeState);
+
+        assertSame(
+                ChatFont.PLAIN_12,
+                fieldValue(
+                        activeState,
+                        "chatFont"));
+
+        assertSame(
+                ChatFontRegistry.get(
+                        ChatFont.PLAIN_12),
+                fieldValue(
+                        activeState,
+                        "fontProfile"));
+    }
+
+    @Test
+    public void refreshActiveFontStateUpdatesProfile()
+            throws Exception
+    {
+        when(config.chatFont())
+                .thenReturn(
+                        ChatFont.BARBARIAN);
+
+        service.refreshActiveFontState();
+
+        final Object activeState =
+                fieldValue(
+                        service,
+                        "activeFontState");
+
+        assertNotNull(
+                activeState);
+
+        assertSame(
+                ChatFont.BARBARIAN,
+                fieldValue(
+                        activeState,
+                        "chatFont"));
+
+        assertSame(
+                ChatFontRegistry.get(
+                        ChatFont.BARBARIAN),
+                fieldValue(
+                        activeState,
+                        "fontProfile"));
+    }
+
+    @Test
+    public void resetPreservesActiveFontState()
+            throws Exception
+    {
+        final Object activeStateBefore =
+                fieldValue(
+                        service,
+                        "activeFontState");
+
+        service.reset();
+
+        final Object activeStateAfter =
+                fieldValue(
+                        service,
+                        "activeFontState");
+
+        assertSame(
+                activeStateBefore,
+                activeStateAfter);
+
+        assertSame(
+                ChatFont.PLAIN_12,
+                fieldValue(
+                        activeStateAfter,
+                        "chatFont"));
+    }
+
+    @Test
+    public void refreshActiveFontStatePreservesPendingProfileSnapshot()
+            throws Exception
+    {
+        final ChatFontProfile plainProfile =
+                ChatFontRegistry.get(
+                        ChatFont.PLAIN_12);
+
+        final ChatFontProfile barbarianProfile =
+                ChatFontRegistry.get(
+                        ChatFont.BARBARIAN);
+
+        /*
+         * Simulate the exact state immediately after a supported PRE has
+         * captured its profile for the pending PRE -> POST construction.
+         *
+         * We intentionally set only the snapshot under test here. The purpose
+         * of this test is to guarantee that refreshing the active font cannot
+         * overwrite an already-captured pending profile.
+         */
+        setFieldValue(
+                service,
+                "pendingFontProfile",
+                plainProfile);
+
+        when(config.chatFont())
+                .thenReturn(
+                        ChatFont.BARBARIAN);
+
+        service.refreshActiveFontState();
+
+        final Object activeState =
+                fieldValue(
+                        service,
+                        "activeFontState");
+
+        assertSame(
+                barbarianProfile,
+                fieldValue(
+                        activeState,
+                        "fontProfile"));
+
+        assertSame(
+                plainProfile,
+                fieldValue(
+                        service,
+                        "pendingFontProfile"));
+    }
+
+    /*
+     * ================================================================
      * HELPERS
+     * ================================================================
      */
 
     private Object createFallbackContext()
@@ -368,6 +710,30 @@ public class FontLayoutServiceTest
                 fallbackContext);
     }
 
+    private Widget findRankIconWidget(
+            FontMeasurementService.ChannelPrefixLayout nativeLayout,
+            Widget rowAnchor,
+            List<Widget> rowWidgets)
+            throws Exception
+    {
+        final Method method =
+                FontLayoutService.class
+                        .getDeclaredMethod(
+                                "findRankIconWidget",
+                                FontMeasurementService.ChannelPrefixLayout.class,
+                                Widget.class,
+                                List.class);
+
+        method.setAccessible(
+                true);
+
+        return (Widget) method.invoke(
+                service,
+                nativeLayout,
+                rowAnchor,
+                rowWidgets);
+    }
+
     private long metric(
             String fieldName)
             throws Exception
@@ -382,6 +748,42 @@ public class FontLayoutServiceTest
 
         return field.getLong(
                 performanceMetrics);
+    }
+
+    private Object fieldValue(
+            Object target,
+            String fieldName)
+            throws Exception
+    {
+        final Field field =
+                target.getClass()
+                        .getDeclaredField(
+                                fieldName);
+
+        field.setAccessible(
+                true);
+
+        return field.get(
+                target);
+    }
+
+    private void setFieldValue(
+            Object target,
+            String fieldName,
+            Object value)
+            throws Exception
+    {
+        final Field field =
+                target.getClass()
+                        .getDeclaredField(
+                                fieldName);
+
+        field.setAccessible(
+                true);
+
+        field.set(
+                target,
+                value);
     }
 
     private Class<?> findNestedClass(

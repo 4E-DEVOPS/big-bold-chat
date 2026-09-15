@@ -73,12 +73,28 @@ public final class FontLayoutService
     private final PerformanceMetrics performanceMetrics;
 
     /*
+     * Active font selection resolved outside the construction hot path.
+     *
+     * Configuration changes replace this immutable pair once, while every
+     * supported PRE construction simply snapshots the already-resolved state.
+     */
+    private ActiveFontState activeFontState;
+
+    /*
      * One exact PRE -> POST construction pair.
      *
      * Nested scripts do not replace this state because only supported
      * construction scripts create a new measurement.
      */
     private FontMeasurementService.ConstructionMeasurement pending;
+
+    /*
+     * Exact profile paired with the pending PRE -> POST construction.
+     *
+     * This snapshots activeFontState for the construction so POST cannot
+     * observe a different profile if configuration changes between events.
+     */
+    private ChatFontProfile pendingFontProfile;
 
     /*
      * Widgets whose profile-specific Y correction must wait until RuneScape
@@ -147,6 +163,8 @@ public final class FontLayoutService
 
         this.performanceMetrics =
                 performanceMetrics;
+
+        refreshActiveFontState();
     }
 
     /*
@@ -193,23 +211,22 @@ public final class FontLayoutService
          * Script 4483 Clan/Guest Clan.
          */
         pending = null;
+        pendingFontProfile = null;
 
-        final ChatFont configuredFont =
-                config.chatFont();
+        final ActiveFontState fontState =
+                activeFontState;
 
-        final ChatFont selectedChatFont =
-                configuredFont != null
-                        ? configuredFont
-                        : ChatFont.PLAIN_12;
-
-        final ChatFontProfile fontProfile =
-                ChatFontRegistry.get(
-                        selectedChatFont);
-
-        if (fontProfile == null)
+        if (fontState == null
+                || fontState.fontProfile == null)
         {
             return;
         }
+
+        final ChatFont selectedChatFont =
+                fontState.chatFont;
+
+        final ChatFontProfile fontProfile =
+                fontState.fontProfile;
 
         // TODO: Measure construction measurement during development.
         final long measurementStarted =
@@ -279,6 +296,9 @@ public final class FontLayoutService
         pending =
                 measurement;
 
+        pendingFontProfile =
+                fontProfile;
+
     }
 
     /*
@@ -301,7 +321,13 @@ public final class FontLayoutService
         final FontMeasurementService.ConstructionMeasurement state =
                 pending;
 
+        final ChatFontProfile fontProfile =
+                pendingFontProfile;
+
         pending =
+                null;
+
+        pendingFontProfile =
                 null;
 
         final Widget lineWidget =
@@ -389,9 +415,6 @@ public final class FontLayoutService
             rankIconWidget =
                     null;
         }
-
-        final ChatFontProfile fontProfile =
-                getConfiguredFontProfile();
 
         applyPrefixPresentation(
                 state,
@@ -870,21 +893,48 @@ public final class FontLayoutService
     }
 
     /*
-     * Resolve the currently selected font profile for presentation-only
-     * adjustments that are intentionally not owned by measurement geometry.
+     * Refresh the selected font/profile pair only when configuration changes.
+     *
+     * This intentionally sits outside the supported construction hot path.
+     * PRE snapshots this state once and POST consumes that exact snapshot.
      */
-    private ChatFontProfile getConfiguredFontProfile()
+    public void refreshActiveFontState()
     {
         final ChatFont configuredFont =
-                config.chatFont();
+                config != null
+                        ? config.chatFont()
+                        : null;
 
         final ChatFont selectedChatFont =
                 configuredFont != null
                         ? configuredFont
                         : ChatFont.PLAIN_12;
 
-        return ChatFontRegistry.get(
-                selectedChatFont);
+        final ChatFontProfile fontProfile =
+                ChatFontRegistry.get(
+                        selectedChatFont);
+
+        if (fontProfile == null)
+        {
+            activeFontState =
+                    null;
+            return;
+        }
+
+        final ActiveFontState current =
+                activeFontState;
+
+        if (current != null
+                && current.chatFont == selectedChatFont
+                && current.fontProfile == fontProfile)
+        {
+            return;
+        }
+
+        activeFontState =
+                new ActiveFontState(
+                        selectedChatFont,
+                        fontProfile);
     }
 
     /*
@@ -1939,7 +1989,31 @@ public final class FontLayoutService
         pending =
                 null;
 
+        pendingFontProfile =
+                null;
+
         pendingYOffsets.clear();
+    }
+
+    /*
+     * Immutable configured font/profile pair.
+     */
+    private static final class ActiveFontState
+    {
+        private final ChatFont chatFont;
+
+        private final ChatFontProfile fontProfile;
+
+        private ActiveFontState(
+                ChatFont chatFont,
+                ChatFontProfile fontProfile)
+        {
+            this.chatFont =
+                    chatFont;
+
+            this.fontProfile =
+                    fontProfile;
+        }
     }
 
     /*
