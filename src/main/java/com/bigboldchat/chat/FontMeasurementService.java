@@ -1465,7 +1465,7 @@ public final class FontMeasurementService
                 totalLines);
     }
 
-    private int calculateSingleParagraphLines(
+    int calculateSingleParagraphLines(
             FontTypeFace font,
             String text,
             int maxWidth)
@@ -1508,7 +1508,8 @@ public final class FontMeasurementService
             }
 
             /*
-             * Hard-break a token that is itself wider than the row.
+             * Don't hard-wrap one uninterrupted token character by character.
+             * This applies uniformly to letters, digits, punctuation, and symbols.
              */
             if (font.getTextWidth(
                     word) > maxWidth)
@@ -1516,42 +1517,10 @@ public final class FontMeasurementService
                 if (!currentLine.isEmpty())
                 {
                     lines++;
-
-                    currentLine =
-                            "";
-                }
-
-                final StringBuilder segment =
-                        new StringBuilder();
-
-                for (int i = 0;
-                     i < word.length();
-                     i++)
-                {
-                    final char ch =
-                            word.charAt(
-                                    i);
-
-                    final String candidate =
-                            segment.toString()
-                                    + ch;
-
-                    if (segment.length() > 0
-                            && font.getTextWidth(
-                            candidate) > maxWidth)
-                    {
-                        lines++;
-
-                        segment.setLength(
-                                0);
-                    }
-
-                    segment.append(
-                            ch);
                 }
 
                 currentLine =
-                        segment.toString();
+                        word;
 
                 continue;
             }
