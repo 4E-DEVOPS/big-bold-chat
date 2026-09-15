@@ -47,8 +47,9 @@ public class ChatXL extends Plugin
 	private static final String CONFIG_GROUP = "bigboldchat";
 	private static final String VERSION_CONFIG_KEY = "lastNotifiedVersion";
 
-	private static final String UPDATE_MESSAGE = "Performance Improvements, Version Update Messages, a `::clear' / `::cls' command to clear chat history, and an emoji fix reported by Ms_Gizzy.";
+	private static final String INSTALL_MESSAGE = "Thank you for installing ChatXL! Report any issues you find to Github.";
 	private static final String UNINSTALL_MESSAGE = "Please submit a review/issue report on Github of your experience. Thanks!";
+	private static final String UPDATE_MESSAGE = "Performance Improvements, Version Update Messages, a `::clear' / `::cls' command to clear chat history, and an emoji fix reported by Ms_Gizzy.";
 
 	@Inject
 	private Client client;
@@ -417,7 +418,8 @@ public class ChatXL extends Plugin
 		client.addChatMessage(
 				ChatMessageType.GAMEMESSAGE,
 				"",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> Thank you for installing ChatXL! Report any issues you find to Github.",
+				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> "
+						+ INSTALL_MESSAGE,
 				null);
 	}
 
