@@ -381,7 +381,8 @@ public final class FontLayoutService
             rankIconWidget =
                     findRankIconWidget(
                             state.nativeChannelLayout,
-                            rowAnchor);
+                            rowAnchor,
+                            rowWidgets);
         }
         else
         {
@@ -1678,7 +1679,8 @@ public final class FontLayoutService
 
     private Widget findRankIconWidget(
             FontMeasurementService.ChannelPrefixLayout nativeLayout,
-            Widget rowAnchor)
+            Widget rowAnchor,
+            List<Widget> rowWidgets)
     {
         if (nativeLayout == null
                 || nativeLayout.rankIconSpriteId < 0
@@ -1703,11 +1705,93 @@ public final class FontLayoutService
             performanceMetrics.recordRankSearch();
         }
 
+        /*
+         * Rank icons share the same native row geometry used by the text
+         * correlation pass. Reuse those already-collected row candidates
+         * before walking the complete chat widget tree.
+         *
+         * This preserves the exact sprite / X / Y matcher. The recursive
+         * tree search remains as a correctness fallback for any RuneLite
+         * layout where the rank sprite is not present in rowWidgets.
+         */
+        final Widget rowMatch =
+                findRankIconWidgetOnRow(
+                        rowWidgets,
+                        nativeLayout,
+                        rowAnchor);
+
+        if (rowMatch != null)
+        {
+            return rowMatch;
+        }
+
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordRankFallback();
+        }
+
         return findRankIconWidget(
                 root,
                 nativeLayout,
                 rowAnchor,
                 new IdentityHashMap<>());
+    }
+
+
+    private Widget findRankIconWidgetOnRow(
+            List<Widget> rowWidgets,
+            FontMeasurementService.ChannelPrefixLayout nativeLayout,
+            Widget rowAnchor)
+    {
+        if (rowWidgets == null
+                || rowWidgets.isEmpty()
+                || nativeLayout == null
+                || rowAnchor == null)
+        {
+            return null;
+        }
+
+        for (Widget widget : rowWidgets)
+        {
+            if (widget == null)
+            {
+                continue;
+            }
+
+            if (performanceMetrics != null)
+            {
+                performanceMetrics.recordRankNodesExamined(
+                        1);
+            }
+
+            if (isStrictRankIconMatch(
+                    widget,
+                    nativeLayout,
+                    rowAnchor))
+            {
+                return widget;
+            }
+        }
+
+        return null;
+    }
+
+    private boolean isStrictRankIconMatch(
+            Widget widget,
+            FontMeasurementService.ChannelPrefixLayout nativeLayout,
+            Widget rowAnchor)
+    {
+        return widget != null
+                && nativeLayout != null
+                && rowAnchor != null
+                && widget.getSpriteId()
+                == nativeLayout.rankIconSpriteId
+                && widget.getOriginalX()
+                == nativeLayout.rankIconX
+                && (widget.getOriginalY()
+                == rowAnchor.getOriginalY()
+                || widget.getRelativeY()
+                == rowAnchor.getRelativeY());
     }
 
     private Widget findRankIconWidget(
@@ -1743,14 +1827,10 @@ public final class FontLayoutService
          * canvas-Y matching can accidentally move another visible row's
          * rank icon.
          */
-        if (widget.getSpriteId()
-                == nativeLayout.rankIconSpriteId
-                && widget.getOriginalX()
-                == nativeLayout.rankIconX
-                && (widget.getOriginalY()
-                == rowAnchor.getOriginalY()
-                || widget.getRelativeY()
-                == rowAnchor.getRelativeY()))
+        if (isStrictRankIconMatch(
+                widget,
+                nativeLayout,
+                rowAnchor))
         {
             return widget;
         }

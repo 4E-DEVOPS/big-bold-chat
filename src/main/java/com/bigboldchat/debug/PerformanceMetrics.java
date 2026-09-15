@@ -82,8 +82,10 @@ public final class PerformanceMetrics
     // Count fallback requests served by an already-built per-POST index.
     private long fallbackReuses;
 
-    // Count rank-icon searches and examined nodes.
+    // Count rank-icon searches, full-tree fallbacks, and examined nodes.
     private long rankSearches;
+
+    private long rankFallbacks;
 
     private long rankNodesExamined;
 
@@ -215,6 +217,11 @@ public final class PerformanceMetrics
     public void recordRankSearch()
     {
         rankSearches++;
+    }
+
+    public void recordRankFallback()
+    {
+        rankFallbacks++;
     }
 
     public void recordRankNodesExamined(
@@ -371,6 +378,7 @@ public final class PerformanceMetrics
                         + " | FallbackBuilds={}"
                         + " | FallbackReuses={}"
                         + " | RankSearches={}"
+                        + " | RankFallbacks={}"
                         + " | RankNodes={}",
                 widgetsExamined,
                 rowSearches,
@@ -380,6 +388,7 @@ public final class PerformanceMetrics
                 fallbackBuilds,
                 fallbackReuses,
                 rankSearches,
+                rankFallbacks,
                 rankNodesExamined);
 
         log.info(
@@ -510,6 +519,9 @@ public final class PerformanceMetrics
                 0L;
 
         rankSearches =
+                0L;
+
+        rankFallbacks =
                 0L;
 
         rankNodesExamined =
