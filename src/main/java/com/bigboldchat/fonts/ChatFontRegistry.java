@@ -7,10 +7,7 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * Central registry for Chat XL font profiles.
- *
- * Layout code should request a profile from this registry rather than
- * containing per-font switch statements or tuning constants.
+ * Maps ChatFont values to their ChatFontProfile instances.
  */
 public final class ChatFontRegistry
 {
@@ -83,10 +80,7 @@ public final class ChatFontRegistry
     }
 
     /**
-     * Returns the tuning profile for the selected ChatFont.
-     *
-     * Plain 12 is used as the safe fallback for null or an
-     * unexpectedly unregistered font.
+     * Returns the selected profile, falling back to Plain 12.
      */
     public static ChatFontProfile get(
             ChatFont chatFont)

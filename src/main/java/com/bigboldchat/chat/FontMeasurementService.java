@@ -18,24 +18,10 @@ import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 
 /**
- * Owns Chat XL text and geometry measurement.
+ * Measures chat text, wrapping, row allocation, and presentation geometry.
  *
- * This service does NOT mutate chat construction or presentation widgets.
- *
- * It is responsible for determining:
- *
- *  - native and selected font metrics;
- *  - prefix / sender widths;
- *  - Clan / Guest Clan channel geometry;
- *  - rank-icon geometry;
- *  - body X / width;
- *  - native and selected wrapping;
- *  - selected line height;
- *  - required pre-construction row allocation;
- *  - per-font PRE row-Y adjustment.
- *
- * FontLayoutService consumes the resulting ConstructionMeasurement
- * and performs the actual PRE / POST mutations.
+ * Produces ConstructionMeasurement values consumed by FontLayoutService.
+ * This service does not mutate widgets or script stacks.
  */
 public final class FontMeasurementService
 {
@@ -58,7 +44,7 @@ public final class FontMeasurementService
     private final Client client;
     private final ChatTextNormalizer textNormalizer;
 
-    // TODO: Record measurement performance during development.
+    // Optional performance instrumentation; null when disabled.
     private final PerformanceMetrics performanceMetrics;
 
     /*
@@ -361,14 +347,8 @@ public final class FontMeasurementService
         if (scriptId == GAME_BODY_SCRIPT)
         {
             /*
-             * Script 199 constructs ordinary GAME / system rows with no
-             * textual prefix. Diagnostic tracing confirmed that the body
-             * occupies the full construction span:
-             *
-             *     leftBoundary -> rightBoundary
-             *
-             * Keep native and selected horizontal geometry identical. Only
-             * wrapping, line height, row allocation, row Y, and FontID change.
+             * Script 199 is prefix-less and uses the full construction span.
+             * Preserve its native horizontal geometry.
              */
             nativeBodyX =
                     leftBoundary;
@@ -382,23 +362,15 @@ public final class FontMeasurementService
                     rawPrefixComponents.get(
                             rawPrefixComponents.size() - 1);
 
-            /*
-             * Native RuneScape geometry must always be measured from the native
-             * unmodified prefix.
-             */
+            // Measure native geometry from the unmodified prefix.
             nativePrefixWidth =
                     nativeFont.getTextWidth(
                             normalizeRawForMeasurement(
                                     rawPrefix));
 
             /*
-             * Friends Chat renders:
-             *     [channel] <img=rank>Username:
-             *          inside one prefix widget.
-             *
-             * Preserve the original raw prefix for widget correlation, but build a
-             * separate selected/rendered prefix containing the configured visual gap
-             * between the final inline image and the username.
+             * Keep the raw Friends Chat prefix for correlation and build a separate
+             * rendered prefix with configured inline-icon spacing.
              */
             selectedRawPrefixText =
                     isFriendsChatPrefix(
@@ -507,12 +479,7 @@ public final class FontMeasurementService
             return null;
         }
 
-        /*
-         * Line-height allocation is measurement, not presentation.
-         *
-         * Each profile describes how much the native RuneScape cadence
-         * needs to change for that font.
-         */
+        // Apply the selected profile's line-height adjustment.
         final int lineHeightAdjustment =
                 fontProfile
                         .getLineHeightAdjustment();
@@ -528,16 +495,8 @@ public final class FontMeasurementService
                         .getRowYOffset();
 
         /*
-         * Split Private Chat uses a bottom-relative row-Y construction value.
-         *
-         * RuneScape / Resizable Chat already maintain the native relationship
-         * between Split Private Chat and the current chatbox position.
-         *
-         * PRIVATE_CHAT_GAP therefore adds only the font-specific extra clearance
-         * requested by the selected profile.
-         *
-         * Positive values increase the gap above the chatbox.
-         * Negative values reduce the gap.
+         * Apply PRIVATE_CHAT_GAP to Split Private's bottom-relative row Y.
+         * Positive increases the gap; negative reduces it.
          */
         final int privateChatGap =
                 isSplitPrivateChatConstruction(
@@ -552,11 +511,7 @@ public final class FontMeasurementService
                         + privateChatGap;
 
         /*
-         * RuneScape initially wraps using its native Plain-12 geometry.
-         *
-         * Therefore the construction input must compensate for the number
-         * of native wrapped lines while reserving enough space for the
-         * selected font.
+         * Compensate construction height for native and selected wrapped-line counts.
          */
         final int desiredHeight =
                 selectedLines
@@ -867,12 +822,8 @@ public final class FontMeasurementService
         }
 
         /*
-         * Immediately before the common eleven-value 4483 payload,
-         * RuneScape can provide:
-         *
-         *     rankIconSpriteId
-         *     rankIconWidth
-         *     rankIconHeight
+         * Read optional rank sprite ID, width, and height
+         * immediately before the common Script-4483 payload.
          */
         final int commonPayloadStart =
                 intStackSize - 11;
@@ -913,25 +864,10 @@ public final class FontMeasurementService
         }
 
         /*
-         * ACCOUNT_BUILD_ICON
+         * Inline account/build icons are measured as part of sender text.
          *
-         * Account/build icons are inline image markup inside the username
-         * widget, for example:
-         *
-         *     <img=2>Splamna:
-         *     <img=3>Swole Milk:
-         *
-         * Their width is measured directly as part of the raw sender text.
-         * This is intentionally independent from the separate channel rank
-         * icon, whose sprite and dimensions are controlled separately.
-         *
-         * CHANNEL_ACCOUNT_BUILD_ICON_SPACING changes the visible gap between
-         * the final inline icon and the username.
-         *
-         * ACCOUNT_BUILD_ICON_PADDING is different: it reserves additional
-         * sender width after the complete sender measurement. It therefore
-         * affects where the message body begins, not the visible icon-to-name
-         * gap inside the sender widget.
+         * CHANNEL_ACCOUNT_BUILD_ICON_SPACING controls icon-to-name spacing.
+         * ACCOUNT_BUILD_ICON_PADDING reserves additional sender layout width.
          */
         if (layout.hasSender
                 && hasAccountBuildIcon(
@@ -975,10 +911,10 @@ public final class FontMeasurementService
                         RANK_ICON_GAP;
 
                 /*
-                 * Per-font adjustment is additional space only AFTER
-                 * the rank icon.
+                 * Enforce minimum spacing after the final inline image before the username.
                  *
-                 * The icon itself remains at its measured X.
+                 * The caller supplies the spacing character. Existing whitespace counts
+                 * toward the minimum, and consecutive inline images are not separated.
                  */
                 cursor +=
                         rankIconRightAdjustment;
@@ -1053,7 +989,6 @@ public final class FontMeasurementService
 
         if (cachedFont != null)
         {
-            // TODO: Count font-cache hits during development.
             if (performanceMetrics != null)
             {
                 performanceMetrics.recordFontCacheHit();
@@ -1062,7 +997,6 @@ public final class FontMeasurementService
             return cachedFont;
         }
 
-        // TODO: Measure uncached font resolution during development.
         final long started =
                 performanceMetrics != null
                         ? System.nanoTime()

@@ -45,7 +45,7 @@ public class ChatXL extends Plugin
 	private Configurations config;
 
 	/*
-	 * Diagnostics and Performance.
+	 * DIAGNOSTICS & PERFORMANCE
 	 */
 	private ChatDiagnostics chatDiagnostics;
 	private PerformanceMetrics performanceMetrics;
@@ -69,9 +69,6 @@ public class ChatXL extends Plugin
 		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
 		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);
 
-		/*
-		 * DIAGNOSTICS & PERFORMANCE METRICS
-		 */
 		if (DIAGNOSTICS_ENABLED)
 		{
 			chatDiagnostics = new ChatDiagnostics(client, config);
@@ -82,8 +79,7 @@ public class ChatXL extends Plugin
 		}
 
 		/*
-		 * Rebuild already-existing chat rows through the production
-		 * layout pipeline so the currently configured font is updated.
+		 * Refresh retained rows through the active layout pipeline.
 		 */
 		clientThread.invokeLater(client::refreshChat);
 
@@ -97,15 +93,12 @@ public class ChatXL extends Plugin
 		final PerformanceMetrics shutdownPerformanceMetrics = performanceMetrics;
 
 		/*
-		 * Stop all future Chat XL PRE / POST handling immediately.
+		 * Disable PRE / POST handling before restoration.
 		 */
 		fontLayoutService = null;
 		fontMeasurementService = null;
 		textNormalizer = null;
 
-		/*
-		 * Reset Diagnostic
-		 */
 		if (chatDiagnostics != null)
 		{
 			chatDiagnostics.reset();
@@ -118,7 +111,7 @@ public class ChatXL extends Plugin
 					PerformanceMetrics.RefreshReason.SHUTDOWN);
 		}
 
-		// Native presentation restoration must run on the client thread.
+		// Restore native presentation on the client thread.
 		clientThread.invokeLater(() -> {
 			if (shutdownLayoutService != null)
 			{
@@ -178,9 +171,7 @@ public class ChatXL extends Plugin
 	public void onScriptPreFired(
 			ScriptPreFired event)
 	{
-		/*
-		 * Diagnostic observes the incoming/native construction state first.
-		 */
+		// Observe native PRE state before layout changes.
 		runDiagnosticPre(event);
 
 		if (fontLayoutService == null)
@@ -188,7 +179,7 @@ public class ChatXL extends Plugin
 			return;
 		}
 
-		// Measure production PRE processing during development.
+		// Measure production PRE processing.
 		final long started =
 				performanceMetrics != null
 						? System.nanoTime()
@@ -228,10 +219,10 @@ public class ChatXL extends Plugin
 			}
 		}
 
-		// Diagnostic observes the completed production presentation.
+		// Observe final POST presentation when enabled.
 		runDiagnosticPost(event);
 
-		// Report performance measurements during development.
+		// Report performance measurements when enabled.
 		if (performanceMetrics != null)
 		{
 			performanceMetrics.reportIfDue();
@@ -258,9 +249,7 @@ public class ChatXL extends Plugin
 				event.getKey()))
 		{
 			/*
-			 * Resolve the newly selected font/profile once before rebuilding
-			 * retained rows. Every PRE -> POST construction created by the
-			 * refresh then consumes this same active state.
+			 * Refresh the active font/profile before rebuilding retained rows.
 			 */
 			if (fontLayoutService != null)
 			{
@@ -268,12 +257,7 @@ public class ChatXL extends Plugin
 			}
 
 			/*
-			 * Font selection, wrapping, geometry, and row allocation must
-			 * always be recalculated together.
-			 *
-			 * Discard any incomplete construction state before forcing
-			 * RuneScape to reconstruct every retained chat row through
-			 * the production PRE -> POST pipeline.
+			 * Clear incomplete construction state before rebuilding retained rows.
 			 */
 			if (fontLayoutService != null)
 			{

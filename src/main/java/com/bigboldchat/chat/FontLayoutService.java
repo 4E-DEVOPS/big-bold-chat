@@ -22,46 +22,18 @@ import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 
 /**
- * Production Chat XL layout service.
+ * Applies Chat XL construction geometry and widget presentation.
  *
- * FontMeasurementService determines what geometry is required.
+ * PRE injects measured construction values.
+ * POST correlates row widgets and applies selected presentation.
+ * FINALIZE applies queued component-specific Y offsets.
  *
- * This production service is intentionally silent. Diagnostic output belongs
- * exclusively to ChatDiagnostics.
- *
- * This service owns the lifecycle:
- *
- * PRE
- *  - request a ConstructionMeasurement;
- *  - inject the required row allocation;
- *  - inject the selected row-Y position;
- *  - preserve unknown / native construction values.
- *
- * POST
- *  - correlate the exact constructed body;
- *  - correlate prefix / channel / username widgets when present;
- *  - apply the selected FontID;
- *  - apply selected line height;
- *  - apply selected horizontal geometry;
- *  - resize / horizontally position the correct rank icon;
- *  - queue component-specific vertical corrections.
- *
- * FINALIZE
- *  - after RuneScape establishes final native row Y;
- *  - apply queued Channel / Friends Chat component-specific corrections
- *    at chat Script 72 PRE.
- *
- * Ordinary Script 199 GAME / system rows do not use component-specific
- * vertical corrections. Their profile row Y is owned entirely by PRE geometry.
+ * FontMeasurementService supplies the ConstructionMeasurement consumed here.
  */
 public final class FontLayoutService
 {
     /*
-     * RuneScape's final chat-row positioning lifecycle.
-     *
-     * Diagnostic tracing confirmed that native Y placement for Channel,
-     * Guest Clan, and Friends Chat row components has completed before
-     * this script begins.
+     * Script used to apply queued component-specific Y offsets.
      */
     private static final int CHAT_FINALIZE_SCRIPT = 72;
 
@@ -70,7 +42,7 @@ public final class FontLayoutService
     private final FontMeasurementService measurementService;
     private final ChatTextNormalizer textNormalizer;
 
-    // TODO: Record layout performance during development.
+    // Optional performance instrumentation; null when disabled.
     private final PerformanceMetrics performanceMetrics;
 
     /*
@@ -98,45 +70,26 @@ public final class FontLayoutService
     private ChatFontProfile pendingFontProfile;
 
     /*
-     * Widgets whose profile-specific Y correction must wait until RuneScape
-     * has completed its native row positioning.
+     * Widgets awaiting delayed profile-specific Y correction.
      *
-     * Identity semantics are intentional because RuneScape recycles
-     * individual Widget objects between chat-row slots.
-     *
-     * Text widgets retain their expected semantic text while separate rank
-     * widgets retain their expected sprite ID. Those guards prevent a queued
-     * correction from being applied after a Widget object has been recycled
-     * for a different logical row component.
+     * Text entries retain expected semantic text; sprite entries retain
+     * their expected sprite ID as identity guards.
      */
     private final IdentityHashMap<Widget, PendingYOffset> pendingYOffsets =
             new IdentityHashMap<>();
 
     /*
-     * Native presentation values captured immediately before Chat XL first
-     * mutates a widget field.
+     * Native and last-applied presentation values tracked per Widget identity.
      *
-     * RuneScape recycles chat Widget objects. Each field therefore also tracks
-     * the last value applied by Chat XL. If RuneScape changes that field later,
-     * the next Chat XL mutation treats the current value as a new native
-     * baseline instead of restoring stale geometry from an older logical row.
+     * Used for compare-before-write mutation and safe native restoration.
      */
     private final IdentityHashMap<Widget, NativeWidgetState> nativeWidgetStates =
             new IdentityHashMap<>();
 
     /*
-     * Persistent row indexes for each chat surface.
+     * Persistent per-surface row indexes keyed by OriginalY + RelativeY.
      *
-     * RuneScape constructs many rows against the same surface. Rebuilding the
-     * complete candidate set for every POST was the dominant remaining
-     * correlation cost. Each surface index groups the same widgets previously
-     * examined by collectRow() by their exact native OriginalY + RelativeY
-     * pair and reuses that grouping across constructions.
-     *
-     * Candidate geometry is validated before reuse. If RuneScape has recycled
-     * or repositioned any indexed widget for the requested row, that surface
-     * is rebuilt before correlation continues. Broad semantic fallback remains
-     * unchanged as the final correctness path.
+     * Supports direct reuse, local repair, and broad fallback when required.
      */
     private final Map<Surface, RowCorrelationIndex> rowIndexes =
             new EnumMap<>(
@@ -216,11 +169,7 @@ public final class FontLayoutService
                 event.getScriptId();
 
         /*
-         * Script 72 begins only after RuneScape has replaced construction-local
-         * component Y values with the row's final native Y.
-         *
-         * Apply any queued component-specific corrections now, before Script 72
-         * executes.
+         * Apply queued component-specific Y offsets on the finalize script.
          */
         if (scriptId == CHAT_FINALIZE_SCRIPT)
         {
@@ -259,7 +208,6 @@ public final class FontLayoutService
         final ChatFontProfile fontProfile =
                 fontState.fontProfile;
 
-        // TODO: Measure construction measurement during development.
         final long measurementStarted =
                 performanceMetrics != null
                         ? System.nanoTime()
@@ -297,20 +245,8 @@ public final class FontLayoutService
         }
 
         /*
-         * PRE owns construction geometry.
-         *
-         * Height:
-         *     compensated for the selected font's wrapping / cadence.
-         *
-         * Row Y:
-         *     profile-specific ARG6 adjustment.
-         *
-         * ARG7:
-         *     unknown; preserve RuneScape's native value.
-         *
-         * Sender width:
-         *     preserve RuneScape's native value. Selected horizontal
-         *     presentation is applied to the resulting widgets in POST.
+         * PRE injects selected height and row Y while preserving native ARG7
+         * and sender width. Horizontal presentation is applied in POST.
          */
         intStack[measurement.verticalValueIndex] =
                 measurement.injectedValue;
@@ -380,12 +316,8 @@ public final class FontLayoutService
                         surface);
 
         /*
-         * Row-first correlation should satisfy ordinary chat reconstruction.
-         *
-         * Keep the broad surface fallback completely lazy: no index is built
-         * unless a row lookup actually misses. If one miss does occur, the
-         * same normalized surface index is reused by every remaining body /
-         * prefix lookup in this exact POST construction.
+         * Prefer row correlation. Build the broad semantic fallback on first
+         * miss and reuse it for the remainder of this POST.
          */
         final FallbackCorrelationContext fallbackContext =
                 new FallbackCorrelationContext(
@@ -423,9 +355,7 @@ public final class FontLayoutService
                         : lineWidget;
 
         /*
-         * Find the rank icon BEFORE changing any channel text Y values.
-         *
-         * The strict matcher relies on RuneScape's native row geometry.
+         * Correlate the rank icon before changing row geometry.
          */
         final Widget rankIconWidget;
 
@@ -514,17 +444,8 @@ public final class FontLayoutService
                         state.selectedBodyWidth);
 
         /*
-         * Independent body-text Y corrections are presentation adjustments,
-         * not construction geometry.
-         *
-         * RuneScape performs another native row-positioning pass after the
-         * supported constructor returns, so applying these offsets here would
-         * be overwritten. Queue the exact correlated body widget and apply the
-         * correction only after native final row Y has been established.
-         *
-         * Script 199 GAME / system rows intentionally do not enter either
-         * branch below. Their vertical behavior is controlled only by the
-         * profile ROW_Y_OFFSET injected during PRE.
+         * Queue component-specific body Y correction for finalize.
+         * Script 199 uses only the PRE row-Y adjustment.
          */
         if (fontProfile != null
                 && state.scriptId
@@ -624,10 +545,7 @@ public final class FontLayoutService
             }
 
             /*
-             * Script 4483 uses separate channel-title and username widgets.
-             *
-             * Their independent Y corrections are queued here but deliberately
-             * not applied until RuneScape has established final native row Y.
+             * Queue channel-title and username Y corrections for finalize.
              */
             if (state.scriptId
                     == FontMeasurementService.CHANNEL_BODY_SCRIPT
@@ -690,13 +608,8 @@ public final class FontLayoutService
                                     channel.senderWidth);
 
                     /*
-                     * Apply the exact sender markup that MeasurementService measured.
-                     *
-                     * This may include account/build icon spacing and the Verdana 13 Bold
-                     * malformed-colon replacement.
-                     *
-                     * Correlation has already completed using channel.senderText, so changing
-                     * the rendered text here cannot interfere with row matching.
+                     * Apply measured sender markup after correlation, including
+                     * icon spacing and the Verdana 13 Bold colon correction.
                      */
                     if (channel.renderedSenderText != null
                             && !channel.renderedSenderText.isEmpty()
@@ -765,6 +678,45 @@ public final class FontLayoutService
         }
     }
 
+    /*
+     * Identify Friends Chat by its combined bracketed Script-203 prefix:
+     *
+     *     [Friends Chat name] + optional inline rank + username
+     */
+    private boolean isFriendsChatConstruction(
+            FontMeasurementService.ConstructionMeasurement state)
+    {
+        if (state == null
+                || state.scriptId
+                != FontMeasurementService.CHAT_BODY_SCRIPT
+                || state.rawPrefixComponents == null
+                || state.rawPrefixComponents.size()
+                != 1)
+        {
+            return false;
+        }
+
+        final String semanticPrefix =
+                textNormalizer.normalizeSemantic(
+                        state.rawPrefixComponents.get(
+                                0));
+
+        if (semanticPrefix == null
+                || semanticPrefix.length() < 3
+                || semanticPrefix.charAt(0) != '[')
+        {
+            return false;
+        }
+
+        final int closingBracket =
+                semanticPrefix.indexOf(
+                        ']');
+
+        return closingBracket > 0
+                && closingBracket
+                < semanticPrefix.length() - 1;
+    }
+
     private void applyRankIconPresentation(
             FontMeasurementService.ConstructionMeasurement state,
             Widget rankIconWidget,
@@ -778,15 +730,8 @@ public final class FontLayoutService
         }
 
         /*
-         * Horizontal position, width, and height are determined by
-         * FontMeasurementService.
-         *
-         * The rank icon is correlated while it still has RuneScape's native
-         * geometry. Only after that exact widget has been identified do we
-         * apply the selected font's rank-icon presentation.
-         *
-         * Per-font right-side spacing is already reflected in senderX and
-         * bodyX. It does not move the icon itself.
+         * Apply selected rank-icon X, width, and height.
+         * Right-side spacing is already included in sender/body geometry.
          */
         boolean changed =
                 setOriginalXIfChanged(
@@ -804,17 +749,7 @@ public final class FontLayoutService
                         state.selectedChannelLayout.rankIconHeight);
 
         /*
-         * Rank-icon vertical correction is independent from the channel title,
-         * username, and body text.
-         *
-         * Do NOT apply it during Script 4483 POST.
-         *
-         * RuneScape performs another native row-positioning pass after 4483
-         * returns, which overwrites the rank widget's Y while preserving its
-         * selected X / width / height.
-         *
-         * Remember the exact reconstructed sprite widget instead. Its Y
-         * correction will be applied once native row positioning has completed.
+         * Queue the independent rank-icon Y correction for finalize.
          */
         if (fontProfile != null)
         {
@@ -835,10 +770,7 @@ public final class FontLayoutService
     }
 
     /*
-     * Queue a delayed Y correction for a text-bearing widget.
-     *
-     * The semantic text is retained as a recycling guard because RuneScape may
-     * reuse the same Widget object for another logical row before finalization.
+     * Queue text Y correction with a semantic-text identity guard.
      */
     private void queueTextYOffset(
             Widget widget,
@@ -907,11 +839,7 @@ public final class FontLayoutService
     }
 
     /*
-     * Apply queued component-specific Y corrections after RuneScape's native
-     * chat-row positioning has completed.
-     *
-     * This method intentionally handles only the chat-specific Script 72
-     * invocation whose parent argument is CHATBOX_MESSAGE_LINES.
+     * Apply queued Y corrections only for Script 72 under CHATBOX_MESSAGE_LINES.
      */
     private void applyPendingYOffsetsIfChatFinalize()
     {
@@ -963,6 +891,85 @@ public final class FontLayoutService
          * cycle. Clearing here prevents cumulative offsets on later refreshes.
          */
         pendingYOffsets.clear();
+    }
+
+    /*
+     * Script 72 is used in more than one client/interface lifecycle.
+     *
+     * The relevant chat invocation has the CHATBOX_MESSAGE_LINES widget ID
+     * as the penultimate integer-stack argument:
+     *
+     *     [..., messageContainerId, chatMessageLinesId, mode]
+     */
+    private boolean isChatFinalizeInvocation()
+    {
+        final int[] intStack =
+                client.getIntStack();
+
+        final int intStackSize =
+                client.getIntStackSize();
+
+        if (intStack == null
+                || intStackSize < 2
+                || intStackSize > intStack.length)
+        {
+            return false;
+        }
+
+        final Widget chatMessageLines =
+                client.getWidget(
+                        InterfaceID.Chatbox.SCROLLAREA);
+
+        if (chatMessageLines == null)
+        {
+            return false;
+        }
+
+        final int parentWidgetId =
+                intStack[intStackSize - 2];
+
+        return parentWidgetId
+                == chatMessageLines.getId();
+    }
+
+    /**
+     * Applies a vertical offset while keeping OriginalY and RelativeY synchronized.
+     */
+    @SuppressWarnings("deprecation")
+    void applySynchronizedYOffset(
+            Widget widget,
+            int yOffset)
+    {
+        if (widget == null
+                || yOffset == 0)
+        {
+            return;
+        }
+
+        final RowKey previousRow =
+                RowKey.of(
+                        widget);
+
+        final int adjustedY =
+                widget.getOriginalY()
+                        + yOffset;
+
+        boolean changed =
+                setOriginalYIfChanged(
+                        widget,
+                        adjustedY);
+
+        changed |=
+                setRelativeYIfChanged(
+                        widget,
+                        adjustedY);
+
+        if (changed)
+        {
+            notifyIndexedWidgetGeometryChanged(
+                    widget,
+                    previousRow);
+        }
     }
 
     /*
@@ -1041,138 +1048,6 @@ public final class FontLayoutService
     {
         pendingFontProfile =
                 fontProfile;
-    }
-
-    /*
-     * Script 203 is shared by several chat surfaces.
-     *
-     * Friends Chat is identified by its single combined textual prefix:
-     *
-     *     [Friends Chat name] + optional inline rank + username
-     *
-     * The channel name remains bracketed after semantic normalization, while
-     * ordinary public/private Script 203 prefixes do not use this structure.
-     */
-    private boolean isFriendsChatConstruction(
-            FontMeasurementService.ConstructionMeasurement state)
-    {
-        if (state == null
-                || state.scriptId
-                != FontMeasurementService.CHAT_BODY_SCRIPT
-                || state.rawPrefixComponents == null
-                || state.rawPrefixComponents.size()
-                != 1)
-        {
-            return false;
-        }
-
-        final String semanticPrefix =
-                textNormalizer.normalizeSemantic(
-                        state.rawPrefixComponents.get(
-                                0));
-
-        if (semanticPrefix == null
-                || semanticPrefix.length() < 3
-                || semanticPrefix.charAt(0) != '[')
-        {
-            return false;
-        }
-
-        final int closingBracket =
-                semanticPrefix.indexOf(
-                        ']');
-
-        return closingBracket > 0
-                && closingBracket
-                < semanticPrefix.length() - 1;
-    }
-
-    /*
-     * Script 72 is used in more than one client/interface lifecycle.
-     *
-     * The relevant chat invocation has the CHATBOX_MESSAGE_LINES widget ID
-     * as the penultimate integer-stack argument:
-     *
-     *     [..., messageContainerId, chatMessageLinesId, mode]
-     */
-    private boolean isChatFinalizeInvocation()
-    {
-        final int[] intStack =
-                client.getIntStack();
-
-        final int intStackSize =
-                client.getIntStackSize();
-
-        if (intStack == null
-                || intStackSize < 2
-                || intStackSize > intStack.length)
-        {
-            return false;
-        }
-
-        final Widget chatMessageLines =
-                client.getWidget(
-                        InterfaceID.Chatbox.SCROLLAREA);
-
-        if (chatMessageLines == null)
-        {
-            return false;
-        }
-
-        final int parentWidgetId =
-                intStack[intStackSize - 2];
-
-        return parentWidgetId
-                == chatMessageLines.getId();
-    }
-
-    /**
-     * Applies a post-construction vertical correction to a chat widget.
-     *
-     * Widget Inspector testing showed that these chat widgets move reliably
-     * when OriginalY and RelativeY are both assigned the same adjusted value.
-     *
-     * OriginalY represents the widget's configured vertical position while
-     * RelativeY represents its current live position within the parent.
-     *
-     * Both values are therefore kept synchronized whenever a profile-specific
-     * vertical offset is applied.
-     */
-    @SuppressWarnings("deprecation")
-    void applySynchronizedYOffset(
-            Widget widget,
-            int yOffset)
-    {
-        if (widget == null
-                || yOffset == 0)
-        {
-            return;
-        }
-
-        final RowKey previousRow =
-                RowKey.of(
-                        widget);
-
-        final int adjustedY =
-                widget.getOriginalY()
-                        + yOffset;
-
-        boolean changed =
-                setOriginalYIfChanged(
-                        widget,
-                        adjustedY);
-
-        changed |=
-                setRelativeYIfChanged(
-                        widget,
-                        adjustedY);
-
-        if (changed)
-        {
-            notifyIndexedWidgetGeometryChanged(
-                    widget,
-                    previousRow);
-        }
     }
 
     /*
@@ -1558,7 +1433,6 @@ public final class FontLayoutService
                 rowIndex.findRow(
                         lineWidget);
 
-        // TODO: Count row-first correlation work during development.
         if (performanceMetrics != null)
         {
             performanceMetrics.recordRowSearches(
@@ -1569,16 +1443,10 @@ public final class FontLayoutService
     }
 
     /**
-     * Persistent geometry index for one chat surface.
+     * Persistent shallow row index for one chat surface.
      *
-     * The scan domain intentionally matches the former collectRow() exactly:
-     * root + immediate dynamic/static/nested children, without recursion.
-     *
-     * Full surface builds are now only the correctness fallback. Normal
-     * recycling is repaired locally by retaining both RowKey -> widgets and
-     * Widget -> RowKey mappings. Widgets moved by Chat XL's delayed Y
-     * correction are additionally watched for a return to their previous
-     * native row so RuneScape can move them back without forcing a rebuild.
+     * Indexes the root and immediate dynamic/static/nested children by RowKey,
+     * supports local repair, and watches Chat XL-adjusted widgets for row changes.
      */
     private final class RowCorrelationIndex
     {
@@ -1648,11 +1516,7 @@ public final class FontLayoutService
             }
             else
             {
-                /*
-                 * First repair any widget Chat XL deliberately moved away from
-                 * this native row. RuneScape may have moved it back since the
-                 * previous Script 72 finalization.
-                 */
+                // Repair watched widgets that returned to this row.
                 repaired |=
                         repairWatchedWidgetsForRow(
                                 targetRow);
@@ -1677,11 +1541,7 @@ public final class FontLayoutService
                 else if (!indexedAnchorRow.equals(
                         targetRow))
                 {
-                    /*
-                     * RuneScape moved/recycled this already-known logical row.
-                     * Repair only the old bucket; all siblings which moved with
-                     * the anchor are re-keyed at the same time.
-                     */
+                    // Re-key the moved anchor row and its known siblings.
                     repaired |=
                             repairRow(
                                     indexedAnchorRow);
@@ -1913,12 +1773,7 @@ public final class FontLayoutService
                             true;
                 }
 
-                /*
-                 * Keep watching only while the widget remains exactly at the
-                 * Chat XL-adjusted row. Returning to the previous native row,
-                 * or moving elsewhere because RuneScape recycled it, completes
-                 * the watch.
-                 */
+                // Stop watching once the widget leaves the Chat XL-adjusted row.
                 if (!watchedMove.adjustedRow.equals(
                         currentRow))
                 {
@@ -2941,15 +2796,8 @@ public final class FontLayoutService
         }
 
         /*
-         * The persistent row index intentionally avoids enumerating the complete
-         * chatbox tree on every row lookup. RuneScape can, however, replace a
-         * shallow rank-sprite Widget while the already-indexed text widgets remain
-         * stable enough for direct row reuse.
-         *
-         * On a strict rank miss, refresh only the same shallow domain owned by
-         * RowCorrelationIndex: root + immediate dynamic/static/nested children.
-         * This preserves the normal fast path while discovering a newly-created
-         * shallow rank widget without paying for a recursive tree traversal.
+         * Retry a missed rank lookup across the row index's shallow scan domain:
+         * root plus immediate dynamic/static/nested children.
          */
         final Widget shallowMatch =
                 findRankIconWidgetShallow(
@@ -2961,6 +2809,11 @@ public final class FontLayoutService
 
         if (shallowMatch != null)
         {
+            if (performanceMetrics != null)
+            {
+                performanceMetrics.recordRankShallowRecovery();
+            }
+
             observeWidgetFromSurfaceScan(
                     Surface.CHATBOX,
                     root,
@@ -3000,13 +2853,7 @@ public final class FontLayoutService
         }
 
         /*
-         * The strict row-first lookup missed because the rank sprite was not yet
-         * known to the persistent surface index.
-         *
-         * Recursive fallback has now positively identified the exact sprite using
-         * the same native sprite/X/Y criteria. Teach the existing row index about
-         * that widget so subsequent constructions can resolve it through the cheap
-         * row-first path.
+         * Add a recursively found rank widget to the persistent row index.
          */
         if (fallbackMatch != null)
         {
@@ -3551,12 +3398,7 @@ public final class FontLayoutService
                     false;
 
             /*
-             * Restore a field only when the widget still contains the exact value
-             * last applied by Chat XL.
-             *
-             * If RuneScape has already rewritten that field, leave the newer
-             * native value alone. This avoids restoring stale state when a Widget
-             * object has been recycled for another logical chat row.
+             * Restore a field only when it still equals Chat XL's last-applied value.
              */
             if (state.fontIdCaptured
                     && widget.getFontId()
@@ -3687,12 +3529,8 @@ public final class FontLayoutService
     }
 
     /*
-     * Exact native presentation values for one Widget identity.
-     *
-     * Each field is captured independently because Chat XL does not mutate every
-     * property on every widget. The paired applied value lets restoration detect
-     * whether RuneScape has rewritten/recycled the widget since Chat XL last
-     * touched that field.
+     * Native and last-applied presentation values captured per field
+     * for one Widget identity.
      */
     private static final class NativeWidgetState
     {

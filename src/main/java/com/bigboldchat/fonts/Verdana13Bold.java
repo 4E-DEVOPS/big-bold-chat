@@ -5,11 +5,7 @@ import com.bigboldchat.config.ChatFont;
 public final class Verdana13Bold implements ChatFontProfile
 {
     /*
-     * FontID 1446 additionally requires the special ':' width
-     * correction in the layout service.
-     *
-     * That correction should remain service-side because it is a
-     * font-metric defect rather than a fixed pixel tuning value.
+     * FontID 1446 uses selected-text ':' correction in FontMeasurementService.
      */
     private static final int LINE_HEIGHT_ADJUSTMENT = 0;
     private static final int ROW_Y_OFFSET = 0;

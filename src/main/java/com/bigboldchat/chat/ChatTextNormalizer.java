@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 import net.runelite.client.util.Text;
 
 /**
- * Normalizes RuneScape chat text for comparison and measurement.
+ * Normalizes chat text for semantic comparison and font measurement.
  */
 public final class ChatTextNormalizer
 {
@@ -27,7 +27,7 @@ public final class ChatTextNormalizer
                     "<at>",
                     Pattern.CASE_INSENSITIVE);
 
-    // TODO: Record normalization performance during development.
+    // Optional performance instrumentation; null when disabled.
     private final PerformanceMetrics performanceMetrics;
 
     public ChatTextNormalizer()
@@ -45,7 +45,6 @@ public final class ChatTextNormalizer
     String normalizeSemantic(
             String text)
     {
-        // TODO: Measure semantic normalization during development.
         final long started =
                 performanceMetrics != null
                         ? System.nanoTime()
@@ -100,7 +99,7 @@ public final class ChatTextNormalizer
                 return semantic;
             }
 
-// Keep image-only messages identifiable after markup is removed.
+            // Keep image-only messages identifiable after markup is removed.
             return extractImages(
                     withVisibleAtCharacters);
         }
@@ -118,7 +117,6 @@ public final class ChatTextNormalizer
     String measureSemantic(
             String text)
     {
-        // TODO: Measure wrapping normalization during development.
         final long started =
                 performanceMetrics != null
                         ? System.nanoTime()

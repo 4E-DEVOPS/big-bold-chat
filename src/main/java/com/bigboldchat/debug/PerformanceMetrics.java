@@ -97,9 +97,7 @@ public final class PerformanceMetrics
     private long rankNodesExamined;
 
     /*
-     * Classify strict row-first rank misses.
-     *
-     * These are diagnostic counters only. They do not affect correlation.
+     * Classify strict row-first rank misses before shallow recovery.
      */
     private long rankRowNoSprite;
 
@@ -107,8 +105,10 @@ public final class PerformanceMetrics
 
     private long rankRowYMismatch;
 
+    private long rankShallowRecoveries;
+
     /*
-     * Distinguish recursive fallback success from complete correlation failure.
+     * Classify recursive fallback results.
      */
     private long rankFallbackHits;
 
@@ -279,6 +279,11 @@ public final class PerformanceMetrics
         rankRowYMismatch++;
     }
 
+    public void recordRankShallowRecovery()
+    {
+        rankShallowRecoveries++;
+    }
+
     public void recordRankFallbackHit()
     {
         rankFallbackHits++;
@@ -386,14 +391,14 @@ public final class PerformanceMetrics
                 elapsedNanos
                         / 1_000_000_000.0;
 
-        log.info(
+        log.debug(
                 "[Chat XL][Performance] Window={}",
                 String.format(
                         Locale.ROOT,
                         "%.3fs",
                         elapsedSeconds));
 
-        log.info(
+        log.debug(
                 "[Chat XL][Performance] PRE"
                         + " | 199={}"
                         + " | 203={}"
@@ -405,7 +410,7 @@ public final class PerformanceMetrics
                 formatTiming(
                         pre4483));
 
-        log.info(
+        log.debug(
                 "[Chat XL][Performance] POST"
                         + " | 199={}"
                         + " | 203={}"
@@ -417,7 +422,7 @@ public final class PerformanceMetrics
                 formatTiming(
                         post4483));
 
-        log.info(
+        log.debug(
                 "[Chat XL][Performance] SERVICES"
                         + " | Measurement={}"
                         + " | Normalize={}"
@@ -433,7 +438,7 @@ public final class PerformanceMetrics
                 fontCacheHits,
                 fontCacheMisses);
 
-        log.info(
+        log.debug(
                 "[Chat XL][Performance] CORRELATION"
                         + " | Widgets={}"
                         + " | RowSearches={}"
@@ -450,6 +455,7 @@ public final class PerformanceMetrics
                         + " | RankNoSprite={}"
                         + " | RankXMismatch={}"
                         + " | RankYMismatch={}"
+                        + " | RankShallowRecoveries={}"
                         + " | RankFallbackHits={}"
                         + " | RankFallbackMisses={}"
                         + " | RankNodes={}",
@@ -468,18 +474,19 @@ public final class PerformanceMetrics
                 rankRowNoSprite,
                 rankRowXMismatch,
                 rankRowYMismatch,
+                rankShallowRecoveries,
                 rankFallbackHits,
                 rankFallbackMisses,
                 rankNodesExamined);
 
-        log.info(
+        log.debug(
                 "[Chat XL][Performance] PRESENTATION"
                         + " | Mutations={}"
                         + " | Revalidates={}",
                 widgetMutations,
                 revalidates);
 
-        log.info(
+        log.debug(
                 "[Chat XL][Performance] REFRESH"
                         + " | Total={}"
                         + " | Startup={}"
@@ -621,6 +628,9 @@ public final class PerformanceMetrics
                 0L;
 
         rankRowYMismatch =
+                0L;
+
+        rankShallowRecoveries =
                 0L;
 
         rankFallbackHits =
