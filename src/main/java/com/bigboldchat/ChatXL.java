@@ -17,7 +17,6 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.MessageNode;
-import net.runelite.api.ScriptID;
 import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.ScriptPostFired;
@@ -343,7 +342,7 @@ public class ChatXL extends Plugin
 
 		if (removed)
 		{
-			client.runScript(ScriptID.SPLITPM_CHANGED);
+			client.refreshChat();
 		}
 	}
 
