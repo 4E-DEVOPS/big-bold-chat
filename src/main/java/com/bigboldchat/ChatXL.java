@@ -12,13 +12,18 @@ import javax.inject.Inject;
 
 import lombok.extern.slf4j.Slf4j;
 
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
+import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.externalplugins.ExternalPluginManager;
+import net.runelite.client.externalplugins.PluginHubManifest;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 
@@ -35,6 +40,12 @@ public class ChatXL extends Plugin
 	private static final boolean DIAGNOSTICS_ENABLED = false;
 	private static final boolean PERFORMANCE_METRICS = false;
 
+	private static final String CONFIG_GROUP = "bigboldchat";
+	private static final String VERSION_CONFIG_KEY = "lastNotifiedVersion";
+
+	private static final String UPDATE_MESSAGE = "Performance Improvements";
+	private static final String UNINSTALL_MESSAGE = "Thank you for using ChatXL! Please submit a review/issue report on Github of your experience.";
+
 	@Inject
 	private Client client;
 
@@ -43,6 +54,12 @@ public class ChatXL extends Plugin
 
 	@Inject
 	private Configurations config;
+
+	@Inject
+	private ConfigManager configManager;
+
+	@Inject
+	private ExternalPluginManager externalPluginManager;
 
 	/*
 	 * DIAGNOSTICS & PERFORMANCE
@@ -81,7 +98,14 @@ public class ChatXL extends Plugin
 		/*
 		 * Refresh retained rows through the active layout pipeline.
 		 */
-		clientThread.invokeLater(client::refreshChat);
+		clientThread.invokeLater(() -> {
+			client.refreshChat();
+
+			if (client.getGameState() == GameState.LOGGED_IN)
+			{
+				showUpdateMessage();
+			}
+		});
 
 		log.debug("[Chat XL] Plugin Initiated.");
 	}
@@ -91,6 +115,7 @@ public class ChatXL extends Plugin
 	{
 		final FontLayoutService shutdownLayoutService = fontLayoutService;
 		final PerformanceMetrics shutdownPerformanceMetrics = performanceMetrics;
+		final boolean uninstalling = isBeingUninstalled();
 
 		/*
 		 * Disable PRE / POST handling before restoration.
@@ -111,6 +136,11 @@ public class ChatXL extends Plugin
 					PerformanceMetrics.RefreshReason.SHUTDOWN);
 		}
 
+		if (uninstalling)
+		{
+			configManager.unsetConfiguration(CONFIG_GROUP, VERSION_CONFIG_KEY);
+		}
+
 		// Restore native presentation on the client thread.
 		clientThread.invokeLater(() -> {
 			if (shutdownLayoutService != null)
@@ -119,6 +149,17 @@ public class ChatXL extends Plugin
 				shutdownLayoutService.reset();
 			}
 			client.refreshChat();
+
+			if (uninstalling
+					&& client.getGameState() == GameState.LOGGED_IN)
+			{
+				client.addChatMessage(
+						ChatMessageType.GAMEMESSAGE,
+						"",
+						"<col=ff981f>ChatXL:</col> "
+								+ UNINSTALL_MESSAGE,
+						null);
+			}
 
 			if (shutdownPerformanceMetrics != null)
 			{
@@ -231,6 +272,88 @@ public class ChatXL extends Plugin
 
 	/*
 	 * ================================================================
+	 * VERSION NOTIFICATION
+	 * ================================================================
+	 */
+	private String getCurrentVersion()
+	{
+		final PluginHubManifest.DisplayData displayData =
+				ExternalPluginManager.getDisplayData(
+						getClass());
+
+		return displayData != null
+				? displayData.getVersion()
+				: null;
+	}
+
+	private boolean isBeingUninstalled()
+	{
+		final String internalName =
+				ExternalPluginManager.getInternalName(
+						getClass());
+
+		return internalName != null
+				&& !externalPluginManager
+				.getInstalledExternalPlugins()
+				.contains(
+						internalName);
+	}
+
+	@Subscribe
+	public void onGameStateChanged(
+			GameStateChanged event)
+	{
+		if (event == null
+				|| event.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+
+		showUpdateMessage();
+	}
+
+	private void showUpdateMessage()
+	{
+		final String previousVersion = configManager.getConfiguration(CONFIG_GROUP, VERSION_CONFIG_KEY);
+		final String currentVersion = getCurrentVersion();
+
+		if (currentVersion == null || currentVersion.equals(previousVersion))
+		{
+			return;
+		}
+
+		if (previousVersion == null || previousVersion.isEmpty())
+		{
+			client.addChatMessage(
+					ChatMessageType.GAMEMESSAGE,
+					"",
+					"<col=ff981f>ChatXL:</col> Thank you for installing ChatXL! We're currently still in Beta. Report any issues you find to Github for review and resolution.",
+					null);
+		} else {
+			client.addChatMessage(
+					ChatMessageType.GAMEMESSAGE,
+					"",
+					"<col=ff981f>ChatXL:</col> Updated to v"
+							+ currentVersion
+							+ "!",
+					null);
+
+			client.addChatMessage(
+					ChatMessageType.GAMEMESSAGE,
+					"",
+					"<col=ff981f>ChatXL:</col> "
+							+ UPDATE_MESSAGE,
+					null);
+		}
+
+		configManager.setConfiguration(
+				CONFIG_GROUP,
+				VERSION_CONFIG_KEY,
+				currentVersion);
+	}
+
+	/*
+	 * ================================================================
 	 * CONFIGURATION
 	 * ================================================================
 	 */
@@ -239,7 +362,7 @@ public class ChatXL extends Plugin
 			ConfigChanged event)
 	{
 		if (event == null
-				|| !"bigboldchat".equals(
+				|| !CONFIG_GROUP.equals(
 				event.getGroup()))
 		{
 			return;
