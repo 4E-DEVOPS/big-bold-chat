@@ -39,7 +39,7 @@ import static org.mockito.Mockito.when;
  *  - active font/profile lifecycle;
  *  - idempotent widget mutation;
  *  - conditional widget revalidation;
- *  - current persistent row-index behavior.
+ *  - FontLayoutService integration with the persistent row index.
  *
  * The test class deliberately uses package-private test seams instead of
  * Java reflection.
@@ -424,9 +424,7 @@ public class FontLayoutServiceTest
                 result);
 
         /*
-         * Missing the rank from the cached row must first inspect the shallow
-         * CHATBOX domain. Finding the replacement rank there must avoid the
-         * recursive correctness fallback entirely.
+         * A shallow match must avoid recursive traversal.
          */
         verify(
                 root,
@@ -533,10 +531,8 @@ public class FontLayoutServiceTest
                 result);
 
         /*
-         * The shallow refresh cannot see grandchildren. The recursive fallback
-         * must therefore remain available as the final correctness path.
-         * root.getDynamicChildren() is read once by the shallow refresh and once
-         * again by the recursive traversal.
+         * The shallow scan cannot see grandchildren, so recursive fallback
+         * must find the rank. The root is read once by each path.
          */
         verify(
                 root,
@@ -817,207 +813,9 @@ public class FontLayoutServiceTest
 
     /*
      * ================================================================
-     * ROW CORRELATION INDEX
+     * ROW INDEX INTEGRATION
      * ================================================================
      */
-
-    @Test
-    public void firstRowLookupBuildsIndex()
-    {
-        final Widget root =
-                mock(
-                        Widget.class);
-
-        final Widget lineWidget =
-                rowWidget(
-                        42,
-                        84);
-
-        final Widget bodyWidget =
-                rowWidget(
-                        42,
-                        84);
-
-        when(root.getDynamicChildren())
-                .thenReturn(
-                        new Widget[]
-                                {
-                                        lineWidget,
-                                        bodyWidget
-                                });
-
-        when(client.getWidget(
-                InterfaceID.Chatbox.SCROLLAREA))
-                .thenReturn(
-                        root);
-
-        final List<Widget> row =
-                service.collectRow(
-                        lineWidget,
-                        FontLayoutService.Surface.CHATBOX);
-
-        assertEquals(
-                2,
-                row.size());
-
-        assertTrue(
-                row.contains(
-                        lineWidget));
-
-        assertTrue(
-                row.contains(
-                        bodyWidget));
-
-        verify(
-                root,
-                times(
-                        1))
-                .getDynamicChildren();
-    }
-
-    @Test
-    public void laterRowLookupReusesIndex()
-    {
-        final Widget root =
-                mock(
-                        Widget.class);
-
-        final Widget lineWidget =
-                rowWidget(
-                        42,
-                        84);
-
-        final Widget bodyWidget =
-                rowWidget(
-                        42,
-                        84);
-
-        when(root.getDynamicChildren())
-                .thenReturn(
-                        new Widget[]
-                                {
-                                        lineWidget,
-                                        bodyWidget
-                                });
-
-        when(client.getWidget(
-                InterfaceID.Chatbox.SCROLLAREA))
-                .thenReturn(
-                        root);
-
-        final List<Widget> first =
-                service.collectRow(
-                        lineWidget,
-                        FontLayoutService.Surface.CHATBOX);
-
-        final List<Widget> second =
-                service.collectRow(
-                        lineWidget,
-                        FontLayoutService.Surface.CHATBOX);
-
-        assertEquals(
-                first,
-                second);
-
-        /*
-         * Direct index reuse must not enumerate the surface again.
-         */
-        verify(
-                root,
-                times(
-                        1))
-                .getDynamicChildren();
-
-        verify(
-                root,
-                times(
-                        1))
-                .getStaticChildren();
-
-        verify(
-                root,
-                times(
-                        1))
-                .getNestedChildren();
-    }
-
-    @Test
-    public void movedCachedWidgetRepairsIndexWithoutFullRebuild()
-    {
-        final Widget root =
-                mock(
-                        Widget.class);
-
-        final Widget lineWidget =
-                rowWidget(
-                        42,
-                        84);
-
-        final Widget bodyWidget =
-                mock(
-                        Widget.class);
-
-        final AtomicInteger bodyOriginalY =
-                new AtomicInteger(
-                        42);
-
-        when(bodyWidget.getOriginalY())
-                .thenAnswer(
-                        ignored ->
-                                bodyOriginalY.get());
-
-        when(bodyWidget.getRelativeY())
-                .thenReturn(
-                        84);
-
-        when(root.getDynamicChildren())
-                .thenReturn(
-                        new Widget[]
-                                {
-                                        lineWidget,
-                                        bodyWidget
-                                });
-
-        when(client.getWidget(
-                InterfaceID.Chatbox.SCROLLAREA))
-                .thenReturn(
-                        root);
-
-        final List<Widget> first =
-                service.collectRow(
-                        lineWidget,
-                        FontLayoutService.Surface.CHATBOX);
-
-        assertTrue(
-                first.contains(
-                        bodyWidget));
-
-        /*
-         * Simulate RuneScape moving/recycling one candidate while retaining
-         * the same Widget object.
-         */
-        bodyOriginalY.set(
-                43);
-
-        final List<Widget> second =
-                service.collectRow(
-                        lineWidget,
-                        FontLayoutService.Surface.CHATBOX);
-
-        assertFalse(
-                second.contains(
-                        bodyWidget));
-
-        /*
-         * The stale candidate must be repaired from the local bucket rather
-         * than triggering another complete surface enumeration.
-         */
-        verify(
-                root,
-                times(
-                        1))
-                .getDynamicChildren();
-    }
 
     @Test
     @SuppressWarnings("deprecation")
@@ -1060,9 +858,7 @@ public class FontLayoutServiceTest
                         bodyWidget));
 
         /*
-         * Chat XL moves the presentation widget away from its native row.
-         * The row index should immediately re-key the known widget and retain
-         * enough information to recognize its eventual native return.
+         * Move the indexed widget away from its original row.
          */
         service.applySynchronizedYOffset(
                 bodyWidget,
@@ -1077,8 +873,7 @@ public class FontLayoutServiceTest
                 bodyWidget.getRelativeY());
 
         /*
-         * Simulate RuneScape restoring the widget's native geometry before a
-         * later construction.
+         * Restore the widget's original geometry.
          */
         bodyWidget.setOriginalY(
                 42);
@@ -1096,65 +891,12 @@ public class FontLayoutServiceTest
                         bodyWidget));
 
         /*
-         * Returning to native geometry must be repaired from the watched
-         * widget locally. The complete surface is still enumerated only once.
+         * Repair the watched move locally without rebuilding the surface.
          */
         verify(
                 root,
                 times(
                         1))
-                .getDynamicChildren();
-    }
-
-    @Test
-    public void missingRowRefreshesIndexOnce()
-    {
-        final Widget root =
-                mock(
-                        Widget.class);
-
-        final Widget existingLine =
-                rowWidget(
-                        42,
-                        84);
-
-        final Widget requestedMissingLine =
-                rowWidget(
-                        100,
-                        200);
-
-        when(root.getDynamicChildren())
-                .thenReturn(
-                        new Widget[]
-                                {
-                                        existingLine
-                                });
-
-        when(client.getWidget(
-                InterfaceID.Chatbox.SCROLLAREA))
-                .thenReturn(
-                        root);
-
-        service.collectRow(
-                existingLine,
-                FontLayoutService.Surface.CHATBOX);
-
-        final List<Widget> missing =
-                service.collectRow(
-                        requestedMissingLine,
-                        FontLayoutService.Surface.CHATBOX);
-
-        assertTrue(
-                missing.isEmpty());
-
-        /*
-         * The current implementation performs one rebuild to confirm that
-         * the requested row really is absent.
-         */
-        verify(
-                root,
-                times(
-                        2))
                 .getDynamicChildren();
     }
 

@@ -97,7 +97,7 @@ tasks.register('testAll') {
 
 tasks.register('testChat', Test) {
 	group = 'verification'
-	description = 'Tests BigBoldChat supported chat-construction scripts and semantic text normalization behavior.'
+	description = 'Tests BigBoldChat chat construction measurement, semantic normalization, layout/correlation orchestration, rank recovery, and persistent row indexing.'
 
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
@@ -108,6 +108,7 @@ tasks.register('testChat', Test) {
 		includeTestsMatching 'com.bigboldchat.chat.ChatTextNormalizerTest'
 		includeTestsMatching 'com.bigboldchat.chat.FontLayoutServiceTest'
 		includeTestsMatching 'com.bigboldchat.chat.FontMeasurementServiceTest'
+		includeTestsMatching 'com.bigboldchat.chat.RowCorrelationIndexTest'
 	}
 
 	testLogging {
