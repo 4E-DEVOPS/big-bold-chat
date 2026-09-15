@@ -1733,6 +1733,54 @@ public final class FontLayoutService
             return repaired;
         }
 
+        private void observeSurfaceWidget(
+                Widget root,
+                Widget widget)
+        {
+            if (root == null
+                    || widget == null
+                    || indexedRoot != root
+                    || widgetsByRow == null
+                    || rowByWidget == null)
+            {
+                return;
+            }
+
+            final RowKey currentRow =
+                    RowKey.of(
+                            widget);
+
+            final RowKey recordedRow =
+                    rowByWidget.get(
+                            widget);
+
+            if (recordedRow == null)
+            {
+                addWidgetToRow(
+                        widget,
+                        currentRow);
+
+                rowByWidget.put(
+                        widget,
+                        currentRow);
+
+                return;
+            }
+
+            if (!recordedRow.equals(
+                    currentRow))
+            {
+                moveIndexedWidget(
+                        widget,
+                        recordedRow,
+                        currentRow);
+
+                reconcileWatchedMoveAfterExternalGeometryChange(
+                        widget,
+                        currentRow);
+            }
+        }
+
         private void onWidgetGeometryChangedByChatXl(
                 Widget widget,
                 RowKey previousRow)
@@ -2066,6 +2114,30 @@ public final class FontLayoutService
 
             watchedMoves.clear();
             watchedWidgetsByPreviousRow.clear();
+        }
+    }
+
+    private void observeWidgetFromSurfaceScan(
+            Surface surface,
+            Widget root,
+            Widget widget)
+    {
+        if (surface == null
+                || root == null
+                || widget == null)
+        {
+            return;
+        }
+
+        final RowCorrelationIndex rowIndex =
+                rowIndexes.get(
+                        surface);
+
+        if (rowIndex != null)
+        {
+            rowIndex.observeSurfaceWidget(
+                    root,
+                    widget);
         }
     }
 
@@ -2478,19 +2550,24 @@ public final class FontLayoutService
             }
 
             indexWidget(
+                    root,
                     root);
 
             indexWidgets(
+                    root,
                     root.getDynamicChildren());
 
             indexWidgets(
+                    root,
                     root.getStaticChildren());
 
             indexWidgets(
+                    root,
                     root.getNestedChildren());
         }
 
         private void indexWidgets(
+                Widget root,
                 Widget[] widgets)
         {
             if (widgets == null)
@@ -2501,11 +2578,13 @@ public final class FontLayoutService
             for (Widget widget : widgets)
             {
                 indexWidget(
+                        root,
                         widget);
             }
         }
 
         private void indexWidget(
+                Widget root,
                 Widget widget)
         {
             if (widget == null)
@@ -2518,6 +2597,11 @@ public final class FontLayoutService
                 performanceMetrics.recordWidgetsExamined(
                         1);
             }
+
+            observeWidgetFromSurfaceScan(
+                    surface,
+                    root,
+                    widget);
 
             final String semantic =
                     textNormalizer.normalizeSemantic(

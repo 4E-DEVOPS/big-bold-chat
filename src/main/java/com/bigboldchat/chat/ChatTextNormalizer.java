@@ -177,6 +177,22 @@ public final class ChatTextNormalizer
         }
     }
 
+    String renderText(
+            String text)
+    {
+        if (text == null
+                || text.indexOf('<') < 0)
+        {
+            return text;
+        }
+
+        return AT_PATTERN
+                .matcher(
+                        text)
+                .replaceAll(
+                        "@");
+    }
+
     /*
      * HELPERS
      */

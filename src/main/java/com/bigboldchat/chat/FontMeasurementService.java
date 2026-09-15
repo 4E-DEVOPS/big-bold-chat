@@ -165,11 +165,15 @@ public final class FontMeasurementService
                 selectedChatFont
                         == ChatFont.VERDANA_13_BOLD;
 
+        final String visibleRawBodyText =
+                textNormalizer.renderText(
+                        rawBody);
+
         final String selectedRawBodyText =
                 replaceMalformedColons
                         ? replaceVerdana13BoldColons(
-                        rawBody)
-                        : rawBody;
+                        visibleRawBodyText)
+                        : visibleRawBodyText;
 
         // Preserve inline images while measuring wrapping.
         final String measurementBody =
