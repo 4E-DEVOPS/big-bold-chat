@@ -73,6 +73,11 @@ public final class PerformanceMetrics
     // Number of row-candidates searches.
     private long rowCandidates;
 
+    // Count persistent row-index builds and successful reuses.
+    private long rowIndexBuilds;
+
+    private long rowIndexReuses;
+
     // Count correlation fallback requests.
     private long fallbackSearches;
 
@@ -197,6 +202,16 @@ public final class PerformanceMetrics
         {
             rowCandidates += candidates;
         }
+    }
+
+    public void recordRowIndexBuild()
+    {
+        rowIndexBuilds++;
+    }
+
+    public void recordRowIndexReuse()
+    {
+        rowIndexReuses++;
     }
 
     public void recordFallbackSearch()
@@ -373,6 +388,8 @@ public final class PerformanceMetrics
                         + " | Widgets={}"
                         + " | RowSearches={}"
                         + " | RowCandidates={}"
+                        + " | RowIndexBuilds={}"
+                        + " | RowIndexReuses={}"
                         + " | SurfaceSearches={}"
                         + " | FallbackSearches={}"
                         + " | FallbackBuilds={}"
@@ -383,6 +400,8 @@ public final class PerformanceMetrics
                 widgetsExamined,
                 rowSearches,
                 rowCandidates,
+                rowIndexBuilds,
+                rowIndexReuses,
                 surfaceSearches,
                 fallbackSearches,
                 fallbackBuilds,
@@ -504,6 +523,12 @@ public final class PerformanceMetrics
                 0L;
 
         rowCandidates =
+                0L;
+
+        rowIndexBuilds =
+                0L;
+
+        rowIndexReuses =
                 0L;
 
         surfaceSearches =
