@@ -29,7 +29,7 @@ dependencies {
 }
 
 group = 'com.bigboldchat'
-version = '1.1.0'
+version = '1.1.2'
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
