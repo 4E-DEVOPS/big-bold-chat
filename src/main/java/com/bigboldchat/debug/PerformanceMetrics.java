@@ -96,6 +96,24 @@ public final class PerformanceMetrics
 
     private long rankNodesExamined;
 
+    /*
+     * Classify strict row-first rank misses.
+     *
+     * These are diagnostic counters only. They do not affect correlation.
+     */
+    private long rankRowNoSprite;
+
+    private long rankRowXMismatch;
+
+    private long rankRowYMismatch;
+
+    /*
+     * Distinguish recursive fallback success from complete correlation failure.
+     */
+    private long rankFallbackHits;
+
+    private long rankFallbackMisses;
+
     // Count widget mutations.
     private long widgetMutations;
 
@@ -244,6 +262,31 @@ public final class PerformanceMetrics
     public void recordRankFallback()
     {
         rankFallbacks++;
+    }
+
+    public void recordRankRowNoSprite()
+    {
+        rankRowNoSprite++;
+    }
+
+    public void recordRankRowXMismatch()
+    {
+        rankRowXMismatch++;
+    }
+
+    public void recordRankRowYMismatch()
+    {
+        rankRowYMismatch++;
+    }
+
+    public void recordRankFallbackHit()
+    {
+        rankFallbackHits++;
+    }
+
+    public void recordRankFallbackMiss()
+    {
+        rankFallbackMisses++;
     }
 
     public void recordRankNodesExamined(
@@ -404,6 +447,11 @@ public final class PerformanceMetrics
                         + " | FallbackReuses={}"
                         + " | RankSearches={}"
                         + " | RankFallbacks={}"
+                        + " | RankNoSprite={}"
+                        + " | RankXMismatch={}"
+                        + " | RankYMismatch={}"
+                        + " | RankFallbackHits={}"
+                        + " | RankFallbackMisses={}"
                         + " | RankNodes={}",
                 widgetsExamined,
                 rowSearches,
@@ -417,6 +465,11 @@ public final class PerformanceMetrics
                 fallbackReuses,
                 rankSearches,
                 rankFallbacks,
+                rankRowNoSprite,
+                rankRowXMismatch,
+                rankRowYMismatch,
+                rankFallbackHits,
+                rankFallbackMisses,
                 rankNodesExamined);
 
         log.info(
@@ -559,6 +612,21 @@ public final class PerformanceMetrics
                 0L;
 
         rankFallbacks =
+                0L;
+
+        rankRowNoSprite =
+                0L;
+
+        rankRowXMismatch =
+                0L;
+
+        rankRowYMismatch =
+                0L;
+
+        rankFallbackHits =
+                0L;
+
+        rankFallbackMisses =
                 0L;
 
         rankNodesExamined =

@@ -2910,34 +2910,19 @@ public final class FontLayoutService
         /*
          * First inspect the already-collected row.
          *
-         * This is the common path. The exact same native criteria used by the
-         * recursive matcher are preserved:
-         *
-         *     sprite ID
-         *     OriginalX
-         *     row OriginalY OR RelativeY
+         * This remains the common path. The diagnostic counters below classify
+         * why this strict row-first lookup failed without changing its matching
+         * criteria.
          */
-        if (rowWidgets != null
-                && !rowWidgets.isEmpty())
-        {
-            final Widget rowMatch =
-                    findRankIconWidgetInRow(
-                            nativeLayout,
-                            rowAnchor,
-                            rowWidgets);
+        final Widget rowMatch =
+                findRankIconWidgetInRow(
+                        nativeLayout,
+                        rowAnchor,
+                        rowWidgets);
 
-            if (rowMatch != null)
-            {
-                return rowMatch;
-            }
-        }
-
-        /*
-         * Preserve the old recursive search as the correctness fallback.
-         */
-        if (performanceMetrics != null)
+        if (rowMatch != null)
         {
-            performanceMetrics.recordRankFallback();
+            return rowMatch;
         }
 
         final Widget root =
@@ -2946,15 +2931,92 @@ public final class FontLayoutService
 
         if (root == null)
         {
+            if (performanceMetrics != null)
+            {
+                performanceMetrics.recordRankFallback();
+                performanceMetrics.recordRankFallbackMiss();
+            }
+
             return null;
         }
 
-        return findRankIconWidgetRecursive(
-                root,
-                nativeLayout.rankIconSpriteId,
-                nativeLayout.rankIconX,
-                rowAnchor.getOriginalY(),
-                rowAnchor.getRelativeY());
+        /*
+         * The persistent row index intentionally avoids enumerating the complete
+         * chatbox tree on every row lookup. RuneScape can, however, replace a
+         * shallow rank-sprite Widget while the already-indexed text widgets remain
+         * stable enough for direct row reuse.
+         *
+         * On a strict rank miss, refresh only the same shallow domain owned by
+         * RowCorrelationIndex: root + immediate dynamic/static/nested children.
+         * This preserves the normal fast path while discovering a newly-created
+         * shallow rank widget without paying for a recursive tree traversal.
+         */
+        final Widget shallowMatch =
+                findRankIconWidgetShallow(
+                        root,
+                        nativeLayout.rankIconSpriteId,
+                        nativeLayout.rankIconX,
+                        rowAnchor.getOriginalY(),
+                        rowAnchor.getRelativeY());
+
+        if (shallowMatch != null)
+        {
+            observeWidgetFromSurfaceScan(
+                    Surface.CHATBOX,
+                    root,
+                    shallowMatch);
+
+            return shallowMatch;
+        }
+
+        /*
+         * Preserve the recursive tree search as the final correctness fallback.
+         * RankFallback therefore continues to mean that the full-tree path was
+         * actually required.
+         */
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordRankFallback();
+        }
+
+        final Widget fallbackMatch =
+                findRankIconWidgetRecursive(
+                        root,
+                        nativeLayout.rankIconSpriteId,
+                        nativeLayout.rankIconX,
+                        rowAnchor.getOriginalY(),
+                        rowAnchor.getRelativeY());
+
+        if (performanceMetrics != null)
+        {
+            if (fallbackMatch != null)
+            {
+                performanceMetrics.recordRankFallbackHit();
+            }
+            else
+            {
+                performanceMetrics.recordRankFallbackMiss();
+            }
+        }
+
+        /*
+         * The strict row-first lookup missed because the rank sprite was not yet
+         * known to the persistent surface index.
+         *
+         * Recursive fallback has now positively identified the exact sprite using
+         * the same native sprite/X/Y criteria. Teach the existing row index about
+         * that widget so subsequent constructions can resolve it through the cheap
+         * row-first path.
+         */
+        if (fallbackMatch != null)
+        {
+            observeWidgetFromSurfaceScan(
+                    Surface.CHATBOX,
+                    root,
+                    fallbackMatch);
+        }
+
+        return fallbackMatch;
     }
 
     private Widget findRankIconWidgetInRow(
@@ -2962,6 +3024,23 @@ public final class FontLayoutService
             Widget rowAnchor,
             List<Widget> rowWidgets)
     {
+        boolean spriteMatched =
+                false;
+
+        boolean xMatched =
+                false;
+
+        if (rowWidgets == null
+                || rowWidgets.isEmpty())
+        {
+            if (performanceMetrics != null)
+            {
+                performanceMetrics.recordRankRowNoSprite();
+            }
+
+            return null;
+        }
+
         for (Widget widget : rowWidgets)
         {
             if (widget == null)
@@ -2971,7 +3050,8 @@ public final class FontLayoutService
 
             if (performanceMetrics != null)
             {
-                performanceMetrics.recordRankNodesExamined(1);
+                performanceMetrics.recordRankNodesExamined(
+                        1);
             }
 
             if (widget.getSpriteId()
@@ -2980,11 +3060,17 @@ public final class FontLayoutService
                 continue;
             }
 
+            spriteMatched =
+                    true;
+
             if (widget.getOriginalX()
                     != nativeLayout.rankIconX)
             {
                 continue;
             }
+
+            xMatched =
+                    true;
 
             if (widget.getOriginalY()
                     != rowAnchor.getOriginalY()
@@ -2997,7 +3083,143 @@ public final class FontLayoutService
             return widget;
         }
 
+        if (performanceMetrics != null)
+        {
+            if (!spriteMatched)
+            {
+                performanceMetrics.recordRankRowNoSprite();
+            }
+            else if (!xMatched)
+            {
+                performanceMetrics.recordRankRowXMismatch();
+            }
+            else
+            {
+                performanceMetrics.recordRankRowYMismatch();
+            }
+        }
+
         return null;
+    }
+
+    private Widget findRankIconWidgetShallow(
+            Widget root,
+            int spriteId,
+            int originalX,
+            int originalY,
+            int relativeY)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        Widget match =
+                findRankIconWidgetCandidate(
+                        root,
+                        spriteId,
+                        originalX,
+                        originalY,
+                        relativeY);
+
+        if (match != null)
+        {
+            return match;
+        }
+
+        match =
+                findRankIconWidgetInShallowArray(
+                        root.getDynamicChildren(),
+                        spriteId,
+                        originalX,
+                        originalY,
+                        relativeY);
+
+        if (match != null)
+        {
+            return match;
+        }
+
+        match =
+                findRankIconWidgetInShallowArray(
+                        root.getStaticChildren(),
+                        spriteId,
+                        originalX,
+                        originalY,
+                        relativeY);
+
+        if (match != null)
+        {
+            return match;
+        }
+
+        return findRankIconWidgetInShallowArray(
+                root.getNestedChildren(),
+                spriteId,
+                originalX,
+                originalY,
+                relativeY);
+    }
+
+    private Widget findRankIconWidgetInShallowArray(
+            Widget[] widgets,
+            int spriteId,
+            int originalX,
+            int originalY,
+            int relativeY)
+    {
+        if (widgets == null)
+        {
+            return null;
+        }
+
+        for (Widget widget : widgets)
+        {
+            final Widget match =
+                    findRankIconWidgetCandidate(
+                            widget,
+                            spriteId,
+                            originalX,
+                            originalY,
+                            relativeY);
+
+            if (match != null)
+            {
+                return match;
+            }
+        }
+
+        return null;
+    }
+
+    private Widget findRankIconWidgetCandidate(
+            Widget widget,
+            int spriteId,
+            int originalX,
+            int originalY,
+            int relativeY)
+    {
+        if (widget == null)
+        {
+            return null;
+        }
+
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordRankNodesExamined(
+                    1);
+        }
+
+        return widget.getSpriteId()
+                == spriteId
+                && widget.getOriginalX()
+                == originalX
+                && (widget.getOriginalY()
+                == originalY
+                || widget.getRelativeY()
+                == relativeY)
+                ? widget
+                : null;
     }
 
     private Widget findRankIconWidgetRecursive(

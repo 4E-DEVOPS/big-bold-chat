@@ -35,7 +35,7 @@ import static org.mockito.Mockito.when;
  * These tests protect:
  *
  *  - row-first / lazy-fallback text correlation;
- *  - row-first rank correlation and its recursive correctness fallback;
+ *  - row-first rank correlation, shallow refresh, and recursive correctness fallback;
  *  - active font/profile lifecycle;
  *  - idempotent widget mutation;
  *  - conditional widget revalidation;
@@ -353,7 +353,7 @@ public class FontLayoutServiceTest
     }
 
     @Test
-    public void rankRowMissUsesRecursiveFallback()
+    public void rankRowMissUsesShallowRefreshBeforeRecursiveFallback()
     {
         final Widget root =
                 mock(
@@ -424,11 +424,128 @@ public class FontLayoutServiceTest
                 result);
 
         /*
-         * Missing the rank on the already-collected row must enter the
-         * recursive correctness fallback.
+         * Missing the rank from the cached row must first inspect the shallow
+         * CHATBOX domain. Finding the replacement rank there must avoid the
+         * recursive correctness fallback entirely.
          */
         verify(
                 root,
+                times(
+                        1))
+                .getDynamicChildren();
+
+        verify(
+                root,
+                never())
+                .getStaticChildren();
+
+        verify(
+                root,
+                never())
+                .getNestedChildren();
+
+        verify(
+                rankWidget,
+                never())
+                .getDynamicChildren();
+    }
+
+    @Test
+    public void rankShallowMissUsesRecursiveFallback()
+    {
+        final Widget root =
+                mock(
+                        Widget.class);
+
+        final Widget rowAnchor =
+                mock(
+                        Widget.class);
+
+        final Widget rowCandidate =
+                mock(
+                        Widget.class);
+
+        final Widget container =
+                mock(
+                        Widget.class);
+
+        final Widget rankWidget =
+                mock(
+                        Widget.class);
+
+        when(client.getWidget(
+                InterfaceID.Chatbox.SCROLLAREA))
+                .thenReturn(
+                        root);
+
+        when(root.getDynamicChildren())
+                .thenReturn(
+                        new Widget[]
+                                {
+                                        container
+                                });
+
+        when(container.getDynamicChildren())
+                .thenReturn(
+                        new Widget[]
+                                {
+                                        rankWidget
+                                });
+
+        when(rowAnchor.getOriginalY())
+                .thenReturn(
+                        42);
+
+        when(rowAnchor.getRelativeY())
+                .thenReturn(
+                        84);
+
+        when(rankWidget.getSpriteId())
+                .thenReturn(
+                        1234);
+
+        when(rankWidget.getOriginalX())
+                .thenReturn(
+                        27);
+
+        when(rankWidget.getRelativeY())
+                .thenReturn(
+                        84);
+
+        final FontMeasurementService.ChannelPrefixLayout nativeLayout =
+                new FontMeasurementService.ChannelPrefixLayout();
+
+        nativeLayout.rankIconSpriteId =
+                1234;
+
+        nativeLayout.rankIconX =
+                27;
+
+        final Widget result =
+                service.findRankIconWidget(
+                        nativeLayout,
+                        rowAnchor,
+                        Arrays.asList(
+                                rowCandidate));
+
+        assertSame(
+                rankWidget,
+                result);
+
+        /*
+         * The shallow refresh cannot see grandchildren. The recursive fallback
+         * must therefore remain available as the final correctness path.
+         * root.getDynamicChildren() is read once by the shallow refresh and once
+         * again by the recursive traversal.
+         */
+        verify(
+                root,
+                times(
+                        2))
+                .getDynamicChildren();
+
+        verify(
+                container,
                 times(
                         1))
                 .getDynamicChildren();
