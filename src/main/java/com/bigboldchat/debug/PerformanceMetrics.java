@@ -67,6 +67,12 @@ public final class PerformanceMetrics
     // Count full chat-surface searches.
     private long surfaceSearches;
 
+    // Number of row searches.
+    private long rowSearches;
+
+    // Number of row-candidates searches.
+    private long rowCandidates;
+
     // Count correlation fallback searches.
     private long fallbackSearches;
 
@@ -172,6 +178,17 @@ public final class PerformanceMetrics
     public void recordSurfaceSearch()
     {
         surfaceSearches++;
+    }
+
+    public void recordRowSearches(
+            int candidates)
+    {
+        rowSearches++;
+
+        if (candidates > 0)
+        {
+            rowCandidates += candidates;
+        }
     }
 
     public void recordFallbackSearch()
@@ -331,11 +348,15 @@ public final class PerformanceMetrics
         log.info(
                 "[Chat XL][Performance] CORRELATION"
                         + " | Widgets={}"
+                        + " | RowSearches={}"
+                        + " | RowCandidates={}"
                         + " | SurfaceSearches={}"
                         + " | FallbackSearches={}"
                         + " | RankSearches={}"
                         + " | RankNodes={}",
                 widgetsExamined,
+                rowSearches,
+                rowCandidates,
                 surfaceSearches,
                 fallbackSearches,
                 rankSearches,
@@ -448,6 +469,12 @@ public final class PerformanceMetrics
                 0L;
 
         widgetsExamined =
+                0L;
+
+        rowSearches =
+                0L;
+
+        rowCandidates =
                 0L;
 
         surfaceSearches =

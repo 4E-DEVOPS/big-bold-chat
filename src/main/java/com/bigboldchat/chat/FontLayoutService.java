@@ -314,11 +314,17 @@ public final class FontLayoutService
                         state.scriptId,
                         state.parentWidgetId);
 
+        final List<Widget> rowWidgets =
+                collectRow(
+                        lineWidget,
+                        surface);
+
         final Widget bodyWidget =
                 findTargetWidgetForLine(
                         state.semanticBody,
                         lineWidget,
-                        surface);
+                        surface,
+                        rowWidgets);
 
         if (bodyWidget == null)
         {
@@ -334,7 +340,8 @@ public final class FontLayoutService
                         state.rawPrefixComponents,
                         lineWidget,
                         surface,
-                        bodyWidget);
+                        bodyWidget,
+                        rowWidgets);
 
         final Widget rowAnchor =
                 !prefixWidgets.isEmpty()
@@ -980,6 +987,177 @@ public final class FontLayoutService
 
     /*
      * ================================================================
+     * ROW CORRELATION
+     * ================================================================
+     */
+
+    private List<Widget> collectRow(
+            Widget lineWidget,
+            Surface surface)
+    {
+        final List<Widget> result =
+                new ArrayList<>();
+
+        if (lineWidget == null
+                || surface == null)
+        {
+            return result;
+        }
+
+        final Widget root =
+                surface == Surface.SPLIT_PRIVATE
+                        ? client.getWidget(
+                        InterfaceID.PM_CHAT,
+                        0)
+                        : client.getWidget(
+                        InterfaceID.Chatbox.SCROLLAREA);
+
+        if (root == null)
+        {
+            return result;
+        }
+
+        collectRow(
+                result,
+                root,
+                lineWidget);
+
+        collectRow(
+                result,
+                root.getDynamicChildren(),
+                lineWidget);
+
+        collectRow(
+                result,
+                root.getStaticChildren(),
+                lineWidget);
+
+        collectRow(
+                result,
+                root.getNestedChildren(),
+                lineWidget);
+
+        // TODO: Count row-first correlation work during development.
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordRowSearches(
+                    result.size());
+        }
+
+        return result;
+    }
+
+    private void collectRow(
+            List<Widget> result,
+            Widget[] widgets,
+            Widget lineWidget)
+    {
+        if (result == null
+                || widgets == null
+                || lineWidget == null)
+        {
+            return;
+        }
+
+        for (Widget widget : widgets)
+        {
+            collectRow(
+                    result,
+                    widget,
+                    lineWidget);
+        }
+    }
+
+    private void collectRow(
+            List<Widget> result,
+            Widget widget,
+            Widget lineWidget)
+    {
+        if (result == null
+                || widget == null
+                || lineWidget == null)
+        {
+            return;
+        }
+
+        // TODO: Count widgets examined during row correlation.
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordWidgetsExamined(
+                    1);
+        }
+
+        if (widget.getOriginalY()
+                != lineWidget.getOriginalY()
+                || widget.getRelativeY()
+                != lineWidget.getRelativeY())
+        {
+            return;
+        }
+
+        if (!result.contains(
+                widget))
+        {
+            result.add(
+                    widget);
+        }
+    }
+
+    private Widget matchRow(
+            List<Widget> rowWidgets,
+            String targetText,
+            Widget excludedWidget)
+    {
+        if (rowWidgets == null
+                || rowWidgets.isEmpty()
+                || targetText == null)
+        {
+            return null;
+        }
+
+        Widget match =
+                null;
+
+        int matches =
+                0;
+
+        for (Widget widget : rowWidgets)
+        {
+            if (widget == null
+                    || widget == excludedWidget)
+            {
+                continue;
+            }
+
+            final String semantic =
+                    textNormalizer.normalizeSemantic(
+                            widget.getText());
+
+            if (semantic == null
+                    || !semantic.equalsIgnoreCase(
+                    targetText))
+            {
+                continue;
+            }
+
+            match =
+                    widget;
+
+            matches++;
+
+            if (matches > 1)
+            {
+                return null;
+            }
+        }
+
+        return matches == 1
+                ? match
+                : null;
+    }
+
+    /*
+     * ================================================================
      * BODY CORRELATION
      * ================================================================
      */
@@ -987,13 +1165,31 @@ public final class FontLayoutService
     private Widget findTargetWidgetForLine(
             String targetText,
             Widget lineWidget,
-            Surface surface)
+            Surface surface,
+            List<Widget> rowWidgets)
     {
         if (targetText == null
                 || lineWidget == null
                 || surface == null)
         {
             return null;
+        }
+
+        final Widget rowMatch =
+                matchRow(
+                        rowWidgets,
+                        targetText,
+                        null);
+
+        if (rowMatch != null)
+        {
+            return rowMatch;
+        }
+
+// TODO: Count broad correlation fallbacks during development.
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordFallbackSearch();
         }
 
         final List<Widget> matches =
@@ -1208,7 +1404,8 @@ public final class FontLayoutService
             List<String> rawPrefixComponents,
             Widget lineWidget,
             Surface surface,
-            Widget bodyWidget)
+            Widget bodyWidget,
+            List<Widget> rowWidgets)
     {
         final List<Widget> result =
                 new ArrayList<>();
@@ -1258,7 +1455,8 @@ public final class FontLayoutService
                             semanticComponent,
                             lineWidget,
                             surface,
-                            bodyWidget);
+                            bodyWidget,
+                            rowWidgets);
 
             if (match != null
                     && !result.contains(
@@ -1276,8 +1474,26 @@ public final class FontLayoutService
             String targetText,
             Widget lineWidget,
             Surface surface,
-            Widget excludedBodyWidget)
+            Widget excludedBodyWidget,
+            List<Widget> rowWidgets)
     {
+        final Widget rowMatch =
+                matchRow(
+                        rowWidgets,
+                        targetText,
+                        excludedBodyWidget);
+
+        if (rowMatch != null)
+        {
+            return rowMatch;
+        }
+
+        // TODO: Count broad correlation fallbacks during development.
+        if (performanceMetrics != null)
+        {
+            performanceMetrics.recordFallbackSearch();
+        }
+
         final List<Widget> matches =
                 findAllTargetWidgets(
                         targetText,
