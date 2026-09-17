@@ -1,12 +1,8 @@
-package com.bigboldchat.ui;
+package com.bigboldchat.chatbox;
 
-import com.bigboldchat.Configurations;
 import com.bigboldchat.debug.PerformanceMetrics;
 
 import net.runelite.api.Client;
-import net.runelite.api.ScriptID;
-import net.runelite.api.events.ScriptPostFired;
-import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetSizeMode;
@@ -24,19 +20,59 @@ public final class ChatboxResizeService
 	private static final int NATIVE_HEIGHT = 165;
 
 	private final Client client;
-	private final Configurations config;
 	private final PerformanceMetrics performanceMetrics;
 
 	private boolean resizedLayoutApplied;
 
-	public ChatboxResizeService(
-		Client client,
-		Configurations config,
-		PerformanceMetrics performanceMetrics)
+	public ChatboxResizeService(Client client, PerformanceMetrics performanceMetrics)
 	{
 		this.client = client;
-		this.config = config;
 		this.performanceMetrics = performanceMetrics;
+	}
+
+	/*
+	 * ================================================================
+	 * LAYOUT
+	 * ================================================================
+	 */
+	ChatboxLayout getLayout()
+	{
+		final int topLevel = client.getTopLevelInterfaceId();
+
+		if (topLevel == InterfaceID.TOPLEVEL)
+		{
+			return ChatboxLayout.FIXED;
+		}
+
+		if (topLevel == InterfaceID.TOPLEVEL_OSRS_STRETCH)
+		{
+			return ChatboxLayout.RESIZABLE_CLASSIC;
+		}
+
+		if (topLevel == InterfaceID.TOPLEVEL_PRE_EOC)
+		{
+			return ChatboxLayout.RESIZABLE_MODERN;
+		}
+
+		return ChatboxLayout.UNKNOWN;
+	}
+
+	private Widget getSlot(ChatboxLayout layout)
+	{
+		switch (layout)
+		{
+			case RESIZABLE_CLASSIC:
+				return client.getWidget(InterfaceID.ToplevelOsrsStretch.CHAT_CONTAINER);
+
+			case RESIZABLE_MODERN:
+				return client.getWidget(InterfaceID.ToplevelPreEoc.CHAT_CONTAINER);
+
+			case FIXED:
+				return client.getWidget(InterfaceID.Toplevel.CHAT_CONTAINER);
+
+			default:
+				return null;
+		}
 	}
 
 	/*
@@ -44,85 +80,75 @@ public final class ChatboxResizeService
 	 * CHATBOX GEOMETRY
 	 * ================================================================
 	 */
-	public ResizeResult applyConfiguredSize()
+	public ResizeResult applySize(int width, int height)
 	{
-		final long started =
-				performanceMetrics != null
-						? System.nanoTime()
-						: 0L;
+		final long started = performanceMetrics != null
+				? System.nanoTime()
+				: 0L;
 
-		if (!client.isResized())
+		final ChatboxLayout layout = getLayout();
+
+		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN)
 		{
-			if (resizedLayoutApplied)
-			{
-				restoreNativeSize();
-			}
-
+			resizedLayoutApplied = false;
 			return ResizeResult.NOT_APPLIED;
 		}
 
+		final Widget slot = getSlot(layout);
 		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+		final Widget controls = client.getWidget(InterfaceID.Chatbox.CONTROLS);
+		final Widget scrollArea = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
 
-		if (universe == null || chatArea == null)
+		if (slot == null || universe == null || chatArea == null)
 		{
 			recordMissingWidgets();
 			return ResizeResult.NOT_APPLIED;
 		}
-
-		final Widget slot = universe.getParent();
 
 		/*
-		 * The fixed-layout slot uses Toplevel.CHAT_CONTAINER. Both modern and
-		 * classic resizable layouts mount Chatbox.UNIVERSE under another slot.
+		 * Ignore transient layout swaps where Chatbox.UNIVERSE has not yet
+		 * been mounted under the active resizable chat container.
 		 */
-		if (slot == null || slot.getId() == InterfaceID.Toplevel.CHAT_CONTAINER)
+		final Widget parent = universe.getParent();
+
+		if (parent == null || parent.getId() != slot.getId())
 		{
-			recordMissingWidgets();
 			return ResizeResult.NOT_APPLIED;
 		}
-
-		final int width = config.chatboxWidth();
-		final int height = config.chatboxHeight();
 
 		final boolean widthChanged = slot.getWidth() != width || universe.getWidth() != width || chatArea.getWidth() != width;
 		final boolean heightChanged = slot.getHeight() != height || universe.getHeight() != height;
+		final boolean controlsChanged = controls != null && controls.getWidth() != width;
 
-		if (widthChanged || heightChanged)
+		if (widthChanged || heightChanged || controlsChanged)
 		{
-			applyGeometry(
-					slot,
-					universe,
-					chatArea,
-					width,
-					height);
+			applyGeometry(slot, universe, chatArea, controls, width, height);
+		}
+
+		if (heightChanged)
+		{
+			updateScroll(scrollArea);
 		}
 
 		resizedLayoutApplied = true;
 
-		recordApply(
-				started,
-				widthChanged,
-				heightChanged);
+		recordApply(started, widthChanged, heightChanged);
 
-		return new ResizeResult(
-				true,
-				widthChanged,
-				heightChanged);
+		return new ResizeResult(true, widthChanged, heightChanged);
 	}
 
 	private void applyGeometry(
 			Widget slot,
 			Widget universe,
 			Widget chatArea,
+			Widget controls,
 			int width,
 			int height)
 	{
 		if (slot.getWidth() != width || slot.getHeight() != height)
 		{
-			slot.setSize(
-					width,
-					height);
+			slot.setSize(width, height);
 			recordMutation();
 
 			slot.revalidate();
@@ -131,14 +157,8 @@ public final class ChatboxResizeService
 
 		if (universe.getWidth() != width || universe.getHeight() != height)
 		{
-			universe.setSize(
-					width,
-					height,
-					WidgetSizeMode.ABSOLUTE,
-					WidgetSizeMode.ABSOLUTE);
-			universe.setForcedPosition(
-					0,
-					0);
+			universe.setSize(width, height, WidgetSizeMode.ABSOLUTE, WidgetSizeMode.ABSOLUTE);
+			universe.setForcedPosition(0, 0);
 			recordMutation();
 
 			universe.revalidate();
@@ -151,12 +171,11 @@ public final class ChatboxResizeService
 			recordMutation();
 		}
 
-		/*
-		 * Re-resolve child geometry after changing the outer chatbox
-		 * dimensions. Resizable chat children derive their final bounds
-		 * from the updated parent hierarchy.
-		 */
-		revalidateChildren(universe);
+		if (controls != null && controls.getWidth() != width)
+		{
+			controls.setOriginalWidth(width);
+			recordMutation();
+		}
 	}
 
 	/*
@@ -164,58 +183,30 @@ public final class ChatboxResizeService
 	 * GEOMETRY HELPERS
 	 * ================================================================
 	 */
-	private void revalidateChildren(Widget parent)
+	private void updateScroll(Widget scrollArea)
 	{
-		if (parent == null)
+		if (scrollArea == null)
 		{
 			return;
 		}
 
-		revalidateWidgets(parent.getDynamicChildren());
-		revalidateWidgets(parent.getStaticChildren());
-		revalidateWidgets(parent.getNestedChildren());
-	}
+		final int height = scrollArea.getHeight();
+		final int scrollHeight = scrollArea.getScrollHeight();
 
-	private void revalidateWidgets(Widget[] widgets)
-	{
-		if (widgets == null)
+		if (scrollHeight < height)
 		{
-			return;
+			scrollArea.setScrollHeight(height);
+			recordMutation();
 		}
 
-		for (Widget widget : widgets)
+		if (scrollArea.getScrollY() != 0)
 		{
-			if (widget == null)
-			{
-				continue;
-			}
-
-			widget.revalidate();
-			recordRevalidate();
+			scrollArea.setScrollY(0);
+			recordMutation();
 		}
-	}
 
-	/*
-	 * ================================================================
-	 * CHAT CONSTRUCTION
-	 * ================================================================
-	 */
-	public void onScriptPreFired(ScriptPreFired event)
-	{
-		if (event != null && event.getScriptId() == ScriptID.BUILD_CHATBOX)
-		{
-			applyConfiguredSize();
-		}
-	}
-
-	public void onScriptPostFired(ScriptPostFired event)
-	{
-		if (event != null
-				&& (event.getScriptId() == ScriptID.TOPLEVEL_REDRAW
-				|| event.getScriptId() == ScriptID.MESSAGE_LAYER_OPEN))
-		{
-			applyConfiguredSize();
-		}
+		scrollArea.revalidate();
+		recordRevalidate();
 	}
 
 	/*
@@ -225,35 +216,30 @@ public final class ChatboxResizeService
 	 */
 	public void restoreNativeSize()
 	{
-		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
+		final boolean wasApplied = resizedLayoutApplied;
+		final ChatboxLayout layout = getLayout();
 
-		if (universe == null)
+		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN)
 		{
 			resizedLayoutApplied = false;
 			return;
 		}
 
-		final Widget slot = universe.getParent();
+		final Widget slot = getSlot(layout);
+		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
 
-		if (slot != null && slot.getId() != InterfaceID.Toplevel.CHAT_CONTAINER)
+		if (slot == null || universe == null)
 		{
-			slot.setSize(
-					NATIVE_WIDTH,
-					NATIVE_HEIGHT);
-			slot.setForcedPosition(
-					-1,
-					-1);
-			slot.revalidate();
+			resizedLayoutApplied = false;
+			return;
 		}
 
-		universe.setSize(
-				0,
-				0,
-				WidgetSizeMode.MINUS,
-				WidgetSizeMode.MINUS);
-		universe.setForcedPosition(
-				-1,
-				-1);
+		slot.setSize(NATIVE_WIDTH, NATIVE_HEIGHT);
+		slot.setForcedPosition(-1, -1);
+		slot.revalidate();
+
+		universe.setSize(0, 0, WidgetSizeMode.MINUS, WidgetSizeMode.MINUS);
+		universe.setForcedPosition(-1, -1);
 		universe.revalidate();
 
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
@@ -261,13 +247,29 @@ public final class ChatboxResizeService
 		if (chatArea != null)
 		{
 			chatArea.setOriginalWidth(NATIVE_WIDTH);
+			recordMutation();
 		}
 
-		revalidateChildren(universe);
+		final Widget controls = client.getWidget(InterfaceID.Chatbox.CONTROLS);
+
+		if (controls != null)
+		{
+			controls.setOriginalWidth(NATIVE_WIDTH);
+			recordMutation();
+
+			controls.revalidate();
+			recordRevalidate();
+		}
+
+		if (chatArea != null)
+		{
+			chatArea.revalidate();
+			recordRevalidate();
+		}
 
 		resizedLayoutApplied = false;
 
-		if (performanceMetrics != null)
+		if (wasApplied && performanceMetrics != null)
 		{
 			performanceMetrics.recordResizeRestore();
 		}

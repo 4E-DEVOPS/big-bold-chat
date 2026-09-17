@@ -90,9 +90,9 @@ tasks.register('testAll') {
 
 	dependsOn(
 			'testChat',
+			'testChatbox',
 			'testConfig',
 			'testFonts',
-			'testUi',
 	)
 }
 
@@ -110,6 +110,25 @@ tasks.register('testChat', Test) {
 		includeTestsMatching 'com.bigboldchat.chat.FontLayoutServiceTest'
 		includeTestsMatching 'com.bigboldchat.chat.FontMeasurementServiceTest'
 		includeTestsMatching 'com.bigboldchat.chat.RowCorrelationIndexTest'
+	}
+
+	testLogging {
+		events 'passed', 'skipped', 'failed'
+		exceptionFormat 'full'
+	}
+}
+
+tasks.register('testChatbox', Test) {
+	group = 'verification'
+	description = 'Tests BigBoldChat chatbox user interface.'
+
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+
+	useJUnit()
+
+	filter {
+		includeTestsMatching 'com.bigboldchat.chatbox.ChatboxResizeServiceTest'
 	}
 
 	testLogging {
@@ -149,25 +168,6 @@ tasks.register('testFonts', Test) {
 	filter {
 		includeTestsMatching 'com.bigboldchat.fonts.ChatFontRegistryTest'
 		includeTestsMatching 'com.bigboldchat.fonts.ChatFontProfileTest'
-	}
-
-	testLogging {
-		events 'passed', 'skipped', 'failed'
-		exceptionFormat 'full'
-	}
-}
-
-tasks.register('testUi', Test) {
-	group = 'verification'
-	description = 'Tests BigBoldChat user interfaces.'
-
-	testClassesDirs = sourceSets.test.output.classesDirs
-	classpath = sourceSets.test.runtimeClasspath
-
-	useJUnit()
-
-	filter {
-		includeTestsMatching 'com.bigboldchat.ui.ChatboxResizeServiceTest'
 	}
 
 	testLogging {
