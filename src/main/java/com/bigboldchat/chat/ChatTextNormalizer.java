@@ -35,15 +35,12 @@ public final class ChatTextNormalizer
         this(null);
     }
 
-    public ChatTextNormalizer(
-            PerformanceMetrics performanceMetrics)
+    public ChatTextNormalizer(PerformanceMetrics performanceMetrics)
     {
-        this.performanceMetrics =
-                performanceMetrics;
+        this.performanceMetrics = performanceMetrics;
     }
 
-    String normalizeSemantic(
-            String text)
+    String normalizeSemantic(String text)
     {
         final long started =
                 performanceMetrics != null
@@ -100,8 +97,7 @@ public final class ChatTextNormalizer
             }
 
             // Keep image-only messages identifiable after markup is removed.
-            return extractImages(
-                    withVisibleAtCharacters);
+            return extractImages(withVisibleAtCharacters);
         }
         finally
         {
@@ -114,8 +110,7 @@ public final class ChatTextNormalizer
         }
     }
 
-    String measureSemantic(
-            String text)
+    String measureSemantic(String text)
     {
         final long started =
                 performanceMetrics != null
@@ -175,41 +170,31 @@ public final class ChatTextNormalizer
         }
     }
 
-    String renderText(
-            String text)
+    String renderText(String text)
     {
-        if (text == null
-                || text.indexOf('<') < 0)
+        if (text == null || text.indexOf('<') < 0)
         {
             return text;
         }
 
         return AT_PATTERN
-                .matcher(
-                        text)
-                .replaceAll(
-                        "@");
+                .matcher(text)
+                .replaceAll("@");
     }
 
     /*
      * HELPERS
      */
-
-    private String extractImages(
-            String text)
+    private String extractImages(String text)
     {
-        if (text == null
-                || text.isEmpty())
+        if (text == null || text.isEmpty())
         {
             return "";
         }
 
-        final Matcher matcher =
-                IMAGE_PATTERN.matcher(
-                        text);
+        final Matcher matcher = IMAGE_PATTERN.matcher(text);
 
-        final StringBuilder images =
-                new StringBuilder();
+        final StringBuilder images = new StringBuilder();
 
         while (matcher.find())
         {

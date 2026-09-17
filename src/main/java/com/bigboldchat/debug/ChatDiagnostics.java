@@ -81,26 +81,19 @@ public final class ChatDiagnostics
     private final Client client;
     private final Configurations config;
 
-    private final Deque<TraceFrame> traceFrames =
-            new ArrayDeque<>();
+    private final Deque<TraceFrame> traceFrames = new ArrayDeque<>();
 
-    private TraceMode traceMode =
-            TraceMode.NONE;
+    private TraceMode traceMode = TraceMode.NONE;
 
-    private int rootScriptId =
-            -1;
+    private int rootScriptId = -1;
 
     private int traceSequence;
 
-    public ChatDiagnostics(
-            Client client,
-            Configurations config)
+    public ChatDiagnostics(Client client, Configurations config)
     {
-        this.client =
-                client;
+        this.client = client;
 
-        this.config =
-                config;
+        this.config = config;
     }
 
     /*
@@ -109,33 +102,22 @@ public final class ChatDiagnostics
      * ================================================================
      */
 
-    public void onScriptPreFired(
-            ScriptPreFired event)
+    public void onScriptPreFired(ScriptPreFired event)
     {
         if (event == null)
         {
             return;
         }
 
-        final int scriptId =
-                event.getScriptId();
+        final int scriptId = event.getScriptId();
 
         if (traceMode == TraceMode.NONE)
         {
-            if (isTargetRoot(
-                    scriptId))
+            if (isTargetRoot(scriptId))
             {
-                startTrace(
-                        TraceMode.TARGETED,
-                        scriptId);
-            }
-            else if (TRACE_SUPPORTED_LIFECYCLES
-                    && isSupportedScript(
-                    scriptId))
-            {
-                startTrace(
-                        TraceMode.SUPPORTED,
-                        scriptId);
+                startTrace(TraceMode.TARGETED, scriptId);
+            } else if (TRACE_SUPPORTED_LIFECYCLES && isSupportedScript(scriptId)) {
+                startTrace(TraceMode.SUPPORTED, scriptId);
             }
         }
 
@@ -144,29 +126,21 @@ public final class ChatDiagnostics
             return;
         }
 
-        final TraceFrame frame =
-                new TraceFrame();
+        final TraceFrame frame = new TraceFrame();
 
-        frame.scriptId =
-                scriptId;
+        frame.scriptId = scriptId;
 
-        frame.sequence =
-                ++traceSequence;
+        frame.sequence = ++traceSequence;
 
-        frame.rootFrame =
-                traceFrames.isEmpty();
+        frame.rootFrame = traceFrames.isEmpty();
 
-        frame.before =
-                snapshotChatWidgets();
+        frame.before = snapshotChatWidgets();
 
-        frame.intTailBefore =
-                traceIntStackTail();
+        frame.intTailBefore = traceIntStackTail();
 
-        frame.stringsBefore =
-                traceObjectStackStrings();
+        frame.stringsBefore = traceObjectStackStrings();
 
-        traceFrames.push(
-                frame);
+        traceFrames.push(frame);
 
         if (isVerboseTrace())
         {
@@ -186,21 +160,16 @@ public final class ChatDiagnostics
         }
     }
 
-    public void onScriptPostFired(
-            ScriptPostFired event)
+    public void onScriptPostFired(ScriptPostFired event)
     {
-        if (event == null
-                || traceMode == TraceMode.NONE
-                || traceFrames.isEmpty())
+        if (event == null || traceMode == TraceMode.NONE || traceFrames.isEmpty())
         {
             return;
         }
 
-        final int scriptId =
-                event.getScriptId();
+        final int scriptId = event.getScriptId();
 
-        final TraceFrame frame =
-                traceFrames.peek();
+        final TraceFrame frame = traceFrames.peek();
 
         if (frame == null)
         {
@@ -208,8 +177,7 @@ public final class ChatDiagnostics
             return;
         }
 
-        if (frame.scriptId
-                != scriptId)
+        if (frame.scriptId != scriptId)
         {
             log.debug(
                     "[Chat XL][Diagnostic]"
@@ -227,18 +195,11 @@ public final class ChatDiagnostics
 
         traceFrames.pop();
 
-        final IdentityHashMap<Widget, WidgetState> after =
-                snapshotChatWidgets();
+        final IdentityHashMap<Widget, WidgetState> after = snapshotChatWidgets();
 
-        final boolean logChanges =
-                isVerboseTrace()
-                        && TRACE_WIDGET_CHANGES;
+        final boolean logChanges = isVerboseTrace() && TRACE_WIDGET_CHANGES;
 
-        final int mutations =
-                logMutations(
-                        frame,
-                        after,
-                        logChanges);
+        final int mutations = logMutations(frame, after, logChanges);
 
         if (isVerboseTrace())
         {
@@ -262,12 +223,9 @@ public final class ChatDiagnostics
             return;
         }
 
-        if (traceMode == TraceMode.SUPPORTED
-                && !TRACE_SUPPORTED_DETAILS)
+        if (traceMode == TraceMode.SUPPORTED && !TRACE_SUPPORTED_DETAILS)
         {
-            logSupportedSummary(
-                    frame,
-                    mutations);
+            logSupportedSummary(frame, mutations);
         }
         else
         {
@@ -281,34 +239,25 @@ public final class ChatDiagnostics
                     rootScriptId,
                     traceSequence);
 
-            log.debug(
-                    "[Chat XL][Diagnostic]"
-                            + " ========================================");
+            log.debug("[Chat XL][Diagnostic]" + " ========================================");
         }
 
         finishTrace();
     }
 
-    private void startTrace(
-            TraceMode mode,
-            int scriptId)
+    private void startTrace(TraceMode mode, int scriptId)
     {
         traceFrames.clear();
 
-        traceMode =
-                mode;
+        traceMode = mode;
 
-        rootScriptId =
-                scriptId;
+        rootScriptId = scriptId;
 
-        traceSequence =
-                0;
+        traceSequence = 0;
 
         if (isVerboseTrace())
         {
-            log.debug(
-                    "[Chat XL][Diagnostic]"
-                            + " ========================================");
+            log.debug("[Chat XL][Diagnostic]" + " ========================================");
 
             log.debug(
                     "[Chat XL][Diagnostic]"
@@ -328,23 +277,16 @@ public final class ChatDiagnostics
     {
         traceFrames.clear();
 
-        traceMode =
-                TraceMode.NONE;
+        traceMode = TraceMode.NONE;
 
-        rootScriptId =
-                -1;
+        rootScriptId = -1;
 
-        traceSequence =
-                0;
+        traceSequence = 0;
     }
 
     private boolean isVerboseTrace()
     {
-        return traceMode
-                == TraceMode.TARGETED
-                || (traceMode
-                == TraceMode.SUPPORTED
-                && TRACE_SUPPORTED_DETAILS);
+        return traceMode == TraceMode.TARGETED || (traceMode == TraceMode.SUPPORTED && TRACE_SUPPORTED_DETAILS);
     }
 
     /*
@@ -353,21 +295,16 @@ public final class ChatDiagnostics
      * ================================================================
      */
 
-    private void logSupportedSummary(
-            TraceFrame frame,
-            int mutations)
+    private void logSupportedSummary(TraceFrame frame, int mutations)
     {
         if (frame == null)
         {
             return;
         }
 
-        final ChatFont selected =
-                getConfiguredFont();
+        final ChatFont selected = getConfiguredFont();
 
-        final ChatFontProfile profile =
-                ChatFontRegistry.get(
-                        selected);
+        final ChatFontProfile profile = ChatFontRegistry.get(selected);
 
         if (profile == null)
         {
@@ -412,21 +349,13 @@ public final class ChatDiagnostics
 
     private void logConfiguredProfile()
     {
-        final ChatFont selected =
-                getConfiguredFont();
+        final ChatFont selected = getConfiguredFont();
 
-        final ChatFontProfile profile =
-                ChatFontRegistry.get(
-                        selected);
+        final ChatFontProfile profile = ChatFontRegistry.get(selected);
 
         if (profile == null)
         {
-            log.debug(
-                    "[Chat XL][Diagnostic]"
-                            + " PROFILE"
-                            + " | font={}"
-                            + " | profile=NOT FOUND",
-                    selected);
+            log.debug("[Chat XL][Diagnostic]" + " PROFILE" + " | font={}" + " | profile=NOT FOUND", selected);
 
             return;
         }
@@ -446,10 +375,9 @@ public final class ChatDiagnostics
 
     private ChatFont getConfiguredFont()
     {
-        final ChatFont configured =
-                config != null
-                        ? config.chatFont()
-                        : null;
+        final ChatFont configured = config != null
+                ? config.chatFont()
+                : null;
 
         return configured != null
                 ? configured
@@ -467,28 +395,20 @@ public final class ChatDiagnostics
             IdentityHashMap<Widget, WidgetState> after,
             boolean logChanges)
     {
-        if (frame == null
-                || frame.before == null
-                || after == null)
+        if (frame == null || frame.before == null || after == null)
         {
             return 0;
         }
 
-        int mutationCount =
-                0;
+        int mutationCount = 0;
 
-        for (Map.Entry<Widget, WidgetState> entry
-                : after.entrySet())
+        for (Map.Entry<Widget, WidgetState> entry : after.entrySet())
         {
-            final Widget widget =
-                    entry.getKey();
+            final Widget widget = entry.getKey();
 
-            final WidgetState afterState =
-                    entry.getValue();
+            final WidgetState afterState = entry.getValue();
 
-            final WidgetState beforeState =
-                    frame.before.get(
-                            widget);
+            final WidgetState beforeState = frame.before.get(widget);
 
             if (beforeState == null)
             {
@@ -506,16 +426,14 @@ public final class ChatDiagnostics
                                     + " | after={}",
                             frame.sequence,
                             frame.scriptId,
-                            System.identityHashCode(
-                                    widget),
+                            System.identityHashCode(widget),
                             afterState.describe());
                 }
 
                 continue;
             }
 
-            if (!beforeState.materiallyDiffers(
-                    afterState))
+            if (!beforeState.materiallyDiffers(afterState))
             {
                 continue;
             }
@@ -535,18 +453,15 @@ public final class ChatDiagnostics
                                 + " | after={}",
                         frame.sequence,
                         frame.scriptId,
-                        System.identityHashCode(
-                                widget),
+                        System.identityHashCode(widget),
                         beforeState.describe(),
                         afterState.describe());
             }
         }
 
-        for (Map.Entry<Widget, WidgetState> entry
-                : frame.before.entrySet())
+        for (Map.Entry<Widget, WidgetState> entry : frame.before.entrySet())
         {
-            if (after.containsKey(
-                    entry.getKey()))
+            if (after.containsKey(entry.getKey()))
             {
                 continue;
             }
@@ -565,10 +480,8 @@ public final class ChatDiagnostics
                                 + " | before={}",
                         frame.sequence,
                         frame.scriptId,
-                        System.identityHashCode(
-                                entry.getKey()),
-                        entry.getValue()
-                                .describe());
+                        System.identityHashCode(entry.getKey()),
+                        entry.getValue().describe());
             }
         }
 
@@ -583,23 +496,18 @@ public final class ChatDiagnostics
 
     private IdentityHashMap<Widget, WidgetState> snapshotChatWidgets()
     {
-        final IdentityHashMap<Widget, WidgetState> result =
-                new IdentityHashMap<>();
+        final IdentityHashMap<Widget, WidgetState> result = new IdentityHashMap<>();
 
-        final IdentityHashMap<Widget, Boolean> visited =
-                new IdentityHashMap<>();
+        final IdentityHashMap<Widget, Boolean> visited = new IdentityHashMap<>();
 
         collectWidgetTree(
-                client.getWidget(
-                        InterfaceID.Chatbox.SCROLLAREA),
+                client.getWidget(InterfaceID.Chatbox.SCROLLAREA),
                 Surface.CHATBOX,
                 result,
                 visited);
 
         collectWidgetTree(
-                client.getWidget(
-                        InterfaceID.PM_CHAT,
-                        0),
+                client.getWidget(InterfaceID.PM_CHAT, 0),
                 Surface.SPLIT_PRIVATE,
                 result,
                 visited);
@@ -617,55 +525,29 @@ public final class ChatDiagnostics
                 || surface == null
                 || result == null
                 || visited == null
-                || visited.containsKey(
-                widget))
+                || visited.containsKey(widget))
         {
             return;
         }
 
-        visited.put(
-                widget,
-                Boolean.TRUE);
+        visited.put(widget, Boolean.TRUE);
 
-        final String semanticText =
-                normalizeSemantic(
-                        widget.getText());
+        final String semanticText = normalizeSemantic(widget.getText());
 
-        final boolean hasText =
-                semanticText != null
-                        && !semanticText.isEmpty();
+        final boolean hasText = semanticText != null && !semanticText.isEmpty();
 
-        final boolean hasSprite =
-                widget.getSpriteId() >= 0;
+        final boolean hasSprite = widget.getSpriteId() >= 0;
 
-        if (hasText
-                || hasSprite)
+        if (hasText || hasSprite)
         {
-            result.put(
-                    widget,
-                    new WidgetState(
-                            surface,
-                            widget,
-                            semanticText));
+            result.put(widget, new WidgetState(surface, widget, semanticText));
         }
 
-        collectWidgetArray(
-                widget.getDynamicChildren(),
-                surface,
-                result,
-                visited);
+        collectWidgetArray(widget.getDynamicChildren(), surface, result, visited);
 
-        collectWidgetArray(
-                widget.getStaticChildren(),
-                surface,
-                result,
-                visited);
+        collectWidgetArray(widget.getStaticChildren(), surface, result, visited);
 
-        collectWidgetArray(
-                widget.getNestedChildren(),
-                surface,
-                result,
-                visited);
+        collectWidgetArray(widget.getNestedChildren(), surface, result, visited);
     }
 
     private void collectWidgetArray(
@@ -692,11 +574,9 @@ public final class ChatDiagnostics
     /*
      * Manual snapshot for one-off debugging.
      */
-    public void dumpVisibleChatWidgets(
-            String reason)
+    public void dumpVisibleChatWidgets(String reason)
     {
-        final IdentityHashMap<Widget, WidgetState> snapshot =
-                snapshotChatWidgets();
+        final IdentityHashMap<Widget, WidgetState> snapshot = snapshotChatWidgets();
 
         log.debug(
                 "[Chat XL][Diagnostic]"
@@ -708,18 +588,15 @@ public final class ChatDiagnostics
                         : "",
                 snapshot.size());
 
-        for (Map.Entry<Widget, WidgetState> entry
-                : snapshot.entrySet())
+        for (Map.Entry<Widget, WidgetState> entry : snapshot.entrySet())
         {
             log.debug(
                     "[Chat XL][Diagnostic]"
                             + " WIDGET"
                             + " | identity={}"
                             + " | {}",
-                    System.identityHashCode(
-                            entry.getKey()),
-                    entry.getValue()
-                            .describe());
+                    System.identityHashCode(entry.getKey()),
+                    entry.getValue().describe());
         }
     }
 
@@ -731,119 +608,76 @@ public final class ChatDiagnostics
 
     private String traceIntStackTail()
     {
-        final int[] stack =
-                client.getIntStack();
+        final int[] stack = client.getIntStack();
 
-        final int size =
-                client.getIntStackSize();
+        final int size = client.getIntStackSize();
 
-        if (stack == null
-                || size <= 0
-                || size > stack.length)
+        if (stack == null || size <= 0 || size > stack.length)
         {
             return "[]";
         }
 
-        final int start =
-                Math.max(
-                        0,
-                        size
-                                - INT_STACK_TAIL_SIZE);
+        final int start = Math.max(0, size - INT_STACK_TAIL_SIZE);
 
-        return Arrays.toString(
-                Arrays.copyOfRange(
-                        stack,
-                        start,
-                        size));
+        return Arrays.toString(Arrays.copyOfRange(
+                stack,
+                start,
+                size));
     }
 
     private String traceObjectStackStrings()
     {
-        final Object[] stack =
-                client.getObjectStack();
+        final Object[] stack = client.getObjectStack();
 
-        final int size =
-                client.getObjectStackSize();
+        final int size = client.getObjectStackSize();
 
-        if (stack == null
-                || size <= 0
-                || size > stack.length)
+        if (stack == null || size <= 0 || size > stack.length)
         {
             return "[]";
         }
 
-        final List<String> strings =
-                new ArrayList<>();
+        final List<String> strings = new ArrayList<>();
 
-        for (int i = 0;
-             i < size;
-             i++)
+        for (int i = 0; i < size; i++)
         {
-            final Object value =
-                    stack[i];
+            final Object value = stack[i];
 
             if (!(value instanceof String))
             {
                 continue;
             }
 
-            String text =
-                    (String) value;
+            String text = (String) value;
 
-            text =
-                    text.replace(
-                                    "\r\n",
-                                    "\\n")
-                            .replace(
-                                    '\r',
-                                    '\n')
-                            .replace(
-                                    "\n",
-                                    "\\n");
+            text = text
+                    .replace("\r\n", "\\n")
+                    .replace('\r', '\n')
+                    .replace("\n", "\\n");
 
-            if (text.length()
-                    > MAX_LOGGED_STRING_LENGTH)
+            if (text.length() > MAX_LOGGED_STRING_LENGTH)
             {
-                text =
-                        text.substring(
-                                0,
-                                MAX_LOGGED_STRING_LENGTH)
-                                + "...";
+                text = text.substring(0, MAX_LOGGED_STRING_LENGTH) + "...";
             }
 
-            strings.add(
-                    "'"
-                            + text
-                            + "'");
+            strings.add("'" + text + "'");
         }
 
         return strings.toString();
     }
 
-    private String normalizeSemantic(
-            String text)
+    private String normalizeSemantic(String text)
     {
         if (text == null)
         {
             return null;
         }
 
-        final String withLineBreaks =
-                text.replaceAll(
-                        "(?i)<br\\s*/?>",
-                        "\n");
+        final String withLineBreaks = text.replaceAll("(?i)<br\\s*/?>", "\n");
 
-        return Text.removeTags(
-                        withLineBreaks)
-                .replace(
-                        '\u00A0',
-                        ' ')
-                .replace(
-                        '\u202F',
-                        ' ')
-                .replace(
-                        '\u2009',
-                        ' ')
+        return Text.removeTags(withLineBreaks)
+                .replace('\u00A0', ' ')
+                .replace('\u202F', ' ')
+                .replace('\u2009', ' ')
                 .trim();
     }
 
@@ -858,19 +692,12 @@ public final class ChatDiagnostics
         finishTrace();
     }
 
-    private boolean isSupportedScript(
-            int scriptId)
+    private boolean isSupportedScript(int scriptId)
     {
-        return scriptId
-                == GAME_BODY_SCRIPT
-                || scriptId
-                == CHAT_BODY_SCRIPT
-                || scriptId
-                == CHANNEL_BODY_SCRIPT;
+        return scriptId == GAME_BODY_SCRIPT || scriptId == CHAT_BODY_SCRIPT || scriptId == CHANNEL_BODY_SCRIPT;
     }
 
-    private boolean isTargetRoot(
-            int scriptId)
+    private boolean isTargetRoot(int scriptId)
     {
         for (int targetScriptId : TARGET_ROOT_SCRIPTS)
         {
@@ -939,59 +766,42 @@ public final class ChatDiagnostics
                 Widget widget,
                 String text)
         {
-            this.surface =
-                    surface;
+            this.surface = surface;
 
-            this.id =
-                    widget.getId();
+            this.id = widget.getId();
 
-            this.parentId =
-                    widget.getParentId();
+            this.parentId = widget.getParentId();
 
-            this.text =
-                    text != null
-                            ? text
-                            : "";
+            this.text = text != null
+                    ? text
+                    : "";
 
-            this.spriteId =
-                    widget.getSpriteId();
+            this.spriteId = widget.getSpriteId();
 
-            this.fontId =
-                    widget.getFontId();
+            this.fontId = widget.getFontId();
 
-            this.lineHeight =
-                    widget.getLineHeight();
+            this.lineHeight = widget.getLineHeight();
 
-            this.originalX =
-                    widget.getOriginalX();
+            this.originalX = widget.getOriginalX();
 
-            this.originalY =
-                    widget.getOriginalY();
+            this.originalY = widget.getOriginalY();
 
-            this.originalWidth =
-                    widget.getOriginalWidth();
+            this.originalWidth = widget.getOriginalWidth();
 
-            this.originalHeight =
-                    widget.getOriginalHeight();
+            this.originalHeight = widget.getOriginalHeight();
 
-            this.relativeX =
-                    widget.getRelativeX();
+            this.relativeX = widget.getRelativeX();
 
-            this.relativeY =
-                    widget.getRelativeY();
+            this.relativeY = widget.getRelativeY();
 
-            this.width =
-                    widget.getWidth();
+            this.width = widget.getWidth();
 
-            this.height =
-                    widget.getHeight();
+            this.height = widget.getHeight();
 
-            this.hidden =
-                    widget.isHidden();
+            this.hidden = widget.isHidden();
         }
 
-        private boolean materiallyDiffers(
-                WidgetState other)
+        private boolean materiallyDiffers(WidgetState other)
         {
             if (other == null)
             {
@@ -1001,8 +811,7 @@ public final class ChatDiagnostics
             if (surface != other.surface
                     || id != other.id
                     || parentId != other.parentId
-                    || !text.equals(
-                    other.text)
+                    || !text.equals(other.text)
                     || spriteId != other.spriteId
                     || fontId != other.fontId
                     || lineHeight != other.lineHeight
@@ -1017,11 +826,7 @@ public final class ChatDiagnostics
                 return true;
             }
 
-            return !IGNORE_Y_ONLY_CHANGES
-                    && (originalY
-                    != other.originalY
-                    || relativeY
-                    != other.relativeY);
+            return !IGNORE_Y_ONLY_CHANGES && (originalY != other.originalY || relativeY != other.relativeY);
         }
 
         private String describe()
@@ -1049,19 +854,7 @@ public final class ChatDiagnostics
                     + originalWidth
                     + ", h="
                     + originalHeight
-                    + "]"
-                    + ", relative=[x="
-                    + relativeX
-                    + ", y="
-                    + relativeY
-                    + "]"
-                    + ", calculated=[w="
-                    + width
-                    + ", h="
-                    + height
-                    + "]"
-                    + ", hidden="
-                    + hidden;
+                    + "]" + ", relative=[x=" + relativeX + ", y=" + relativeY + "]" + ", calculated=[w=" + width + ", h=" + height + "]" + ", hidden=" + hidden;
         }
     }
 }

@@ -34,43 +34,32 @@ final class RowCorrelationIndex
 
     private IdentityHashMap<Widget, RowKey> rowByWidget;
 
-    private final IdentityHashMap<Widget, WatchedRowMove> watchedMoves =
-            new IdentityHashMap<>();
+    private final IdentityHashMap<Widget, WatchedRowMove> watchedMoves = new IdentityHashMap<>();
 
-    private final Map<RowKey, List<Widget>> watchedWidgetsByPreviousRow =
-            new HashMap<>();
+    private final Map<RowKey, List<Widget>> watchedWidgetsByPreviousRow = new HashMap<>();
 
     RowCorrelationIndex(
             Client client,
             Surface surface,
             PerformanceMetrics performanceMetrics)
     {
-        this.client =
-                client;
+        this.client = client;
 
-        this.surface =
-                surface;
+        this.surface = surface;
 
-        this.performanceMetrics =
-                performanceMetrics;
+        this.performanceMetrics = performanceMetrics;
     }
 
-    List<Widget> findRow(
-            Widget lineWidget)
+    List<Widget> findRow(Widget lineWidget)
     {
-        if (lineWidget == null
-                || surface == null)
+        if (lineWidget == null || surface == null)
         {
             return Collections.emptyList();
         }
 
-        final Widget root =
-                surface == Surface.SPLIT_PRIVATE
-                        ? client.getWidget(
-                        InterfaceID.PM_CHAT,
-                        0)
-                        : client.getWidget(
-                        InterfaceID.Chatbox.SCROLLAREA);
+        final Widget root = surface == Surface.SPLIT_PRIVATE
+                ? client.getWidget(InterfaceID.PM_CHAT, 0)
+                : client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
 
         if (root == null)
         {
@@ -78,36 +67,22 @@ final class RowCorrelationIndex
             return Collections.emptyList();
         }
 
-        final RowKey targetRow =
-                RowKey.of(
-                        lineWidget);
+        final RowKey targetRow = RowKey.of(lineWidget);
 
-        boolean rebuilt =
-                false;
+        boolean rebuilt = false;
 
-        boolean repaired =
-                false;
+        boolean repaired = false;
 
-        if (widgetsByRow == null
-                || rowByWidget == null
-                || indexedRoot != root)
+        if (widgetsByRow == null || rowByWidget == null || indexedRoot != root)
         {
-            build(
-                    root);
+            build(root);
 
-            rebuilt =
-                    true;
-        }
-        else
-        {
+            rebuilt = true;
+        } else {
             // Repair watched widgets that returned to this row.
-            repaired |=
-                    repairWatchedWidgetsForRow(
-                            targetRow);
+            repaired |= repairWatchedWidgetsForRow(targetRow);
 
-            final RowKey indexedAnchorRow =
-                    rowByWidget.get(
-                            lineWidget);
+            final RowKey indexedAnchorRow = rowByWidget.get(lineWidget);
 
             if (indexedAnchorRow == null)
             {
@@ -116,19 +91,12 @@ final class RowCorrelationIndex
                  * build. We cannot discover its sibling candidates without
                  * enumerating the surface once.
                  */
-                build(
-                        root);
+                build(root);
 
-                rebuilt =
-                        true;
-            }
-            else if (!indexedAnchorRow.equals(
-                    targetRow))
-            {
+                rebuilt = true;
+            } else if (!indexedAnchorRow.equals(targetRow)) {
                 // Re-key the moved anchor row and its known siblings.
-                repaired |=
-                        repairRow(
-                                indexedAnchorRow);
+                repaired |= repairRow(indexedAnchorRow);
             }
         }
 
@@ -139,34 +107,23 @@ final class RowCorrelationIndex
              * candidates are moved to their current row without touching
              * unrelated rows or walking the complete surface.
              */
-            repaired |=
-                    repairRow(
-                            targetRow);
+            repaired |= repairRow(targetRow);
         }
 
-        List<Widget> candidates =
-                widgetsByRow.get(
-                        targetRow);
+        List<Widget> candidates = widgetsByRow.get(targetRow);
 
         /*
          * The exact line widget must be present in its requested bucket.
          * If not, local knowledge is insufficient and one complete build
          * remains the conservative correctness fallback.
          */
-        if (!rebuilt
-                && !containsIdentity(
-                candidates,
-                lineWidget))
+        if (!rebuilt && !containsIdentity(candidates, lineWidget))
         {
-            build(
-                    root);
+            build(root);
 
-            rebuilt =
-                    true;
+            rebuilt = true;
 
-            candidates =
-                    widgetsByRow.get(
-                            targetRow);
+            candidates = widgetsByRow.get(targetRow);
         }
 
         if (performanceMetrics != null)
@@ -174,13 +131,9 @@ final class RowCorrelationIndex
             if (rebuilt)
             {
                 performanceMetrics.recordRowIndexBuild();
-            }
-            else if (repaired)
-            {
+            } else if (repaired) {
                 performanceMetrics.recordRowIndexRepair();
-            }
-            else
-            {
+            } else {
                 performanceMetrics.recordRowIndexReuse();
             }
         }
@@ -190,32 +143,23 @@ final class RowCorrelationIndex
                 : Collections.emptyList();
     }
 
-    private boolean repairRow(
-            RowKey indexedRow)
+    private boolean repairRow(RowKey indexedRow)
     {
-        if (indexedRow == null
-                || widgetsByRow == null
-                || rowByWidget == null)
+        if (indexedRow == null || widgetsByRow == null || rowByWidget == null)
         {
             return false;
         }
 
-        final List<Widget> indexedWidgets =
-                widgetsByRow.get(
-                        indexedRow);
+        final List<Widget> indexedWidgets = widgetsByRow.get(indexedRow);
 
-        if (indexedWidgets == null
-                || indexedWidgets.isEmpty())
+        if (indexedWidgets == null || indexedWidgets.isEmpty())
         {
             return false;
         }
 
-        final List<Widget> snapshot =
-                new ArrayList<>(
-                        indexedWidgets);
+        final List<Widget> snapshot = new ArrayList<>(indexedWidgets);
 
-        boolean repaired =
-                false;
+        boolean repaired = false;
 
         for (Widget widget : snapshot)
         {
@@ -226,13 +170,9 @@ final class RowCorrelationIndex
 
             recordRowWidgetExamined();
 
-            final RowKey currentRow =
-                    RowKey.of(
-                            widget);
+            final RowKey currentRow = RowKey.of(widget);
 
-            final RowKey recordedRow =
-                    rowByWidget.get(
-                            widget);
+            final RowKey recordedRow = rowByWidget.get(widget);
 
             if (recordedRow == null)
             {
@@ -240,73 +180,50 @@ final class RowCorrelationIndex
                  * This should not occur for a healthy index. Keep the
                  * reverse mapping internally consistent without a scan.
                  */
-                rowByWidget.put(
-                        widget,
-                        currentRow);
+                rowByWidget.put(widget, currentRow);
 
-                if (!indexedRow.equals(
-                        currentRow))
+                if (!indexedRow.equals(currentRow))
                 {
-                    removeWidgetFromRow(
-                            widget,
-                            indexedRow);
+                    removeWidgetFromRow(widget, indexedRow);
 
-                    addWidgetToRow(
-                            widget,
-                            currentRow);
+                    addWidgetToRow(widget, currentRow);
 
-                    repaired =
-                            true;
+                    repaired = true;
                 }
 
                 continue;
             }
 
-            if (!recordedRow.equals(
-                    currentRow))
+            if (!recordedRow.equals(currentRow))
             {
-                moveIndexedWidget(
-                        widget,
-                        recordedRow,
-                        currentRow);
+                moveIndexedWidget(widget, recordedRow, currentRow);
 
-                reconcileWatchedMoveAfterExternalGeometryChange(
-                        widget,
-                        currentRow);
+                reconcileWatchedMoveAfterExternalGeometryChange(widget, currentRow);
 
-                repaired =
-                        true;
+                repaired = true;
             }
         }
 
         return repaired;
     }
 
-    private boolean repairWatchedWidgetsForRow(
-            RowKey requestedRow)
+    private boolean repairWatchedWidgetsForRow(RowKey requestedRow)
     {
-        if (requestedRow == null
-                || rowByWidget == null)
+        if (requestedRow == null || rowByWidget == null)
         {
             return false;
         }
 
-        final List<Widget> watchedWidgets =
-                watchedWidgetsByPreviousRow.get(
-                        requestedRow);
+        final List<Widget> watchedWidgets = watchedWidgetsByPreviousRow.get(requestedRow);
 
-        if (watchedWidgets == null
-                || watchedWidgets.isEmpty())
+        if (watchedWidgets == null || watchedWidgets.isEmpty())
         {
             return false;
         }
 
-        final List<Widget> snapshot =
-                new ArrayList<>(
-                        watchedWidgets);
+        final List<Widget> snapshot = new ArrayList<>(watchedWidgets);
 
-        boolean repaired =
-                false;
+        boolean repaired = false;
 
         for (Widget widget : snapshot)
         {
@@ -315,63 +232,44 @@ final class RowCorrelationIndex
                 continue;
             }
 
-            final WatchedRowMove watchedMove =
-                    watchedMoves.get(
-                            widget);
+            final WatchedRowMove watchedMove = watchedMoves.get(widget);
 
-            if (watchedMove == null
-                    || !requestedRow.equals(
-                    watchedMove.previousRow))
+            if (watchedMove == null || !requestedRow.equals(watchedMove.previousRow))
             {
-                removeWatchedMove(
-                        widget);
+                removeWatchedMove(widget);
                 continue;
             }
 
-            final RowKey recordedRow =
-                    rowByWidget.get(
-                            widget);
+            final RowKey recordedRow = rowByWidget.get(widget);
 
             if (recordedRow == null)
             {
-                removeWatchedMove(
-                        widget);
+                removeWatchedMove(widget);
                 continue;
             }
 
             recordRowWidgetExamined();
 
-            final RowKey currentRow =
-                    RowKey.of(
-                            widget);
+            final RowKey currentRow = RowKey.of(widget);
 
-            if (!recordedRow.equals(
-                    currentRow))
+            if (!recordedRow.equals(currentRow))
             {
-                moveIndexedWidget(
-                        widget,
-                        recordedRow,
-                        currentRow);
+                moveIndexedWidget(widget, recordedRow, currentRow);
 
-                repaired =
-                        true;
+                repaired = true;
             }
 
             // Stop watching once the widget leaves the Chat XL-adjusted row.
-            if (!watchedMove.adjustedRow.equals(
-                    currentRow))
+            if (!watchedMove.adjustedRow.equals(currentRow))
             {
-                removeWatchedMove(
-                        widget);
+                removeWatchedMove(widget);
             }
         }
 
         return repaired;
     }
 
-    void observeSurfaceWidget(
-            Widget root,
-            Widget widget)
+    void observeSurfaceWidget(Widget root, Widget widget)
     {
         if (root == null
                 || widget == null
@@ -382,38 +280,24 @@ final class RowCorrelationIndex
             return;
         }
 
-        final RowKey currentRow =
-                RowKey.of(
-                        widget);
+        final RowKey currentRow = RowKey.of(widget);
 
-        final RowKey recordedRow =
-                rowByWidget.get(
-                        widget);
+        final RowKey recordedRow = rowByWidget.get(widget);
 
         if (recordedRow == null)
         {
-            addWidgetToRow(
-                    widget,
-                    currentRow);
+            addWidgetToRow(widget, currentRow);
 
-            rowByWidget.put(
-                    widget,
-                    currentRow);
+            rowByWidget.put(widget, currentRow);
 
             return;
         }
 
-        if (!recordedRow.equals(
-                currentRow))
+        if (!recordedRow.equals(currentRow))
         {
-            moveIndexedWidget(
-                    widget,
-                    recordedRow,
-                    currentRow);
+            moveIndexedWidget(widget, recordedRow, currentRow);
 
-            reconcileWatchedMoveAfterExternalGeometryChange(
-                    widget,
-                    currentRow);
+            reconcileWatchedMoveAfterExternalGeometryChange(widget, currentRow);
         }
     }
 
@@ -422,46 +306,30 @@ final class RowCorrelationIndex
             int previousOriginalY,
             int previousRelativeY)
     {
-        if (widget == null
-                || rowByWidget == null)
+        if (widget == null || rowByWidget == null)
         {
             return;
         }
 
-        final RowKey previousRow =
-                new RowKey(
-                        previousOriginalY,
-                        previousRelativeY);
+        final RowKey previousRow = new RowKey(previousOriginalY, previousRelativeY);
 
-        final RowKey recordedRow =
-                rowByWidget.get(
-                        widget);
+        final RowKey recordedRow = rowByWidget.get(widget);
 
         if (recordedRow == null)
         {
             return;
         }
 
-        final RowKey adjustedRow =
-                RowKey.of(
-                        widget);
+        final RowKey adjustedRow = RowKey.of(widget);
 
-        if (!recordedRow.equals(
-                adjustedRow))
+        if (!recordedRow.equals(adjustedRow))
         {
-            moveIndexedWidget(
-                    widget,
-                    recordedRow,
-                    adjustedRow);
+            moveIndexedWidget(widget, recordedRow, adjustedRow);
         }
 
-        if (!previousRow.equals(
-                adjustedRow))
+        if (!previousRow.equals(adjustedRow))
         {
-            watchMove(
-                    widget,
-                    previousRow,
-                    adjustedRow);
+            watchMove(widget, previousRow, adjustedRow);
         }
     }
 
@@ -470,83 +338,55 @@ final class RowCorrelationIndex
             RowKey oldRow,
             RowKey newRow)
     {
-        if (widget == null
-                || newRow == null
-                || rowByWidget == null
-                || widgetsByRow == null)
+        if (widget == null || newRow == null || rowByWidget == null || widgetsByRow == null)
         {
             return;
         }
 
         if (oldRow != null)
         {
-            removeWidgetFromRow(
-                    widget,
-                    oldRow);
+            removeWidgetFromRow(widget, oldRow);
         }
 
-        addWidgetToRow(
-                widget,
-                newRow);
+        addWidgetToRow(widget, newRow);
 
-        rowByWidget.put(
-                widget,
-                newRow);
+        rowByWidget.put(widget, newRow);
     }
 
-    private void addWidgetToRow(
-            Widget widget,
-            RowKey row)
+    private void addWidgetToRow(Widget widget, RowKey row)
     {
-        if (widget == null
-                || row == null
-                || widgetsByRow == null)
+        if (widget == null || row == null || widgetsByRow == null)
         {
             return;
         }
 
-        final List<Widget> widgets =
-                widgetsByRow.computeIfAbsent(
-                        row,
-                        ignored -> new ArrayList<>());
+        final List<Widget> widgets = widgetsByRow.computeIfAbsent(row, ignored -> new ArrayList<>());
 
-        if (!containsIdentity(
-                widgets,
-                widget))
+        if (!containsIdentity(widgets, widget))
         {
-            widgets.add(
-                    widget);
+            widgets.add(widget);
         }
     }
 
-    private void removeWidgetFromRow(
-            Widget widget,
-            RowKey row)
+    private void removeWidgetFromRow(Widget widget, RowKey row)
     {
-        if (widget == null
-                || row == null
-                || widgetsByRow == null)
+        if (widget == null || row == null || widgetsByRow == null)
         {
             return;
         }
 
-        final List<Widget> widgets =
-                widgetsByRow.get(
-                        row);
+        final List<Widget> widgets = widgetsByRow.get(row);
 
         if (widgets == null)
         {
             return;
         }
 
-        removeIdentity(
-                widgets,
-                widget);
+        removeIdentity(widgets, widget);
 
         if (widgets.isEmpty())
         {
-            widgetsByRow.remove(
-                    row);
+            widgetsByRow.remove(row);
         }
     }
 
@@ -555,124 +395,87 @@ final class RowCorrelationIndex
             RowKey previousRow,
             RowKey adjustedRow)
     {
-        if (widget == null
-                || previousRow == null
-                || adjustedRow == null)
+        if (widget == null || previousRow == null || adjustedRow == null)
         {
             return;
         }
 
-        removeWatchedMove(
-                widget);
+        removeWatchedMove(widget);
 
-        watchedMoves.put(
-                widget,
-                new WatchedRowMove(
-                        previousRow,
-                        adjustedRow));
+        watchedMoves.put(widget, new WatchedRowMove(previousRow, adjustedRow));
 
-        final List<Widget> watchedWidgets =
-                watchedWidgetsByPreviousRow.computeIfAbsent(
-                        previousRow,
-                        ignored -> new ArrayList<>());
+        final List<Widget> watchedWidgets = watchedWidgetsByPreviousRow.computeIfAbsent(previousRow, ignored -> new ArrayList<>());
 
-        if (!containsIdentity(
-                watchedWidgets,
-                widget))
+        if (!containsIdentity(watchedWidgets, widget))
         {
-            watchedWidgets.add(
-                    widget);
+            watchedWidgets.add(widget);
         }
     }
 
-    private void reconcileWatchedMoveAfterExternalGeometryChange(
-            Widget widget,
-            RowKey currentRow)
+    private void reconcileWatchedMoveAfterExternalGeometryChange(Widget widget, RowKey currentRow)
     {
-        final WatchedRowMove watchedMove =
-                watchedMoves.get(
-                        widget);
+        final WatchedRowMove watchedMove = watchedMoves.get(widget);
 
-        if (watchedMove == null
-                || currentRow == null)
+        if (watchedMove == null || currentRow == null)
         {
             return;
         }
 
-        if (!watchedMove.adjustedRow.equals(
-                currentRow))
+        if (!watchedMove.adjustedRow.equals(currentRow))
         {
-            removeWatchedMove(
-                    widget);
+            removeWatchedMove(widget);
         }
     }
 
-    private void removeWatchedMove(
-            Widget widget)
+    private void removeWatchedMove(Widget widget)
     {
         if (widget == null)
         {
             return;
         }
 
-        final WatchedRowMove watchedMove =
-                watchedMoves.remove(
-                        widget);
+        final WatchedRowMove watchedMove = watchedMoves.remove(widget);
 
         if (watchedMove == null)
         {
             return;
         }
 
-        final List<Widget> watchedWidgets =
-                watchedWidgetsByPreviousRow.get(
-                        watchedMove.previousRow);
+        final List<Widget> watchedWidgets = watchedWidgetsByPreviousRow.get(watchedMove.previousRow);
 
         if (watchedWidgets == null)
         {
             return;
         }
 
-        removeIdentity(
-                watchedWidgets,
-                widget);
+        removeIdentity(watchedWidgets, widget);
 
         if (watchedWidgets.isEmpty())
         {
-            watchedWidgetsByPreviousRow.remove(
-                    watchedMove.previousRow);
+            watchedWidgetsByPreviousRow.remove(watchedMove.previousRow);
         }
     }
 
-    private void build(
-            Widget root)
+    private void build(Widget root)
     {
-        indexedRoot =
-                root;
+        indexedRoot = root;
 
-        widgetsByRow =
-                new HashMap<>();
+        widgetsByRow = new HashMap<>();
 
-        rowByWidget =
-                new IdentityHashMap<>();
+        rowByWidget = new IdentityHashMap<>();
 
-        indexWidget(
-                root);
+        indexWidget(root);
 
-        indexWidgets(
-                root.getDynamicChildren());
+        indexWidgets(root.getDynamicChildren());
 
-        indexWidgets(
-                root.getStaticChildren());
+        indexWidgets(root.getStaticChildren());
 
-        indexWidgets(
-                root.getNestedChildren());
+        indexWidgets(root.getNestedChildren());
 
         pruneWatchedMovesAfterBuild();
     }
 
-    private void indexWidgets(
-            Widget[] widgets)
+    private void indexWidgets(Widget[] widgets)
     {
         if (widgets == null)
         {
@@ -681,13 +484,11 @@ final class RowCorrelationIndex
 
         for (Widget widget : widgets)
         {
-            indexWidget(
-                    widget);
+            indexWidget(widget);
         }
     }
 
-    private void indexWidget(
-            Widget widget)
+    private void indexWidget(Widget widget)
     {
         if (widget == null)
         {
@@ -696,62 +497,42 @@ final class RowCorrelationIndex
 
         recordRowWidgetExamined();
 
-        final RowKey row =
-                RowKey.of(
-                        widget);
+        final RowKey row = RowKey.of(widget);
 
-        addWidgetToRow(
-                widget,
-                row);
+        addWidgetToRow(widget, row);
 
-        rowByWidget.put(
-                widget,
-                row);
+        rowByWidget.put(widget, row);
     }
 
     private void pruneWatchedMovesAfterBuild()
     {
-        if (watchedMoves.isEmpty()
-                || rowByWidget == null)
+        if (watchedMoves.isEmpty() || rowByWidget == null)
         {
             return;
         }
 
-        final List<Widget> watchedWidgets =
-                new ArrayList<>(
-                        watchedMoves.keySet());
+        final List<Widget> watchedWidgets = new ArrayList<>(watchedMoves.keySet());
 
         for (Widget widget : watchedWidgets)
         {
-            final WatchedRowMove watchedMove =
-                    watchedMoves.get(
-                            widget);
+            final WatchedRowMove watchedMove = watchedMoves.get(widget);
 
-            final RowKey indexedRow =
-                    rowByWidget.get(
-                            widget);
+            final RowKey indexedRow = rowByWidget.get(widget);
 
-            if (watchedMove == null
-                    || indexedRow == null
-                    || !watchedMove.adjustedRow.equals(
-                    indexedRow))
+            if (watchedMove == null || indexedRow == null || !watchedMove.adjustedRow.equals(indexedRow))
             {
-                removeWatchedMove(
-                        widget);
+                removeWatchedMove(widget);
             }
         }
     }
 
     private void clear()
     {
-        indexedRoot =
-                null;
+        indexedRoot = null;
 
-        widgetsByRow =
-                null;
+        widgetsByRow = null;
 
-        rowByWidget =
-                null;
+        rowByWidget = null;
 
         watchedMoves.clear();
         watchedWidgetsByPreviousRow.clear();
@@ -760,17 +541,13 @@ final class RowCorrelationIndex
     {
         if (performanceMetrics != null)
         {
-            performanceMetrics.recordWidgetsExamined(
-                    1);
+            performanceMetrics.recordWidgetsExamined(1);
         }
     }
 
-    private boolean containsIdentity(
-            List<Widget> widgets,
-            Widget target)
+    private boolean containsIdentity(List<Widget> widgets, Widget target)
     {
-        if (widgets == null
-                || target == null)
+        if (widgets == null || target == null)
         {
             return false;
         }
@@ -786,25 +563,18 @@ final class RowCorrelationIndex
         return false;
     }
 
-    private void removeIdentity(
-            List<Widget> widgets,
-            Widget target)
+    private void removeIdentity(List<Widget> widgets, Widget target)
     {
-        if (widgets == null
-                || target == null)
+        if (widgets == null || target == null)
         {
             return;
         }
 
-        for (int i = widgets.size() - 1;
-             i >= 0;
-             i--)
+        for (int i = widgets.size() - 1; i >= 0; i--)
         {
-            if (widgets.get(
-                    i) == target)
+            if (widgets.get(i) == target)
             {
-                widgets.remove(
-                        i);
+                widgets.remove(i);
             }
         }
     }
@@ -815,15 +585,11 @@ final class RowCorrelationIndex
 
         private final RowKey adjustedRow;
 
-        private WatchedRowMove(
-                RowKey previousRow,
-                RowKey adjustedRow)
+        private WatchedRowMove(RowKey previousRow, RowKey adjustedRow)
         {
-            this.previousRow =
-                    previousRow;
+            this.previousRow = previousRow;
 
-            this.adjustedRow =
-                    adjustedRow;
+            this.adjustedRow = adjustedRow;
         }
     }
 
@@ -833,28 +599,20 @@ final class RowCorrelationIndex
 
         private final int relativeY;
 
-        private RowKey(
-                int originalY,
-                int relativeY)
+        private RowKey(int originalY, int relativeY)
         {
-            this.originalY =
-                    originalY;
+            this.originalY = originalY;
 
-            this.relativeY =
-                    relativeY;
+            this.relativeY = relativeY;
         }
 
-        private static RowKey of(
-                Widget widget)
+        private static RowKey of(Widget widget)
         {
-            return new RowKey(
-                    widget.getOriginalY(),
-                    widget.getRelativeY());
+            return new RowKey(widget.getOriginalY(), widget.getRelativeY());
         }
 
         @Override
-        public boolean equals(
-                Object other)
+        public boolean equals(Object other)
         {
             if (this == other)
             {
@@ -866,26 +624,20 @@ final class RowCorrelationIndex
                 return false;
             }
 
-            final RowKey rowKey =
-                    (RowKey) other;
+            final RowKey rowKey = (RowKey) other;
 
-            return originalY == rowKey.originalY
-                    && relativeY == rowKey.relativeY;
+            return originalY == rowKey.originalY && relativeY == rowKey.relativeY;
         }
 
         @Override
         public int hashCode()
         {
-            int result =
-                    originalY;
+            int result = originalY;
 
-            result =
-                    31 * result
-                            + relativeY;
+            result = 31 * result + relativeY;
 
             return result;
         }
     }
 
 }
-

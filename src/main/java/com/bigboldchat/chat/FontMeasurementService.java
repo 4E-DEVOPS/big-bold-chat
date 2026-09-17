@@ -53,24 +53,14 @@ public final class FontMeasurementService
      */
     private final Map<Integer, FontTypeFace> fontCache = new HashMap<>();
 
-    public FontMeasurementService(
-            Client client)
+    public FontMeasurementService(Client client)
     {
-        this(
-                client,
-                new ChatTextNormalizer(),
-                null);
+        this(client, new ChatTextNormalizer(), null);
     }
 
-    public FontMeasurementService(
-            Client client,
-            PerformanceMetrics performanceMetrics)
+    public FontMeasurementService(Client client, PerformanceMetrics performanceMetrics)
     {
-        this(
-                client,
-                new ChatTextNormalizer(
-                        performanceMetrics),
-                performanceMetrics);
+        this(client, new ChatTextNormalizer(performanceMetrics), performanceMetrics);
     }
 
     public FontMeasurementService(
@@ -78,28 +68,18 @@ public final class FontMeasurementService
             ChatTextNormalizer textNormalizer,
             PerformanceMetrics performanceMetrics)
     {
-        this.client =
-                client;
+        this.client = client;
 
-        this.textNormalizer =
-                textNormalizer != null
-                        ? textNormalizer
-                        : new ChatTextNormalizer(
-                        performanceMetrics);
+        this.textNormalizer = textNormalizer != null
+                ? textNormalizer
+                : new ChatTextNormalizer(performanceMetrics);
 
-        this.performanceMetrics =
-                performanceMetrics;
+        this.performanceMetrics = performanceMetrics;
     }
 
-    boolean supportsScript(
-            int scriptId)
+    boolean supportsScript(int scriptId)
     {
-        return scriptId
-                == GAME_BODY_SCRIPT
-                || scriptId
-                == CHAT_BODY_SCRIPT
-                || scriptId
-                == CHANNEL_BODY_SCRIPT;
+        return scriptId == GAME_BODY_SCRIPT || scriptId == CHAT_BODY_SCRIPT || scriptId == CHANNEL_BODY_SCRIPT;
     }
 
     ConstructionMeasurement measure(
@@ -107,36 +87,25 @@ public final class FontMeasurementService
             ChatFont selectedChatFont,
             ChatFontProfile fontProfile)
     {
-        if (!supportsScript(
-                scriptId)
-                || selectedChatFont == null
-                || fontProfile == null)
+        if (!supportsScript(scriptId) || selectedChatFont == null || fontProfile == null)
         {
             return null;
         }
 
-        final Object[] objectStack =
-                client.getObjectStack();
+        final Object[] objectStack = client.getObjectStack();
 
-        final int objectStackSize =
-                client.getObjectStackSize();
+        final int objectStackSize = client.getObjectStackSize();
 
-        final String rawBody =
-                findBody(
-                        objectStack,
-                        objectStackSize);
+        final String rawBody = findBody(objectStack, objectStackSize);
 
         if (rawBody == null)
         {
             return null;
         }
 
-        final String semanticBody =
-                textNormalizer.normalizeSemantic(
-                        rawBody);
+        final String semanticBody = textNormalizer.normalizeSemantic(rawBody);
 
-        if (semanticBody == null
-                || semanticBody.isEmpty())
+        if (semanticBody == null || semanticBody.isEmpty())
         {
             return null;
         }
@@ -147,43 +116,29 @@ public final class FontMeasurementService
          * Keep native text unchanged for correlation and replace ':' only in
          * the selected text that Chat XL measures and renders.
          */
-        final boolean replaceMalformedColons =
-                selectedChatFont
-                        == ChatFont.VERDANA_13_BOLD;
+        final boolean replaceMalformedColons = selectedChatFont == ChatFont.VERDANA_13_BOLD;
 
-        final String visibleRawBodyText =
-                textNormalizer.renderText(
-                        rawBody);
+        final String visibleRawBodyText = textNormalizer.renderText(rawBody);
 
-        final String selectedRawBodyText =
-                replaceMalformedColons
-                        ? replaceVerdana13BoldColons(
-                        visibleRawBodyText)
-                        : visibleRawBodyText;
+        final String selectedRawBodyText = replaceMalformedColons
+                ? replaceVerdana13BoldColons(visibleRawBodyText)
+                : visibleRawBodyText;
 
         // Preserve inline images while measuring wrapping.
-        final String measurementBody =
-                textNormalizer.measureSemantic(
-                        rawBody);
+        final String measurementBody = textNormalizer.measureSemantic(rawBody);
 
-        final String selectedMeasurementBody =
-                textNormalizer.measureSemantic(
-                        selectedRawBodyText);
+        final String selectedMeasurementBody = textNormalizer.measureSemantic(selectedRawBodyText);
 
         if (measurementBody == null || selectedMeasurementBody == null)
         {
             return null;
         }
 
-        final int[] intStack =
-                client.getIntStack();
+        final int[] intStack = client.getIntStack();
 
-        final int intStackSize =
-                client.getIntStackSize();
+        final int intStackSize = client.getIntStackSize();
 
-        if (intStack == null
-                || intStackSize < 11
-                || intStackSize > intStack.length)
+        if (intStack == null || intStackSize < 11 || intStackSize > intStack.length)
         {
             return null;
         }
@@ -203,92 +158,63 @@ public final class FontMeasurementService
          * [9]  color
          * [10] shadow
          */
-        final int rowValueIndex =
-                intStackSize - 11;
+        final int rowValueIndex = intStackSize - 11;
 
-        final int lineWidgetIndex =
-                intStackSize - 10;
+        final int lineWidgetIndex = intStackSize - 10;
 
-        final int parentWidgetIndex =
-                intStackSize - 9;
+        final int parentWidgetIndex = intStackSize - 9;
 
-        final int rightBoundaryIndex =
-                intStackSize - 8;
+        final int rightBoundaryIndex = intStackSize - 8;
 
-        final int leftBoundaryIndex =
-                intStackSize - 7;
+        final int leftBoundaryIndex = intStackSize - 7;
 
-        final int verticalValueIndex =
-                intStackSize - 6;
+        final int verticalValueIndex = intStackSize - 6;
 
-        final int rowYIndex =
-                intStackSize - 5;
+        final int rowYIndex = intStackSize - 5;
 
-        final int argument7Index =
-                intStackSize - 4;
+        final int argument7Index = intStackSize - 4;
 
-        final int senderWidthIndex =
-                intStackSize - 3;
+        final int senderWidthIndex = intStackSize - 3;
 
-        final int colorIndex =
-                intStackSize - 2;
+        final int colorIndex = intStackSize - 2;
 
-        final int shadowIndex =
-                intStackSize - 1;
+        final int shadowIndex = intStackSize - 1;
 
-        final int lineWidgetId =
-                intStack[lineWidgetIndex];
+        final int lineWidgetId = intStack[lineWidgetIndex];
 
-        final int parentWidgetId =
-                intStack[parentWidgetIndex];
+        final int parentWidgetId = intStack[parentWidgetIndex];
 
-        final int rightBoundary =
-                intStack[rightBoundaryIndex];
+        final int rightBoundary = intStack[rightBoundaryIndex];
 
-        final int leftBoundary =
-                intStack[leftBoundaryIndex];
+        final int leftBoundary = intStack[leftBoundaryIndex];
 
-        final int nativeLineHeight =
-                intStack[verticalValueIndex];
+        final int nativeLineHeight = intStack[verticalValueIndex];
 
-        final int nativeRowY =
-                intStack[rowYIndex];
+        final int nativeRowY = intStack[rowYIndex];
 
-        final int nativeArgument7 =
-                intStack[argument7Index];
+        final int nativeArgument7 = intStack[argument7Index];
 
-        final int nativeSenderWidth =
-                intStack[senderWidthIndex];
+        final int nativeSenderWidth = intStack[senderWidthIndex];
 
         if (nativeLineHeight <= 0)
         {
             return null;
         }
 
-        final Widget lineWidget =
-                client.getWidget(
-                        lineWidgetId);
+        final Widget lineWidget = client.getWidget(lineWidgetId);
 
         if (lineWidget == null)
         {
             return null;
         }
 
-        final FontTypeFace nativeFont =
-                resolveFont(
-                        FontID.PLAIN_12);
+        final FontTypeFace nativeFont = resolveFont(FontID.PLAIN_12);
 
-        final FontTypeFace selectedFont =
-                resolveFont(
-                        selectedChatFont.getFontId());
+        final FontTypeFace selectedFont = resolveFont(selectedChatFont.getFontId());
 
-        final ChatFontProfile nativeFontProfile =
-                ChatFontRegistry.get(
-                        ChatFont.PLAIN_12);
+        final ChatFontProfile nativeFontProfile = ChatFontRegistry.get(ChatFont.PLAIN_12);
 
-        if (nativeFont == null
-                || selectedFont == null
-                || nativeFontProfile == null)
+        if (nativeFont == null || selectedFont == null || nativeFontProfile == null)
         {
             return null;
         }
@@ -310,26 +236,20 @@ public final class FontMeasurementService
          * Script 4483 can legitimately provide empty title / sender
          * components for Clan / Guest Clan system messages.
          */
-        if (scriptId == CHAT_BODY_SCRIPT
-                && rawPrefixComponents.isEmpty())
+        if (scriptId == CHAT_BODY_SCRIPT && rawPrefixComponents.isEmpty())
         {
             return null;
         }
 
-        final int lineX =
-                lineWidget.getOriginalX();
+        final int lineX = lineWidget.getOriginalX();
 
-        int nativePrefixWidth =
-                0;
+        int nativePrefixWidth = 0;
 
-        int selectedPrefixLayoutWidth =
-                0;
+        int selectedPrefixLayoutWidth = 0;
 
-        ChannelPrefixLayout nativeChannelLayout =
-                null;
+        ChannelPrefixLayout nativeChannelLayout = null;
 
-        ChannelPrefixLayout selectedChannelLayout =
-                null;
+        ChannelPrefixLayout selectedChannelLayout = null;
 
         int nativeBodyX;
         int selectedBodyX;
@@ -341,8 +261,7 @@ public final class FontMeasurementService
          * This is primarily used by Friends Chat, where the rank icon is inline
          * markup inside the same prefix widget as the channel name and username.
          */
-        String selectedRawPrefixText =
-                null;
+        String selectedRawPrefixText = null;
 
         if (scriptId == GAME_BODY_SCRIPT)
         {
@@ -350,31 +269,23 @@ public final class FontMeasurementService
              * Script 199 is prefix-less and uses the full construction span.
              * Preserve its native horizontal geometry.
              */
-            nativeBodyX =
-                    leftBoundary;
+            nativeBodyX = leftBoundary;
 
-            selectedBodyX =
-                    leftBoundary;
+            selectedBodyX = leftBoundary;
         }
         else if (scriptId == CHAT_BODY_SCRIPT)
         {
-            final String rawPrefix =
-                    rawPrefixComponents.get(
-                            rawPrefixComponents.size() - 1);
+            final String rawPrefix = rawPrefixComponents.get(rawPrefixComponents.size() - 1);
 
             // Measure native geometry from the unmodified prefix.
-            nativePrefixWidth =
-                    nativeFont.getTextWidth(
-                            normalizeRawForMeasurement(
-                                    rawPrefix));
+            nativePrefixWidth = nativeFont.getTextWidth(normalizeRawForMeasurement(rawPrefix));
 
             /*
              * Keep the raw Friends Chat prefix for correlation and build a separate
              * rendered prefix with configured inline-icon spacing.
              */
             selectedRawPrefixText =
-                    isFriendsChatPrefix(
-                            rawPrefix)
+                    isFriendsChatPrefix(rawPrefix)
                             ? applyInlineIconUsernameSpacing(
                             rawPrefix,
                             fontProfile.getFriendsChatPlayerIconSpacing(),
@@ -386,25 +297,14 @@ public final class FontMeasurementService
              */
             if (replaceMalformedColons)
             {
-                selectedRawPrefixText =
-                        replaceVerdana13BoldColons(
-                                selectedRawPrefixText);
+                selectedRawPrefixText = replaceVerdana13BoldColons(selectedRawPrefixText);
             }
 
-            selectedPrefixLayoutWidth =
-                    selectedFont.getTextWidth(
-                            normalizeRawForMeasurement(
-                                    selectedRawPrefixText));
+            selectedPrefixLayoutWidth = selectedFont.getTextWidth(normalizeRawForMeasurement(selectedRawPrefixText));
 
-            nativeBodyX =
-                    lineX
-                            + nativePrefixWidth
-                            + BODY_GAP;
+            nativeBodyX = lineX + nativePrefixWidth + BODY_GAP;
 
-            selectedBodyX =
-                    lineX
-                            + selectedPrefixLayoutWidth
-                            + BODY_GAP;
+            selectedBodyX = lineX + selectedPrefixLayoutWidth + BODY_GAP;
         }
         else
         {
@@ -434,29 +334,21 @@ public final class FontMeasurementService
                             fontProfile.getAccountBuildIconPadding(),
                             fontProfile.getChannelAccountBuildIconSpacing());
 
-            if (nativeChannelLayout == null
-                    || selectedChannelLayout == null)
+            if (nativeChannelLayout == null || selectedChannelLayout == null)
             {
                 return null;
             }
 
-            nativeBodyX =
-                    nativeChannelLayout.bodyX;
+            nativeBodyX = nativeChannelLayout.bodyX;
 
-            selectedBodyX =
-                    selectedChannelLayout.bodyX;
+            selectedBodyX = selectedChannelLayout.bodyX;
         }
 
-        final int nativeBodyWidth =
-                rightBoundary
-                        - nativeBodyX;
+        final int nativeBodyWidth = rightBoundary - nativeBodyX;
 
-        final int selectedBodyWidth =
-                rightBoundary
-                        - selectedBodyX;
+        final int selectedBodyWidth = rightBoundary - selectedBodyX;
 
-        if (nativeBodyWidth <= 0
-                || selectedBodyWidth <= 0)
+        if (nativeBodyWidth <= 0 || selectedBodyWidth <= 0)
         {
             return null;
         }
@@ -473,211 +365,137 @@ public final class FontMeasurementService
                         selectedMeasurementBody,
                         selectedBodyWidth);
 
-        if (nativeLines <= 0
-                || selectedLines <= 0)
+        if (nativeLines <= 0 || selectedLines <= 0)
         {
             return null;
         }
 
         // Apply the selected profile's line-height adjustment.
-        final int lineHeightAdjustment =
-                fontProfile
-                        .getLineHeightAdjustment();
+        final int lineHeightAdjustment = fontProfile.getLineHeightAdjustment();
 
-        final int selectedLineHeight =
-                Math.max(
-                        1,
-                        nativeLineHeight
-                                + lineHeightAdjustment);
+        final int selectedLineHeight = Math.max(1, nativeLineHeight + lineHeightAdjustment);
 
-        final int rowYOffset =
-                fontProfile
-                        .getRowYOffset();
+        final int rowYOffset = fontProfile.getRowYOffset();
 
         /*
          * Apply PRIVATE_CHAT_GAP to Split Private's bottom-relative row Y.
          * Positive increases the gap; negative reduces it.
          */
-        final int privateChatGap =
-                isSplitPrivateChatConstruction(
-                        scriptId,
-                        parentWidgetId)
-                        ? fontProfile.getPrivateChatGap()
-                        : 0;
+        final int privateChatGap = isSplitPrivateChatConstruction(scriptId, parentWidgetId)
+                ? fontProfile.getPrivateChatGap()
+                : 0;
 
-        final int selectedRowY =
-                nativeRowY
-                        + rowYOffset
-                        + privateChatGap;
+        final int selectedRowY = nativeRowY + rowYOffset + privateChatGap;
 
         /*
          * Compensate construction height for native and selected wrapped-line counts.
          */
-        final int desiredHeight =
-                selectedLines
-                        * selectedLineHeight;
+        final int desiredHeight = selectedLines * selectedLineHeight;
 
-        final int injectedValue =
-                ceilDiv(
-                        desiredHeight,
-                        nativeLines);
+        final int injectedValue = ceilDiv(desiredHeight, nativeLines);
 
         if (injectedValue <= 0)
         {
             return null;
         }
 
-        final int allocatedHeight =
-                nativeLines
-                        * injectedValue;
+        final int allocatedHeight = nativeLines * injectedValue;
 
-        final ConstructionMeasurement measurement =
-                new ConstructionMeasurement();
+        final ConstructionMeasurement measurement = new ConstructionMeasurement();
 
-        measurement.scriptId =
-                scriptId;
+        measurement.scriptId = scriptId;
 
-        measurement.semanticBody =
-                semanticBody;
+        measurement.semanticBody = semanticBody;
 
-        measurement.selectedRawBodyText =
-                selectedRawBodyText;
+        measurement.selectedRawBodyText = selectedRawBodyText;
 
-        measurement.selectedChatFont =
-                selectedChatFont;
+        measurement.selectedChatFont = selectedChatFont;
 
-        measurement.selectedFontId =
-                selectedChatFont.getFontId();
+        measurement.selectedFontId = selectedChatFont.getFontId();
 
-        measurement.rawPrefixComponents =
-                new ArrayList<>(
-                        rawPrefixComponents);
+        measurement.rawPrefixComponents = new ArrayList<>(rawPrefixComponents);
 
         /*
          * Script 203 keeps the selected/rendered raw prefix separately from the
          * native raw components used for correlation.
          */
-        measurement.selectedRawPrefixText =
-                selectedRawPrefixText;
+        measurement.selectedRawPrefixText = selectedRawPrefixText;
 
-        measurement.rowValueIndex =
-                rowValueIndex;
+        measurement.rowValueIndex = rowValueIndex;
 
-        measurement.verticalValueIndex =
-                verticalValueIndex;
+        measurement.verticalValueIndex = verticalValueIndex;
 
-        measurement.rowYIndex =
-                rowYIndex;
+        measurement.rowYIndex = rowYIndex;
 
-        measurement.argument7Index =
-                argument7Index;
+        measurement.argument7Index = argument7Index;
 
-        measurement.senderWidthIndex =
-                senderWidthIndex;
+        measurement.senderWidthIndex = senderWidthIndex;
 
-        measurement.lineWidgetId =
-                lineWidgetId;
+        measurement.lineWidgetId = lineWidgetId;
 
-        measurement.parentWidgetId =
-                parentWidgetId;
+        measurement.parentWidgetId = parentWidgetId;
 
-        measurement.leftBoundary =
-                leftBoundary;
+        measurement.leftBoundary = leftBoundary;
 
-        measurement.rightBoundary =
-                rightBoundary;
+        measurement.rightBoundary = rightBoundary;
 
-        measurement.lineX =
-                lineX;
+        measurement.lineX = lineX;
 
-        measurement.nativeLineHeight =
-                nativeLineHeight;
+        measurement.nativeLineHeight = nativeLineHeight;
 
-        measurement.lineHeightAdjustment =
-                lineHeightAdjustment;
+        measurement.lineHeightAdjustment = lineHeightAdjustment;
 
-        measurement.selectedLineHeight =
-                selectedLineHeight;
+        measurement.selectedLineHeight = selectedLineHeight;
 
-        measurement.nativeRowY =
-                nativeRowY;
+        measurement.nativeRowY = nativeRowY;
 
-        measurement.rowYOffset =
-                rowYOffset;
+        measurement.rowYOffset = rowYOffset;
 
-        measurement.selectedRowY =
-                selectedRowY;
+        measurement.selectedRowY = selectedRowY;
 
-        measurement.channelTextYOffset =
-                fontProfile
-                        .getChannelTextYOffset();
+        measurement.channelTextYOffset = fontProfile.getChannelTextYOffset();
 
-        measurement.rankIconRightAdjustment =
-                fontProfile
-                        .getRankIconRightAdjustment();
+        measurement.rankIconRightAdjustment = fontProfile.getRankIconRightAdjustment();
 
-        measurement.rankIconSizeAdjustment =
-                fontProfile
-                        .getRankIconSizeAdjustment();
+        measurement.rankIconSizeAdjustment = fontProfile.getRankIconSizeAdjustment();
 
-        measurement.rankIconYOffset =
-                fontProfile
-                        .getChannelRankIconYOffset();
+        measurement.rankIconYOffset = fontProfile.getChannelRankIconYOffset();
 
-        measurement.accountBuildIconPadding =
-                fontProfile
-                        .getAccountBuildIconPadding();
+        measurement.accountBuildIconPadding = fontProfile.getAccountBuildIconPadding();
 
-        measurement.nativeArgument7 =
-                nativeArgument7;
+        measurement.nativeArgument7 = nativeArgument7;
 
-        measurement.nativeSenderWidth =
-                nativeSenderWidth;
+        measurement.nativeSenderWidth = nativeSenderWidth;
 
-        measurement.nativeColor =
-                intStack[colorIndex];
+        measurement.nativeColor = intStack[colorIndex];
 
-        measurement.nativeShadow =
-                intStack[shadowIndex];
+        measurement.nativeShadow = intStack[shadowIndex];
 
-        measurement.nativePrefixWidth =
-                nativePrefixWidth;
+        measurement.nativePrefixWidth = nativePrefixWidth;
 
-        measurement.selectedPrefixLayoutWidth =
-                selectedPrefixLayoutWidth;
+        measurement.selectedPrefixLayoutWidth = selectedPrefixLayoutWidth;
 
-        measurement.nativeChannelLayout =
-                nativeChannelLayout;
+        measurement.nativeChannelLayout = nativeChannelLayout;
 
-        measurement.selectedChannelLayout =
-                selectedChannelLayout;
+        measurement.selectedChannelLayout = selectedChannelLayout;
 
-        measurement.nativeBodyX =
-                nativeBodyX;
+        measurement.nativeBodyX = nativeBodyX;
 
-        measurement.nativeBodyWidth =
-                nativeBodyWidth;
+        measurement.nativeBodyWidth = nativeBodyWidth;
 
-        measurement.selectedBodyX =
-                selectedBodyX;
+        measurement.selectedBodyX = selectedBodyX;
 
-        measurement.selectedBodyWidth =
-                selectedBodyWidth;
+        measurement.selectedBodyWidth = selectedBodyWidth;
 
-        measurement.nativeLines =
-                nativeLines;
+        measurement.nativeLines = nativeLines;
 
-        measurement.selectedLines =
-                selectedLines;
+        measurement.selectedLines = selectedLines;
 
-        measurement.desiredHeight =
-                desiredHeight;
+        measurement.desiredHeight = desiredHeight;
 
-        measurement.injectedValue =
-                injectedValue;
+        measurement.injectedValue = injectedValue;
 
-        measurement.allocatedHeight =
-                allocatedHeight;
+        measurement.allocatedHeight = allocatedHeight;
 
         return measurement;
     }
@@ -687,23 +505,16 @@ public final class FontMeasurementService
      * PRIVATE CHAT
      * ================================================================
      */
-    private boolean isSplitPrivateChatConstruction(
-            int scriptId,
-            int parentWidgetId)
+    private boolean isSplitPrivateChatConstruction(int scriptId, int parentWidgetId)
     {
         if (scriptId != CHAT_BODY_SCRIPT)
         {
             return false;
         }
 
-        final Widget splitPrivate =
-                client.getWidget(
-                        InterfaceID.PM_CHAT,
-                        0);
+        final Widget splitPrivate = client.getWidget(InterfaceID.PM_CHAT, 0);
 
-        return splitPrivate != null
-                && parentWidgetId
-                == splitPrivate.getId();
+        return splitPrivate != null && parentWidgetId == splitPrivate.getId();
     }
 
     /*
@@ -723,47 +534,33 @@ public final class FontMeasurementService
             int accountBuildIconPadding,
             int inlineIconUsernameSpacing)
     {
-        if (font == null
-                || rawPrefixComponents == null
-                || intStack == null)
+        if (font == null || rawPrefixComponents == null || intStack == null)
         {
             return null;
         }
 
-        final ChannelPrefixLayout layout =
-                new ChannelPrefixLayout();
+        final ChannelPrefixLayout layout = new ChannelPrefixLayout();
 
-        layout.titleX =
-                lineX;
+        layout.titleX = lineX;
 
-        final String rawTitleText =
-                rawPrefixComponents.size() > 0
-                        ? rawPrefixComponents.get(
-                        0)
-                        : "";
+        final String rawTitleText = rawPrefixComponents.size() > 0
+                ? rawPrefixComponents.get(0)
+                : "";
 
-        layout.titleText =
-                textNormalizer.normalizeSemantic(
-                        rawTitleText);
+        layout.titleText = textNormalizer.normalizeSemantic(rawTitleText);
 
-        layout.renderedTitleText =
-                replaceMalformedColons
-                        ? replaceVerdana13BoldColons(
-                        rawTitleText)
-                        : rawTitleText;
+        layout.renderedTitleText = replaceMalformedColons
+                ? replaceVerdana13BoldColons(rawTitleText)
+                : rawTitleText;
 
-        final String rawSenderText =
-                rawPrefixComponents.size() > 1
-                        ? rawPrefixComponents.get(
-                        1)
-                        : "";
+        final String rawSenderText = rawPrefixComponents.size() > 1
+                ? rawPrefixComponents.get(1)
+                : "";
 
         /*
          * Preserve the native sender semantic for correlation.
          */
-        layout.senderText =
-                textNormalizer.normalizeSemantic(
-                        rawSenderText);
+        layout.senderText = textNormalizer.normalizeSemantic(rawSenderText);
 
         /*
          * The rendered sender may contain additional visible spacing after the
@@ -782,63 +579,46 @@ public final class FontMeasurementService
 
         if (replaceMalformedColons)
         {
-            layout.renderedSenderText =
-                    replaceVerdana13BoldColons(
-                            layout.renderedSenderText);
+            layout.renderedSenderText = replaceVerdana13BoldColons(layout.renderedSenderText);
         }
 
         if (layout.titleText == null)
         {
-            layout.titleText =
-                    "";
+            layout.titleText = "";
         }
 
         if (layout.senderText == null)
         {
-            layout.senderText =
-                    "";
+            layout.senderText = "";
         }
 
-        layout.hasTitle =
-                !layout.titleText.isEmpty();
+        layout.hasTitle = !layout.titleText.isEmpty();
 
-        layout.hasSender =
-                !layout.senderText.isEmpty();
+        layout.hasSender = !layout.senderText.isEmpty();
 
         if (layout.hasTitle)
         {
-            layout.titleWidth =
-                    font.getTextWidth(
-                            normalizeRawForMeasurement(
-                                    layout.renderedTitleText));
+            layout.titleWidth = font.getTextWidth(normalizeRawForMeasurement(layout.renderedTitleText));
         }
 
         if (layout.hasSender)
         {
-            layout.senderWidth =
-                    font.getTextWidth(
-                            normalizeRawForMeasurement(
-                                    layout.renderedSenderText));
+            layout.senderWidth = font.getTextWidth(normalizeRawForMeasurement(layout.renderedSenderText));
         }
 
         /*
          * Read optional rank sprite ID, width, and height
          * immediately before the common Script-4483 payload.
          */
-        final int commonPayloadStart =
-                intStackSize - 11;
+        final int commonPayloadStart = intStackSize - 11;
 
-        if (layout.hasSender
-                && commonPayloadStart >= 3)
+        if (layout.hasSender && commonPayloadStart >= 3)
         {
-            final int spriteIdCandidate =
-                    intStack[commonPayloadStart - 3];
+            final int spriteIdCandidate = intStack[commonPayloadStart - 3];
 
-            final int widthCandidate =
-                    intStack[commonPayloadStart - 2];
+            final int widthCandidate = intStack[commonPayloadStart - 2];
 
-            final int heightCandidate =
-                    intStack[commonPayloadStart - 1];
+            final int heightCandidate = intStack[commonPayloadStart - 1];
 
             if (spriteIdCandidate >= 0
                     && widthCandidate > 0
@@ -846,20 +626,11 @@ public final class FontMeasurementService
                     && heightCandidate > 0
                     && heightCandidate <= 32)
             {
-                layout.rankIconSpriteId =
-                        spriteIdCandidate;
+                layout.rankIconSpriteId = spriteIdCandidate;
 
-                layout.rankIconWidth =
-                        Math.max(
-                                1,
-                                widthCandidate
-                                        + rankIconSizeAdjustment);
+                layout.rankIconWidth = Math.max(1, widthCandidate + rankIconSizeAdjustment);
 
-                layout.rankIconHeight =
-                        Math.max(
-                                1,
-                                heightCandidate
-                                        + rankIconSizeAdjustment);
+                layout.rankIconHeight = Math.max(1, heightCandidate + rankIconSizeAdjustment);
             }
         }
 
@@ -869,21 +640,16 @@ public final class FontMeasurementService
          * CHANNEL_ACCOUNT_BUILD_ICON_SPACING controls icon-to-name spacing.
          * ACCOUNT_BUILD_ICON_PADDING reserves additional sender layout width.
          */
-        if (layout.hasSender
-                && hasAccountBuildIcon(
-                rawSenderText))
+        if (layout.hasSender && hasAccountBuildIcon(rawSenderText))
         {
-            layout.senderWidth +=
-                    accountBuildIconPadding;
+            layout.senderWidth += accountBuildIconPadding;
         }
 
-        int cursor =
-                lineX;
+        int cursor = lineX;
 
         if (layout.hasTitle)
         {
-            cursor +=
-                    layout.titleWidth;
+            cursor += layout.titleWidth;
         }
 
         if (layout.hasSender)
@@ -897,18 +663,14 @@ public final class FontMeasurementService
                  */
                 if (layout.hasTitle)
                 {
-                    cursor +=
-                            RANK_ICON_GAP;
+                    cursor += RANK_ICON_GAP;
                 }
 
-                layout.rankIconX =
-                        cursor;
+                layout.rankIconX = cursor;
 
-                cursor +=
-                        layout.rankIconWidth;
+                cursor += layout.rankIconWidth;
 
-                cursor +=
-                        RANK_ICON_GAP;
+                cursor += RANK_ICON_GAP;
 
                 /*
                  * Enforce minimum spacing after the final inline image before the username.
@@ -916,34 +678,27 @@ public final class FontMeasurementService
                  * The caller supplies the spacing character. Existing whitespace counts
                  * toward the minimum, and consecutive inline images are not separated.
                  */
-                cursor +=
-                        rankIconRightAdjustment;
+                cursor += rankIconRightAdjustment;
             }
             else if (layout.hasTitle)
             {
-                cursor +=
-                        BODY_GAP;
+                cursor += BODY_GAP;
             }
 
-            layout.senderX =
-                    cursor;
+            layout.senderX = cursor;
 
-            cursor +=
-                    layout.senderWidth;
+            cursor += layout.senderWidth;
 
-            cursor +=
-                    BODY_GAP;
+            cursor += BODY_GAP;
         }
         else if (layout.hasTitle)
         {
             // Title-only Clan / Guest Clan system message.
-            cursor +=
-                    BODY_GAP;
+            cursor += BODY_GAP;
         }
 
         // If both title and sender are empty, the body naturally begins at lineX.
-        layout.bodyX =
-                cursor;
+        layout.bodyX = cursor;
 
         return layout;
     }
@@ -960,18 +715,14 @@ public final class FontMeasurementService
      * This helper is used only for selected Verdana 13 Bold text.
      * Native text remains unchanged for widget correlation.
      */
-    private String replaceVerdana13BoldColons(
-            String text)
+    private String replaceVerdana13BoldColons(String text)
     {
-        if (text == null
-                || text.isEmpty())
+        if (text == null || text.isEmpty())
         {
             return text;
         }
 
-        return text.replace(
-                ':',
-                '-');
+        return text.replace(':', '-');
     }
 
     /*
@@ -980,12 +731,9 @@ public final class FontMeasurementService
      * ================================================================
      */
 
-    private FontTypeFace resolveFont(
-            int fontId)
+    private FontTypeFace resolveFont(int fontId)
     {
-        final FontTypeFace cachedFont =
-                fontCache.get(
-                        fontId);
+        final FontTypeFace cachedFont = fontCache.get(fontId);
 
         if (cachedFont != null)
         {
@@ -997,46 +745,37 @@ public final class FontMeasurementService
             return cachedFont;
         }
 
-        final long started =
-                performanceMetrics != null
-                        ? System.nanoTime()
-                        : 0L;
+        final long started = performanceMetrics != null
+                ? System.nanoTime()
+                : 0L;
 
         try
         {
-            final Widget probe =
-                    client.getWidget(
-                            InterfaceID.Chatbox.INPUT);
+            final Widget probe = client.getWidget(InterfaceID.Chatbox.INPUT);
 
             if (probe == null)
             {
                 return null;
             }
 
-            final int originalFontId =
-                    probe.getFontId();
+            final int originalFontId = probe.getFontId();
 
             final FontTypeFace resolvedFont;
 
             try
             {
-                probe.setFontId(
-                        fontId);
+                probe.setFontId(fontId);
 
-                resolvedFont =
-                        probe.getFont();
+                resolvedFont = probe.getFont();
             }
             finally
             {
-                probe.setFontId(
-                        originalFontId);
+                probe.setFontId(originalFontId);
             }
 
             if (resolvedFont != null)
             {
-                fontCache.put(
-                        fontId,
-                        resolvedFont);
+                fontCache.put(fontId, resolvedFont);
             }
 
             return resolvedFont;
@@ -1045,9 +784,7 @@ public final class FontMeasurementService
         {
             if (performanceMetrics != null)
             {
-                performanceMetrics.recordFontCacheMiss(
-                        System.nanoTime()
-                                - started);
+                performanceMetrics.recordFontCacheMiss(System.nanoTime() - started);
             }
         }
     }
@@ -1057,42 +794,29 @@ public final class FontMeasurementService
      * OBJECT-STACK EXTRACTION
      * ================================================================
      */
-    private String findBody(
-            Object[] stack,
-            int size)
+    private String findBody(Object[] stack, int size)
     {
-        if (stack == null
-                || size <= 0)
+        if (stack == null || size <= 0)
         {
             return null;
         }
 
-        final int safeSize =
-                Math.min(
-                        size,
-                        stack.length);
+        final int safeSize = Math.min(size, stack.length);
 
-        for (int i = safeSize - 1;
-             i >= 0;
-             i--)
+        for (int i = safeSize - 1; i >= 0; i--)
         {
-            final Object value =
-                    stack[i];
+            final Object value = stack[i];
 
             if (!(value instanceof String))
             {
                 continue;
             }
 
-            final String raw =
-                    (String) value;
+            final String raw = (String) value;
 
-            final String semantic =
-                    textNormalizer.normalizeSemantic(
-                            raw);
+            final String semantic = textNormalizer.normalizeSemantic(raw);
 
-            if (semantic == null
-                    || semantic.isEmpty())
+            if (semantic == null || semantic.isEmpty())
             {
                 continue;
             }
@@ -1108,47 +832,34 @@ public final class FontMeasurementService
             int size,
             String semanticBody)
     {
-        final List<String> result =
-                new ArrayList<>();
+        final List<String> result = new ArrayList<>();
 
-        if (stack == null
-                || size <= 0
-                || semanticBody == null)
+        if (stack == null || size <= 0 || semanticBody == null)
         {
             return result;
         }
 
-        final int safeSize =
-                Math.min(
-                        size,
-                        stack.length);
+        final int safeSize = Math.min(size, stack.length);
 
-        for (int i = 0;
-             i < safeSize;
-             i++)
+        for (int i = 0; i < safeSize; i++)
         {
-            final Object value =
-                    stack[i];
+            final Object value = stack[i];
 
             if (!(value instanceof String))
             {
                 continue;
             }
 
-            final String raw =
-                    (String) value;
+            final String raw = (String) value;
 
-            final String semantic =
-                    textNormalizer.normalizeSemantic(
-                            raw);
+            final String semantic = textNormalizer.normalizeSemantic(raw);
 
             if (semantic == null)
             {
                 continue;
             }
 
-            if (semantic.equalsIgnoreCase(
-                    semanticBody))
+            if (semantic.equalsIgnoreCase(semanticBody))
             {
                 break;
             }
@@ -1159,27 +870,20 @@ public final class FontMeasurementService
              * Script 4483 uses them to represent title-only and
              * prefix-less system rows.
              */
-            result.add(
-                    raw);
+            result.add(raw);
         }
 
         return result;
     }
 
-    private boolean hasAccountBuildIcon(
-            String rawSenderText)
+    private boolean hasAccountBuildIcon(String rawSenderText)
     {
-        if (rawSenderText == null
-                || rawSenderText.isEmpty())
+        if (rawSenderText == null || rawSenderText.isEmpty())
         {
             return false;
         }
 
-        return rawSenderText
-                .toLowerCase(
-                        Locale.ROOT)
-                .contains(
-                        "<img=");
+        return rawSenderText.toLowerCase(Locale.ROOT).contains("<img=");
     }
 
     /*
@@ -1214,52 +918,34 @@ public final class FontMeasurementService
             int spacing,
             char spacingCharacter)
     {
-        if (rawText == null
-                || rawText.isEmpty()
-                || spacing <= 0)
+        if (rawText == null || rawText.isEmpty() || spacing <= 0)
         {
             return rawText;
         }
 
-        final String lower =
-                rawText.toLowerCase(
-                        Locale.ROOT);
+        final String lower = rawText.toLowerCase(Locale.ROOT);
 
-        final int imageStart =
-                lower.lastIndexOf(
-                        "<img=");
+        final int imageStart = lower.lastIndexOf("<img=");
 
         if (imageStart < 0)
         {
             return rawText;
         }
 
-        final int imageEnd =
-                rawText.indexOf(
-                        '>',
-                        imageStart);
+        final int imageEnd = rawText.indexOf('>', imageStart);
 
-        if (imageEnd < 0
-                || imageEnd
-                >= rawText.length() - 1)
+        if (imageEnd < 0 || imageEnd >= rawText.length() - 1)
         {
             return rawText;
         }
 
-        int existingSpacing =
-                0;
+        int existingSpacing = 0;
 
-        for (int i = imageEnd + 1;
-             i < rawText.length();
-             i++)
+        for (int i = imageEnd + 1; i < rawText.length(); i++)
         {
-            final char ch =
-                    rawText.charAt(
-                            i);
+            final char ch = rawText.charAt(i);
 
-            if (ch == ' '
-                    || ch == '\u00A0'
-                    || ch == '\t')
+            if (ch == ' ' || ch == '\u00A0' || ch == '\t')
             {
                 existingSpacing++;
 
@@ -1269,35 +955,21 @@ public final class FontMeasurementService
             break;
         }
 
-        final int spacingToAdd =
-                Math.max(
-                        0,
-                        spacing
-                                - existingSpacing);
+        final int spacingToAdd = Math.max(0, spacing - existingSpacing);
 
         if (spacingToAdd == 0)
         {
             return rawText;
         }
 
-        final StringBuilder gap =
-                new StringBuilder(
-                        spacingToAdd);
+        final StringBuilder gap = new StringBuilder(spacingToAdd);
 
-        for (int i = 0;
-             i < spacingToAdd;
-             i++)
+        for (int i = 0; i < spacingToAdd; i++)
         {
-            gap.append(
-                    spacingCharacter);
+            gap.append(spacingCharacter);
         }
 
-        return rawText.substring(
-                0,
-                imageEnd + 1)
-                + gap
-                + rawText.substring(
-                imageEnd + 1);
+        return rawText.substring(0, imageEnd + 1) + gap + rawText.substring(imageEnd + 1);
     }
 
     /*
@@ -1307,27 +979,18 @@ public final class FontMeasurementService
      *
      *     [Friends Chat] <img=rank>Username:
      */
-    private boolean isFriendsChatPrefix(
-            String rawPrefix)
+    private boolean isFriendsChatPrefix(String rawPrefix)
     {
-        final String semanticPrefix =
-                textNormalizer.normalizeSemantic(
-                        rawPrefix);
+        final String semanticPrefix = textNormalizer.normalizeSemantic(rawPrefix);
 
-        if (semanticPrefix == null
-                || semanticPrefix.length() < 3
-                || semanticPrefix.charAt(0) != '[')
+        if (semanticPrefix == null || semanticPrefix.length() < 3 || semanticPrefix.charAt(0) != '[')
         {
             return false;
         }
 
-        final int closingBracket =
-                semanticPrefix.indexOf(
-                        ']');
+        final int closingBracket = semanticPrefix.indexOf(']');
 
-        return closingBracket > 0
-                && closingBracket
-                < semanticPrefix.length() - 1;
+        return closingBracket > 0 && closingBracket < semanticPrefix.length() - 1;
     }
 
     /*
@@ -1336,18 +999,14 @@ public final class FontMeasurementService
      * ================================================================
      */
 
-    private String normalizeRawForMeasurement(
-            String text)
+    private String normalizeRawForMeasurement(String text)
     {
         if (text == null)
         {
             return "";
         }
 
-        return text
-                .replace(
-                        '\u00A0',
-                        ' ');
+        return text.replace('\u00A0', ' ');
     }
 
     /*
@@ -1368,35 +1027,20 @@ public final class FontMeasurementService
             return 1;
         }
 
-        final String normalized =
-                text
-                        .replace(
-                                "\r\n",
-                                "\n")
-                        .replace(
-                                '\r',
-                                '\n');
+        final String normalized = text
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
 
-        final String[] explicitLines =
-                normalized.split(
-                        "\n",
-                        -1);
+        final String[] explicitLines = normalized.split("\n", -1);
 
-        int totalLines =
-                0;
+        int totalLines = 0;
 
         for (String explicitLine : explicitLines)
         {
-            totalLines +=
-                    calculateSingleParagraphLines(
-                            font,
-                            explicitLine,
-                            maxWidth);
+            totalLines += calculateSingleParagraphLines(font, explicitLine, maxWidth);
         }
 
-        return Math.max(
-                1,
-                totalLines);
+        return Math.max(1, totalLines);
     }
 
     int calculateSingleParagraphLines(
@@ -1404,35 +1048,28 @@ public final class FontMeasurementService
             String text,
             int maxWidth)
     {
-        if (text == null
-                || text.isEmpty())
+        if (text == null || text.isEmpty())
         {
             return 1;
         }
 
-        if (font.getTextWidth(
-                text) <= maxWidth)
+        if (font.getTextWidth(text) <= maxWidth)
         {
             return 1;
         }
 
-        final String trimmed =
-                text.trim();
+        final String trimmed = text.trim();
 
         if (trimmed.isEmpty())
         {
             return 1;
         }
 
-        final String[] words =
-                trimmed.split(
-                        "\\s+");
+        final String[] words = trimmed.split("\\s+");
 
-        int lines =
-                1;
+        int lines = 1;
 
-        String currentLine =
-                "";
+        String currentLine = "";
 
         for (String word : words)
         {
@@ -1445,66 +1082,50 @@ public final class FontMeasurementService
              * Don't hard-wrap one uninterrupted token character by character.
              * This applies uniformly to letters, digits, punctuation, and symbols.
              */
-            if (font.getTextWidth(
-                    word) > maxWidth)
+            if (font.getTextWidth(word) > maxWidth)
             {
                 if (!currentLine.isEmpty())
                 {
                     lines++;
                 }
 
-                currentLine =
-                        word;
+                currentLine = word;
 
                 continue;
             }
 
             if (currentLine.isEmpty())
             {
-                currentLine =
-                        word;
+                currentLine = word;
 
                 continue;
             }
 
-            final String candidate =
-                    currentLine
-                            + " "
-                            + word;
+            final String candidate = currentLine + " " + word;
 
-            if (font.getTextWidth(
-                    candidate) <= maxWidth)
+            if (font.getTextWidth(candidate) <= maxWidth)
             {
-                currentLine =
-                        candidate;
+                currentLine = candidate;
             }
             else
             {
                 lines++;
 
-                currentLine =
-                        word;
+                currentLine = word;
             }
         }
 
-        return Math.max(
-                1,
-                lines);
+        return Math.max(1, lines);
     }
 
-    private int ceilDiv(
-            int numerator,
-            int denominator)
+    private int ceilDiv(int numerator, int denominator)
     {
         if (denominator <= 0)
         {
             return numerator;
         }
 
-        return (numerator
-                + denominator
-                - 1)
-                / denominator;
+        return (numerator + denominator - 1) / denominator;
     }
 
     /*
@@ -1517,26 +1138,22 @@ public final class FontMeasurementService
         /*
          * Native semantic title used for correlation.
          */
-        String titleText =
-                "";
+        String titleText = "";
 
         /*
          * Exact title text rendered after correlation.
          */
-        String renderedTitleText =
-                "";
+        String renderedTitleText = "";
 
         /*
          * Native semantic sender used for correlation.
          */
-        String senderText =
-                "";
+        String senderText = "";
 
         /*
          * Exact selected raw sender markup rendered after correlation.
          */
-        String renderedSenderText =
-                "";
+        String renderedSenderText = "";
 
         boolean hasTitle;
 
@@ -1546,11 +1163,9 @@ public final class FontMeasurementService
 
         int titleWidth;
 
-        int rankIconSpriteId =
-                -1;
+        int rankIconSpriteId = -1;
 
-        int rankIconX =
-                -1;
+        int rankIconX = -1;
 
         int rankIconWidth;
 

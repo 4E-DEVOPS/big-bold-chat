@@ -75,25 +75,21 @@ public final class FontLayoutService
      * Text entries retain expected semantic text; sprite entries retain
      * their expected sprite ID as identity guards.
      */
-    private final IdentityHashMap<Widget, PendingYOffset> pendingYOffsets =
-            new IdentityHashMap<>();
+    private final IdentityHashMap<Widget, PendingYOffset> pendingYOffsets = new IdentityHashMap<>();
 
     /*
      * Native and last-applied presentation values tracked per Widget identity.
      *
      * Used for compare-before-write mutation and safe native restoration.
      */
-    private final IdentityHashMap<Widget, NativeWidgetState> nativeWidgetStates =
-            new IdentityHashMap<>();
+    private final IdentityHashMap<Widget, NativeWidgetState> nativeWidgetStates = new IdentityHashMap<>();
 
     /*
      * Persistent per-surface row indexes keyed by OriginalY + RelativeY.
      *
      * Supports direct reuse, local repair, and broad fallback when required.
      */
-    private final Map<Surface, RowCorrelationIndex> rowIndexes =
-            new EnumMap<>(
-                    Surface.class);
+    private final Map<Surface, RowCorrelationIndex> rowIndexes = new EnumMap<>(Surface.class);
 
     public FontLayoutService(
             Client client,
@@ -118,8 +114,7 @@ public final class FontLayoutService
                 client,
                 config,
                 measurementService,
-                new ChatTextNormalizer(
-                        performanceMetrics),
+                new ChatTextNormalizer(performanceMetrics),
                 performanceMetrics);
     }
 
@@ -130,23 +125,17 @@ public final class FontLayoutService
             ChatTextNormalizer textNormalizer,
             PerformanceMetrics performanceMetrics)
     {
-        this.client =
-                client;
+        this.client = client;
 
-        this.config =
-                config;
+        this.config = config;
 
-        this.measurementService =
-                measurementService;
+        this.measurementService = measurementService;
 
-        this.textNormalizer =
-                textNormalizer != null
-                        ? textNormalizer
-                        : new ChatTextNormalizer(
-                        performanceMetrics);
+        this.textNormalizer = textNormalizer != null
+                ? textNormalizer
+                : new ChatTextNormalizer(performanceMetrics);
 
-        this.performanceMetrics =
-                performanceMetrics;
+        this.performanceMetrics = performanceMetrics;
 
         refreshActiveFontState();
     }
@@ -157,16 +146,14 @@ public final class FontLayoutService
      * ================================================================
      */
 
-    public void onScriptPreFired(
-            ScriptPreFired event)
+    public void onScriptPreFired(ScriptPreFired event)
     {
         if (event == null)
         {
             return;
         }
 
-        final int scriptId =
-                event.getScriptId();
+        final int scriptId = event.getScriptId();
 
         /*
          * Apply queued component-specific Y offsets on the finalize script.
@@ -177,8 +164,7 @@ public final class FontLayoutService
             return;
         }
 
-        if (!measurementService.supportsScript(
-                scriptId))
+        if (!measurementService.supportsScript(scriptId))
         {
             return;
         }
@@ -193,25 +179,20 @@ public final class FontLayoutService
         pending = null;
         pendingFontProfile = null;
 
-        final ActiveFontState fontState =
-                activeFontState;
+        final ActiveFontState fontState = activeFontState;
 
-        if (fontState == null
-                || fontState.fontProfile == null)
+        if (fontState == null || fontState.fontProfile == null)
         {
             return;
         }
 
-        final ChatFont selectedChatFont =
-                fontState.chatFont;
+        final ChatFont selectedChatFont = fontState.chatFont;
 
-        final ChatFontProfile fontProfile =
-                fontState.fontProfile;
+        final ChatFontProfile fontProfile = fontState.fontProfile;
 
-        final long measurementStarted =
-                performanceMetrics != null
-                        ? System.nanoTime()
-                        : 0L;
+        final long measurementStarted = performanceMetrics != null
+                ? System.nanoTime()
+                : 0L;
 
         final FontMeasurementService.ConstructionMeasurement measurement =
                 measurementService.measure(
@@ -221,9 +202,7 @@ public final class FontLayoutService
 
         if (performanceMetrics != null)
         {
-            performanceMetrics.recordMeasurement(
-                    System.nanoTime()
-                            - measurementStarted);
+            performanceMetrics.recordMeasurement(System.nanoTime() - measurementStarted);
         }
 
         if (measurement == null)
@@ -231,15 +210,11 @@ public final class FontLayoutService
             return;
         }
 
-        final int[] intStack =
-                client.getIntStack();
+        final int[] intStack = client.getIntStack();
 
-        final int intStackSize =
-                client.getIntStackSize();
+        final int intStackSize = client.getIntStackSize();
 
-        if (intStack == null
-                || intStackSize <= 0
-                || intStackSize > intStack.length)
+        if (intStack == null || intStackSize <= 0 || intStackSize > intStack.length)
         {
             return;
         }
@@ -248,23 +223,17 @@ public final class FontLayoutService
          * PRE injects selected height and row Y while preserving native ARG7
          * and sender width. Horizontal presentation is applied in POST.
          */
-        intStack[measurement.verticalValueIndex] =
-                measurement.injectedValue;
+        intStack[measurement.verticalValueIndex] = measurement.injectedValue;
 
-        intStack[measurement.rowYIndex] =
-                measurement.selectedRowY;
+        intStack[measurement.rowYIndex] = measurement.selectedRowY;
 
-        intStack[measurement.argument7Index] =
-                measurement.nativeArgument7;
+        intStack[measurement.argument7Index] = measurement.nativeArgument7;
 
-        intStack[measurement.senderWidthIndex] =
-                measurement.nativeSenderWidth;
+        intStack[measurement.senderWidthIndex] = measurement.nativeSenderWidth;
 
-        pending =
-                measurement;
+        pending = measurement;
 
-        pendingFontProfile =
-                fontProfile;
+        pendingFontProfile = fontProfile;
     }
 
     /*
@@ -273,55 +242,37 @@ public final class FontLayoutService
      * ================================================================
      */
 
-    public void onScriptPostFired(
-            ScriptPostFired event)
+    public void onScriptPostFired(ScriptPostFired event)
     {
-        if (event == null
-                || pending == null
-                || event.getScriptId()
-                != pending.scriptId)
+        if (event == null || pending == null || event.getScriptId() != pending.scriptId)
         {
             return;
         }
 
-        final FontMeasurementService.ConstructionMeasurement state =
-                pending;
+        final FontMeasurementService.ConstructionMeasurement state = pending;
 
-        final ChatFontProfile fontProfile =
-                pendingFontProfile;
+        final ChatFontProfile fontProfile = pendingFontProfile;
 
-        pending =
-                null;
+        pending = null;
 
-        pendingFontProfile =
-                null;
+        pendingFontProfile = null;
 
-        final Widget lineWidget =
-                client.getWidget(
-                        state.lineWidgetId);
+        final Widget lineWidget = client.getWidget(state.lineWidgetId);
 
         if (lineWidget == null)
         {
             return;
         }
 
-        final Surface surface =
-                determineSurface(
-                        state.scriptId,
-                        state.parentWidgetId);
+        final Surface surface = determineSurface(state.scriptId, state.parentWidgetId);
 
-        final List<Widget> rowWidgets =
-                collectRow(
-                        lineWidget,
-                        surface);
+        final List<Widget> rowWidgets = collectRow(lineWidget, surface);
 
         /*
          * Prefer row correlation. Build the broad semantic fallback on first
          * miss and reuse it for the remainder of this POST.
          */
-        final FallbackCorrelationContext fallbackContext =
-                new FallbackCorrelationContext(
-                        surface);
+        final FallbackCorrelationContext fallbackContext = new FallbackCorrelationContext(surface);
 
         final Widget bodyWidget =
                 findTargetWidgetForLine(
@@ -349,10 +300,9 @@ public final class FontLayoutService
                         rowWidgets,
                         fallbackContext);
 
-        final Widget rowAnchor =
-                !prefixWidgets.isEmpty()
-                        ? prefixWidgets.get(0)
-                        : lineWidget;
+        final Widget rowAnchor = !prefixWidgets.isEmpty()
+                ? prefixWidgets.get(0)
+                : lineWidget;
 
         /*
          * Correlate the rank icon before changing row geometry.
@@ -364,32 +314,18 @@ public final class FontLayoutService
                 && state.nativeChannelLayout != null
                 && state.nativeChannelLayout.rankIconSpriteId >= 0)
         {
-            rankIconWidget =
-                    findRankIconWidget(
-                            state.nativeChannelLayout,
-                            rowAnchor,
-                            rowWidgets);
+            rankIconWidget = findRankIconWidget(state.nativeChannelLayout, rowAnchor, rowWidgets);
         }
         else
         {
-            rankIconWidget =
-                    null;
+            rankIconWidget = null;
         }
 
-        applyPrefixPresentation(
-                state,
-                prefixWidgets,
-                fontProfile);
+        applyPrefixPresentation(state, prefixWidgets, fontProfile);
 
-        applyBodyPresentation(
-                state,
-                bodyWidget,
-                fontProfile);
+        applyBodyPresentation(state, bodyWidget, fontProfile);
 
-        applyRankIconPresentation(
-                state,
-                rankIconWidget,
-                fontProfile);
+        applyRankIconPresentation(state, rankIconWidget, fontProfile);
     }
 
     /*
@@ -403,75 +339,46 @@ public final class FontLayoutService
             Widget bodyWidget,
             ChatFontProfile fontProfile)
     {
-        if (state == null
-                || bodyWidget == null)
+        if (state == null || bodyWidget == null)
         {
             return;
         }
 
-        boolean changed =
-                setFontIdIfChanged(
-                        bodyWidget,
-                        state.selectedFontId);
+        boolean changed = setFontIdIfChanged(bodyWidget, state.selectedFontId);
 
-        changed |=
-                setLineHeightIfChanged(
-                        bodyWidget,
-                        state.selectedLineHeight);
+        changed |= setLineHeightIfChanged(bodyWidget, state.selectedLineHeight);
 
         /*
          * Correlation has already completed against the native body text.
          * Apply the exact selected text measured by MeasurementService.
          */
-        if (state.selectedRawBodyText != null
-                && !state.selectedRawBodyText.equals(
-                bodyWidget.getText()))
+        if (state.selectedRawBodyText != null && !state.selectedRawBodyText.equals(bodyWidget.getText()))
         {
-            changed |=
-                    setTextIfChanged(
-                            bodyWidget,
-                            state.selectedRawBodyText);
+            changed |= setTextIfChanged(bodyWidget, state.selectedRawBodyText);
         }
 
-        changed |=
-                setOriginalXIfChanged(
-                        bodyWidget,
-                        state.selectedBodyX);
+        changed |= setOriginalXIfChanged(bodyWidget, state.selectedBodyX);
 
-        changed |=
-                setOriginalWidthIfChanged(
-                        bodyWidget,
-                        state.selectedBodyWidth);
+        changed |= setOriginalWidthIfChanged(bodyWidget, state.selectedBodyWidth);
 
         /*
          * Queue component-specific body Y correction for finalize.
          * Script 199 uses only the PRE row-Y adjustment.
          */
-        if (fontProfile != null
-                && state.scriptId
-                == FontMeasurementService.CHANNEL_BODY_SCRIPT)
+        if (fontProfile != null && state.scriptId == FontMeasurementService.CHANNEL_BODY_SCRIPT)
         {
-            queueTextYOffset(
-                    bodyWidget,
-                    fontProfile.getChannelTextYOffset());
+            queueTextYOffset(bodyWidget, fontProfile.getChannelTextYOffset());
         }
-        else if (fontProfile != null
-                && isFriendsChatConstruction(
-                state))
+        else if (fontProfile != null && isFriendsChatConstruction(state))
         {
-            queueTextYOffset(
-                    bodyWidget,
-                    fontProfile.getFriendsChatTextYOffset());
+            queueTextYOffset(bodyWidget, fontProfile.getFriendsChatTextYOffset());
         }
         else
         {
-            pendingYOffsets.remove(
-                    bodyWidget);
+            pendingYOffsets.remove(bodyWidget);
         }
 
-        revalidateWidgetIfChanged(
-                bodyWidget,
-                changed);
+        revalidateWidgetIfChanged(bodyWidget, changed);
     }
 
     private void applyPrefixPresentation(
@@ -479,9 +386,7 @@ public final class FontLayoutService
             List<Widget> prefixWidgets,
             ChatFontProfile fontProfile)
     {
-        if (state == null
-                || prefixWidgets == null
-                || prefixWidgets.isEmpty())
+        if (state == null || prefixWidgets == null || prefixWidgets.isEmpty())
         {
             return;
         }
@@ -493,38 +398,23 @@ public final class FontLayoutService
                 continue;
             }
 
-            final String semantic =
-                    textNormalizer.normalizeSemantic(
-                            widget.getText());
+            final String semantic = textNormalizer.normalizeSemantic(widget.getText());
 
-            if (semantic == null
-                    || semantic.isEmpty())
+            if (semantic == null || semantic.isEmpty())
             {
                 continue;
             }
 
-            boolean changed =
-                    setFontIdIfChanged(
-                            widget,
-                            state.selectedFontId);
+            boolean changed = setFontIdIfChanged(widget, state.selectedFontId);
 
-            changed |=
-                    setLineHeightIfChanged(
-                            widget,
-                            state.selectedLineHeight);
+            changed |= setLineHeightIfChanged(widget, state.selectedLineHeight);
 
             /*
              * Script 203 uses one textual prefix widget.
              */
-            if (state.scriptId
-                    == FontMeasurementService.CHAT_BODY_SCRIPT
-                    && prefixWidgets.size()
-                    == 1)
+            if (state.scriptId == FontMeasurementService.CHAT_BODY_SCRIPT && prefixWidgets.size() == 1)
             {
-                changed |=
-                        setOriginalWidthIfChanged(
-                                widget,
-                                state.selectedPrefixLayoutWidth);
+                changed |= setOriginalWidthIfChanged(widget, state.selectedPrefixLayoutWidth);
 
                 /*
                  * MeasurementService retains the native prefix for correlation and
@@ -533,111 +423,66 @@ public final class FontLayoutService
                  * This includes Friends Chat icon spacing and the Verdana 13 Bold
                  * malformed-colon replacement.
                  */
-                if (state.selectedRawPrefixText != null
-                        && !state.selectedRawPrefixText.equals(
-                        widget.getText()))
+                if (state.selectedRawPrefixText != null && !state.selectedRawPrefixText.equals(widget.getText()))
                 {
-                    changed |=
-                            setTextIfChanged(
-                                    widget,
-                                    state.selectedRawPrefixText);
+                    changed |= setTextIfChanged(widget, state.selectedRawPrefixText);
                 }
             }
 
             /*
              * Queue channel-title and username Y corrections for finalize.
              */
-            if (state.scriptId
-                    == FontMeasurementService.CHANNEL_BODY_SCRIPT
-                    && state.selectedChannelLayout != null)
+            if (state.scriptId == FontMeasurementService.CHANNEL_BODY_SCRIPT && state.selectedChannelLayout != null)
             {
-                final FontMeasurementService.ChannelPrefixLayout channel =
-                        state.selectedChannelLayout;
+                final FontMeasurementService.ChannelPrefixLayout channel = state.selectedChannelLayout;
 
-                boolean recognizedChannelComponent =
-                        false;
+                boolean recognizedChannelComponent = false;
 
-                if (channel.hasTitle
-                        && semantic.equalsIgnoreCase(
-                        channel.titleText))
+                if (channel.hasTitle && semantic.equalsIgnoreCase(channel.titleText))
                 {
-                    changed |=
-                            setOriginalXIfChanged(
-                                    widget,
-                                    channel.titleX);
+                    changed |= setOriginalXIfChanged(widget, channel.titleX);
 
-                    changed |=
-                            setOriginalWidthIfChanged(
-                                    widget,
-                                    channel.titleWidth);
+                    changed |= setOriginalWidthIfChanged(widget, channel.titleWidth);
 
-                    if (channel.renderedTitleText != null
-                            && !channel.renderedTitleText.isEmpty()
-                            && !channel.renderedTitleText.equals(
-                            widget.getText()))
+                    if (channel.renderedTitleText != null && !channel.renderedTitleText.isEmpty() && !channel.renderedTitleText.equals(widget.getText()))
                     {
-                        changed |=
-                                setTextIfChanged(
-                                        widget,
-                                        channel.renderedTitleText);
+                        changed |= setTextIfChanged(widget, channel.renderedTitleText);
                     }
 
-                    recognizedChannelComponent =
-                            true;
+                    recognizedChannelComponent = true;
 
                     if (fontProfile != null)
                     {
-                        queueTextYOffset(
-                                widget,
-                                fontProfile.getChannelNameYOffset());
+                        queueTextYOffset(widget, fontProfile.getChannelNameYOffset());
                     }
                 }
 
-                if (channel.hasSender
-                        && semantic.equalsIgnoreCase(
-                        channel.senderText))
+                if (channel.hasSender && semantic.equalsIgnoreCase(channel.senderText))
                 {
-                    changed |=
-                            setOriginalXIfChanged(
-                                    widget,
-                                    channel.senderX);
+                    changed |= setOriginalXIfChanged(widget, channel.senderX);
 
-                    changed |=
-                            setOriginalWidthIfChanged(
-                                    widget,
-                                    channel.senderWidth);
+                    changed |= setOriginalWidthIfChanged(widget, channel.senderWidth);
 
                     /*
                      * Apply measured sender markup after correlation, including
                      * icon spacing and the Verdana 13 Bold colon correction.
                      */
-                    if (channel.renderedSenderText != null
-                            && !channel.renderedSenderText.isEmpty()
-                            && !channel.renderedSenderText.equals(
-                            widget.getText()))
+                    if (channel.renderedSenderText != null && !channel.renderedSenderText.isEmpty() && !channel.renderedSenderText.equals(widget.getText()))
                     {
-                        changed |=
-                                setTextIfChanged(
-                                        widget,
-                                        channel.renderedSenderText);
+                        changed |= setTextIfChanged(widget, channel.renderedSenderText);
                     }
 
-                    recognizedChannelComponent =
-                            true;
+                    recognizedChannelComponent = true;
 
                     if (fontProfile != null)
                     {
-                        queueTextYOffset(
-                                widget,
-                                fontProfile.getChannelUsernameYOffset());
+                        queueTextYOffset(widget, fontProfile.getChannelUsernameYOffset());
                     }
                 }
 
-                if (!recognizedChannelComponent
-                        || fontProfile == null)
+                if (!recognizedChannelComponent || fontProfile == null)
                 {
-                    pendingYOffsets.remove(
-                            widget);
+                    pendingYOffsets.remove(widget);
                 }
             }
             else if (state.scriptId
@@ -645,36 +490,26 @@ public final class FontLayoutService
                     && prefixWidgets.size()
                     == 1
                     && fontProfile != null
-                    && isFriendsChatConstruction(
-                    state))
+                    && isFriendsChatConstruction(state))
             {
                 /*
                  * Friends Chat renders the channel name, inline rank icon, and
                  * username inside one prefix widget. They therefore share one
                  * vertical correction.
                  */
-                queueTextYOffset(
-                        widget,
-                        fontProfile.getFriendsChatPrefixYOffset());
+                queueTextYOffset(widget, fontProfile.getFriendsChatPrefixYOffset());
             }
             else
             {
-                pendingYOffsets.remove(
-                        widget);
+                pendingYOffsets.remove(widget);
             }
 
-            if (widget.getOriginalHeight()
-                    < state.selectedLineHeight)
+            if (widget.getOriginalHeight() < state.selectedLineHeight)
             {
-                changed |=
-                        setOriginalHeightIfChanged(
-                                widget,
-                                state.selectedLineHeight);
+                changed |= setOriginalHeightIfChanged(widget, state.selectedLineHeight);
             }
 
-            revalidateWidgetIfChanged(
-                    widget,
-                    changed);
+            revalidateWidgetIfChanged(widget, changed);
         }
     }
 
@@ -683,8 +518,7 @@ public final class FontLayoutService
      *
      *     [Friends Chat name] + optional inline rank + username
      */
-    private boolean isFriendsChatConstruction(
-            FontMeasurementService.ConstructionMeasurement state)
+    private boolean isFriendsChatConstruction(FontMeasurementService.ConstructionMeasurement state)
     {
         if (state == null
                 || state.scriptId
@@ -696,25 +530,16 @@ public final class FontLayoutService
             return false;
         }
 
-        final String semanticPrefix =
-                textNormalizer.normalizeSemantic(
-                        state.rawPrefixComponents.get(
-                                0));
+        final String semanticPrefix = textNormalizer.normalizeSemantic(state.rawPrefixComponents.get(0));
 
-        if (semanticPrefix == null
-                || semanticPrefix.length() < 3
-                || semanticPrefix.charAt(0) != '[')
+        if (semanticPrefix == null || semanticPrefix.length() < 3 || semanticPrefix.charAt(0) != '[')
         {
             return false;
         }
 
-        final int closingBracket =
-                semanticPrefix.indexOf(
-                        ']');
+        final int closingBracket = semanticPrefix.indexOf(']');
 
-        return closingBracket > 0
-                && closingBracket
-                < semanticPrefix.length() - 1;
+        return closingBracket > 0 && closingBracket < semanticPrefix.length() - 1;
     }
 
     private void applyRankIconPresentation(
@@ -722,9 +547,7 @@ public final class FontLayoutService
             Widget rankIconWidget,
             ChatFontProfile fontProfile)
     {
-        if (state == null
-                || rankIconWidget == null
-                || state.selectedChannelLayout == null)
+        if (state == null || rankIconWidget == null || state.selectedChannelLayout == null)
         {
             return;
         }
@@ -733,20 +556,11 @@ public final class FontLayoutService
          * Apply selected rank-icon X, width, and height.
          * Right-side spacing is already included in sender/body geometry.
          */
-        boolean changed =
-                setOriginalXIfChanged(
-                        rankIconWidget,
-                        state.selectedChannelLayout.rankIconX);
+        boolean changed = setOriginalXIfChanged(rankIconWidget, state.selectedChannelLayout.rankIconX);
 
-        changed |=
-                setOriginalWidthIfChanged(
-                        rankIconWidget,
-                        state.selectedChannelLayout.rankIconWidth);
+        changed |= setOriginalWidthIfChanged(rankIconWidget, state.selectedChannelLayout.rankIconWidth);
 
-        changed |=
-                setOriginalHeightIfChanged(
-                        rankIconWidget,
-                        state.selectedChannelLayout.rankIconHeight);
+        changed |= setOriginalHeightIfChanged(rankIconWidget, state.selectedChannelLayout.rankIconHeight);
 
         /*
          * Queue the independent rank-icon Y correction for finalize.
@@ -760,21 +574,16 @@ public final class FontLayoutService
         }
         else
         {
-            pendingYOffsets.remove(
-                    rankIconWidget);
+            pendingYOffsets.remove(rankIconWidget);
         }
 
-        revalidateWidgetIfChanged(
-                rankIconWidget,
-                changed);
+        revalidateWidgetIfChanged(rankIconWidget, changed);
     }
 
     /*
      * Queue text Y correction with a semantic-text identity guard.
      */
-    private void queueTextYOffset(
-            Widget widget,
-            int yOffset)
+    private void queueTextYOffset(Widget widget, int yOffset)
     {
         if (widget == null)
         {
@@ -783,30 +592,21 @@ public final class FontLayoutService
 
         if (yOffset == 0)
         {
-            pendingYOffsets.remove(
-                    widget);
+            pendingYOffsets.remove(widget);
 
             return;
         }
 
-        final String semantic =
-                textNormalizer.normalizeSemantic(
-                        widget.getText());
+        final String semantic = textNormalizer.normalizeSemantic(widget.getText());
 
-        if (semantic == null
-                || semantic.isEmpty())
+        if (semantic == null || semantic.isEmpty())
         {
-            pendingYOffsets.remove(
-                    widget);
+            pendingYOffsets.remove(widget);
 
             return;
         }
 
-        pendingYOffsets.put(
-                widget,
-                PendingYOffset.forText(
-                        semantic,
-                        yOffset));
+        pendingYOffsets.put(widget, PendingYOffset.forText(semantic, yOffset));
     }
 
     /*
@@ -822,20 +622,14 @@ public final class FontLayoutService
             return;
         }
 
-        if (yOffset == 0
-                || expectedSpriteId < 0)
+        if (yOffset == 0 || expectedSpriteId < 0)
         {
-            pendingYOffsets.remove(
-                    widget);
+            pendingYOffsets.remove(widget);
 
             return;
         }
 
-        pendingYOffsets.put(
-                widget,
-                PendingYOffset.forSprite(
-                        expectedSpriteId,
-                        yOffset));
+        pendingYOffsets.put(widget, PendingYOffset.forSprite(expectedSpriteId, yOffset));
     }
 
     /*
@@ -843,27 +637,21 @@ public final class FontLayoutService
      */
     private void applyPendingYOffsetsIfChatFinalize()
     {
-        if (pendingYOffsets.isEmpty()
-                || !isChatFinalizeInvocation())
+        if (pendingYOffsets.isEmpty() || !isChatFinalizeInvocation())
         {
             return;
         }
 
-        for (Widget widget
-                : pendingYOffsets.keySet())
+        for (Widget widget : pendingYOffsets.keySet())
         {
             if (widget == null)
             {
                 continue;
             }
 
-            final PendingYOffset pendingOffset =
-                    pendingYOffsets.get(
-                            widget);
+            final PendingYOffset pendingOffset = pendingYOffsets.get(widget);
 
-            if (pendingOffset == null
-                    || pendingOffset.yOffset == 0
-                    || widget.isHidden())
+            if (pendingOffset == null || pendingOffset.yOffset == 0 || widget.isHidden())
             {
                 continue;
             }
@@ -874,16 +662,12 @@ public final class FontLayoutService
              * Text components must still contain the same semantic text.
              * Separate rank widgets must still contain the same sprite.
              */
-            if (!pendingOffset.matches(
-                    widget,
-                    textNormalizer))
+            if (!pendingOffset.matches(widget, textNormalizer))
             {
                 continue;
             }
 
-            applySynchronizedYOffset(
-                    widget,
-                    pendingOffset.yOffset);
+            applySynchronizedYOffset(widget, pendingOffset.yOffset);
         }
 
         /*
@@ -903,75 +687,51 @@ public final class FontLayoutService
      */
     private boolean isChatFinalizeInvocation()
     {
-        final int[] intStack =
-                client.getIntStack();
+        final int[] intStack = client.getIntStack();
 
-        final int intStackSize =
-                client.getIntStackSize();
+        final int intStackSize = client.getIntStackSize();
 
-        if (intStack == null
-                || intStackSize < 2
-                || intStackSize > intStack.length)
+        if (intStack == null || intStackSize < 2 || intStackSize > intStack.length)
         {
             return false;
         }
 
-        final Widget chatMessageLines =
-                client.getWidget(
-                        InterfaceID.Chatbox.SCROLLAREA);
+        final Widget chatMessageLines = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
 
         if (chatMessageLines == null)
         {
             return false;
         }
 
-        final int parentWidgetId =
-                intStack[intStackSize - 2];
+        final int parentWidgetId = intStack[intStackSize - 2];
 
-        return parentWidgetId
-                == chatMessageLines.getId();
+        return parentWidgetId == chatMessageLines.getId();
     }
 
     /**
      * Applies a vertical offset while keeping OriginalY and RelativeY synchronized.
      */
     @SuppressWarnings("deprecation")
-    void applySynchronizedYOffset(
-            Widget widget,
-            int yOffset)
+    void applySynchronizedYOffset(Widget widget, int yOffset)
     {
-        if (widget == null
-                || yOffset == 0)
+        if (widget == null || yOffset == 0)
         {
             return;
         }
 
-        final int previousOriginalY =
-                widget.getOriginalY();
+        final int previousOriginalY = widget.getOriginalY();
 
-        final int previousRelativeY =
-                widget.getRelativeY();
+        final int previousRelativeY = widget.getRelativeY();
 
-        final int adjustedY =
-                previousOriginalY
-                        + yOffset;
+        final int adjustedY = previousOriginalY + yOffset;
 
-        boolean changed =
-                setOriginalYIfChanged(
-                        widget,
-                        adjustedY);
+        boolean changed = setOriginalYIfChanged(widget, adjustedY);
 
-        changed |=
-                setRelativeYIfChanged(
-                        widget,
-                        adjustedY);
+        changed |= setRelativeYIfChanged(widget, adjustedY);
 
         if (changed)
         {
-            notifyIndexedWidgetGeometryChanged(
-                    widget,
-                    previousOriginalY,
-                    previousRelativeY);
+            notifyIndexedWidgetGeometryChanged(widget, previousOriginalY, previousRelativeY);
         }
     }
 
@@ -983,41 +743,30 @@ public final class FontLayoutService
      */
     public void refreshActiveFontState()
     {
-        final ChatFont configuredFont =
-                config != null
-                        ? config.chatFont()
-                        : null;
+        final ChatFont configuredFont = config != null
+                ? config.chatFont()
+                : null;
 
-        final ChatFont selectedChatFont =
-                configuredFont != null
-                        ? configuredFont
-                        : ChatFont.PLAIN_12;
+        final ChatFont selectedChatFont = configuredFont != null
+                ? configuredFont
+                : ChatFont.PLAIN_12;
 
-        final ChatFontProfile fontProfile =
-                ChatFontRegistry.get(
-                        selectedChatFont);
+        final ChatFontProfile fontProfile = ChatFontRegistry.get(selectedChatFont);
 
         if (fontProfile == null)
         {
-            activeFontState =
-                    null;
+            activeFontState = null;
             return;
         }
 
-        final ActiveFontState current =
-                activeFontState;
+        final ActiveFontState current = activeFontState;
 
-        if (current != null
-                && current.chatFont == selectedChatFont
-                && current.fontProfile == fontProfile)
+        if (current != null && current.chatFont == selectedChatFont && current.fontProfile == fontProfile)
         {
             return;
         }
 
-        activeFontState =
-                new ActiveFontState(
-                        selectedChatFont,
-                        fontProfile);
+        activeFontState = new ActiveFontState(selectedChatFont, fontProfile);
     }
 
     /*
@@ -1046,11 +795,9 @@ public final class FontLayoutService
         return pendingFontProfile;
     }
 
-    void setPendingFontProfileForTesting(
-            ChatFontProfile fontProfile)
+    void setPendingFontProfileForTesting(ChatFontProfile fontProfile)
     {
-        pendingFontProfile =
-                fontProfile;
+        pendingFontProfile = fontProfile;
     }
 
     /*
@@ -1059,330 +806,225 @@ public final class FontLayoutService
      * ================================================================
      */
 
-    boolean setFontIdIfChanged(
-            Widget widget,
-            int fontId)
+    boolean setFontIdIfChanged(Widget widget, int fontId)
     {
-        if (widget == null
-                || widget.getFontId() == fontId)
+        if (widget == null || widget.getFontId() == fontId)
         {
             return false;
         }
 
-        final NativeWidgetState state =
-                nativeState(
-                        widget);
+        final NativeWidgetState state = nativeState(widget);
 
-        final int currentFontId =
-                widget.getFontId();
+        final int currentFontId = widget.getFontId();
 
-        if (!state.fontIdCaptured
-                || currentFontId
-                != state.appliedFontId)
+        if (!state.fontIdCaptured || currentFontId != state.appliedFontId)
         {
-            state.nativeFontId =
-                    currentFontId;
+            state.nativeFontId = currentFontId;
 
-            state.fontIdCaptured =
-                    true;
+            state.fontIdCaptured = true;
         }
 
-        state.appliedFontId =
-                fontId;
+        state.appliedFontId = fontId;
 
-        widget.setFontId(
-                fontId);
+        widget.setFontId(fontId);
 
         recordWidgetMutation();
         return true;
     }
 
-    private boolean setLineHeightIfChanged(
-            Widget widget,
-            int lineHeight)
+    private boolean setLineHeightIfChanged(Widget widget, int lineHeight)
     {
-        if (widget == null
-                || widget.getLineHeight() == lineHeight)
+        if (widget == null || widget.getLineHeight() == lineHeight)
         {
             return false;
         }
 
-        final NativeWidgetState state =
-                nativeState(
-                        widget);
+        final NativeWidgetState state = nativeState(widget);
 
-        final int currentLineHeight =
-                widget.getLineHeight();
+        final int currentLineHeight = widget.getLineHeight();
 
-        if (!state.lineHeightCaptured
-                || currentLineHeight
-                != state.appliedLineHeight)
+        if (!state.lineHeightCaptured || currentLineHeight != state.appliedLineHeight)
         {
-            state.nativeLineHeight =
-                    currentLineHeight;
+            state.nativeLineHeight = currentLineHeight;
 
-            state.lineHeightCaptured =
-                    true;
+            state.lineHeightCaptured = true;
         }
 
-        state.appliedLineHeight =
-                lineHeight;
+        state.appliedLineHeight = lineHeight;
 
-        widget.setLineHeight(
-                lineHeight);
+        widget.setLineHeight(lineHeight);
 
         recordWidgetMutation();
         return true;
     }
 
-    private boolean setTextIfChanged(
-            Widget widget,
-            String text)
+    private boolean setTextIfChanged(Widget widget, String text)
     {
-        if (widget == null
-                || text == null
-                || text.equals(
-                widget.getText()))
+        if (widget == null || text == null || text.equals(widget.getText()))
         {
             return false;
         }
 
-        final NativeWidgetState state =
-                nativeState(
-                        widget);
+        final NativeWidgetState state = nativeState(widget);
 
-        final String currentText =
-                widget.getText();
+        final String currentText = widget.getText();
 
-        if (!state.textCaptured
-                || !sameText(
-                currentText,
-                state.appliedText))
+        if (!state.textCaptured || !sameText(currentText, state.appliedText))
         {
-            state.nativeText =
-                    currentText;
+            state.nativeText = currentText;
 
-            state.textCaptured =
-                    true;
+            state.textCaptured = true;
         }
 
-        state.appliedText =
-                text;
+        state.appliedText = text;
 
-        widget.setText(
-                text);
+        widget.setText(text);
 
         recordWidgetMutation();
         return true;
     }
 
-    private boolean setOriginalXIfChanged(
-            Widget widget,
-            int originalX)
+    private boolean setOriginalXIfChanged(Widget widget, int originalX)
     {
-        if (widget == null
-                || widget.getOriginalX() == originalX)
+        if (widget == null || widget.getOriginalX() == originalX)
         {
             return false;
         }
 
-        final NativeWidgetState state =
-                nativeState(
-                        widget);
+        final NativeWidgetState state = nativeState(widget);
 
-        final int currentOriginalX =
-                widget.getOriginalX();
+        final int currentOriginalX = widget.getOriginalX();
 
-        if (!state.originalXCaptured
-                || currentOriginalX
-                != state.appliedOriginalX)
+        if (!state.originalXCaptured || currentOriginalX != state.appliedOriginalX)
         {
-            state.nativeOriginalX =
-                    currentOriginalX;
+            state.nativeOriginalX = currentOriginalX;
 
-            state.originalXCaptured =
-                    true;
+            state.originalXCaptured = true;
         }
 
-        state.appliedOriginalX =
-                originalX;
+        state.appliedOriginalX = originalX;
 
-        widget.setOriginalX(
-                originalX);
+        widget.setOriginalX(originalX);
 
         recordWidgetMutation();
         return true;
     }
 
-    private boolean setOriginalYIfChanged(
-            Widget widget,
-            int originalY)
+    private boolean setOriginalYIfChanged(Widget widget, int originalY)
     {
-        if (widget == null
-                || widget.getOriginalY() == originalY)
+        if (widget == null || widget.getOriginalY() == originalY)
         {
             return false;
         }
 
-        final NativeWidgetState state =
-                nativeState(
-                        widget);
+        final NativeWidgetState state = nativeState(widget);
 
-        final int currentOriginalY =
-                widget.getOriginalY();
+        final int currentOriginalY = widget.getOriginalY();
 
-        if (!state.originalYCaptured
-                || currentOriginalY
-                != state.appliedOriginalY)
+        if (!state.originalYCaptured || currentOriginalY != state.appliedOriginalY)
         {
-            state.nativeOriginalY =
-                    currentOriginalY;
+            state.nativeOriginalY = currentOriginalY;
 
-            state.originalYCaptured =
-                    true;
+            state.originalYCaptured = true;
         }
 
-        state.appliedOriginalY =
-                originalY;
+        state.appliedOriginalY = originalY;
 
-        widget.setOriginalY(
-                originalY);
+        widget.setOriginalY(originalY);
 
         recordWidgetMutation();
         return true;
     }
 
     @SuppressWarnings("deprecation")
-    private boolean setRelativeYIfChanged(
-            Widget widget,
-            int relativeY)
+    private boolean setRelativeYIfChanged(Widget widget, int relativeY)
     {
-        if (widget == null
-                || widget.getRelativeY() == relativeY)
+        if (widget == null || widget.getRelativeY() == relativeY)
         {
             return false;
         }
 
-        final NativeWidgetState state =
-                nativeState(
-                        widget);
+        final NativeWidgetState state = nativeState(widget);
 
-        final int currentRelativeY =
-                widget.getRelativeY();
+        final int currentRelativeY = widget.getRelativeY();
 
-        if (!state.relativeYCaptured
-                || currentRelativeY
-                != state.appliedRelativeY)
+        if (!state.relativeYCaptured || currentRelativeY != state.appliedRelativeY)
         {
-            state.nativeRelativeY =
-                    currentRelativeY;
+            state.nativeRelativeY = currentRelativeY;
 
-            state.relativeYCaptured =
-                    true;
+            state.relativeYCaptured = true;
         }
 
-        state.appliedRelativeY =
-                relativeY;
+        state.appliedRelativeY = relativeY;
 
-        widget.setRelativeY(
-                relativeY);
+        widget.setRelativeY(relativeY);
 
         recordWidgetMutation();
         return true;
     }
 
-    boolean setOriginalWidthIfChanged(
-            Widget widget,
-            int originalWidth)
+    boolean setOriginalWidthIfChanged(Widget widget, int originalWidth)
     {
-        if (widget == null
-                || widget.getOriginalWidth() == originalWidth)
+        if (widget == null || widget.getOriginalWidth() == originalWidth)
         {
             return false;
         }
 
-        final NativeWidgetState state =
-                nativeState(
-                        widget);
+        final NativeWidgetState state = nativeState(widget);
 
-        final int currentOriginalWidth =
-                widget.getOriginalWidth();
+        final int currentOriginalWidth = widget.getOriginalWidth();
 
-        if (!state.originalWidthCaptured
-                || currentOriginalWidth
-                != state.appliedOriginalWidth)
+        if (!state.originalWidthCaptured || currentOriginalWidth != state.appliedOriginalWidth)
         {
-            state.nativeOriginalWidth =
-                    currentOriginalWidth;
+            state.nativeOriginalWidth = currentOriginalWidth;
 
-            state.originalWidthCaptured =
-                    true;
+            state.originalWidthCaptured = true;
         }
 
-        state.appliedOriginalWidth =
-                originalWidth;
+        state.appliedOriginalWidth = originalWidth;
 
-        widget.setOriginalWidth(
-                originalWidth);
+        widget.setOriginalWidth(originalWidth);
 
         recordWidgetMutation();
         return true;
     }
 
-    private boolean setOriginalHeightIfChanged(
-            Widget widget,
-            int originalHeight)
+    private boolean setOriginalHeightIfChanged(Widget widget, int originalHeight)
     {
-        if (widget == null
-                || widget.getOriginalHeight() == originalHeight)
+        if (widget == null || widget.getOriginalHeight() == originalHeight)
         {
             return false;
         }
 
-        final NativeWidgetState state =
-                nativeState(
-                        widget);
+        final NativeWidgetState state = nativeState(widget);
 
-        final int currentOriginalHeight =
-                widget.getOriginalHeight();
+        final int currentOriginalHeight = widget.getOriginalHeight();
 
-        if (!state.originalHeightCaptured
-                || currentOriginalHeight
-                != state.appliedOriginalHeight)
+        if (!state.originalHeightCaptured || currentOriginalHeight != state.appliedOriginalHeight)
         {
-            state.nativeOriginalHeight =
-                    currentOriginalHeight;
+            state.nativeOriginalHeight = currentOriginalHeight;
 
-            state.originalHeightCaptured =
-                    true;
+            state.originalHeightCaptured = true;
         }
 
-        state.appliedOriginalHeight =
-                originalHeight;
+        state.appliedOriginalHeight = originalHeight;
 
-        widget.setOriginalHeight(
-                originalHeight);
+        widget.setOriginalHeight(originalHeight);
 
         recordWidgetMutation();
         return true;
     }
 
-    private NativeWidgetState nativeState(
-            Widget widget)
+    private NativeWidgetState nativeState(Widget widget)
     {
-        return nativeWidgetStates.computeIfAbsent(
-                widget,
-                ignored -> new NativeWidgetState());
+        return nativeWidgetStates.computeIfAbsent(widget, ignored -> new NativeWidgetState());
     }
 
-    private boolean sameText(
-            String left,
-            String right)
+    private boolean sameText(String left, String right)
     {
         return left == null
                 ? right == null
-                : left.equals(
-                right);
+                : left.equals(right);
     }
 
     private void recordWidgetMutation()
@@ -1393,12 +1035,9 @@ public final class FontLayoutService
         }
     }
 
-    void revalidateWidgetIfChanged(
-            Widget widget,
-            boolean changed)
+    void revalidateWidgetIfChanged(Widget widget, boolean changed)
     {
-        if (widget == null
-                || !changed)
+        if (widget == null || !changed)
         {
             return;
         }
@@ -1417,32 +1056,22 @@ public final class FontLayoutService
      * ================================================================
      */
 
-    List<Widget> collectRow(
-            Widget lineWidget,
-            Surface surface)
+    List<Widget> collectRow(Widget lineWidget, Surface surface)
     {
-        if (lineWidget == null
-                || surface == null)
+        if (lineWidget == null || surface == null)
         {
             return Collections.emptyList();
         }
 
         final RowCorrelationIndex rowIndex =
-                rowIndexes.computeIfAbsent(
-                        surface,
-                        key -> new RowCorrelationIndex(
-                                client,
-                                key,
-                                performanceMetrics));
+                rowIndexes.computeIfAbsent(surface, key ->
+                        new RowCorrelationIndex(client, key, performanceMetrics));
 
-        final List<Widget> result =
-                rowIndex.findRow(
-                        lineWidget);
+        final List<Widget> result = rowIndex.findRow(lineWidget);
 
         if (performanceMetrics != null)
         {
-            performanceMetrics.recordRowSearches(
-                    result.size());
+            performanceMetrics.recordRowSearches(result.size());
         }
 
         return result;
@@ -1453,22 +1082,16 @@ public final class FontLayoutService
             Widget root,
             Widget widget)
     {
-        if (surface == null
-                || root == null
-                || widget == null)
+        if (surface == null || root == null || widget == null)
         {
             return;
         }
 
-        final RowCorrelationIndex rowIndex =
-                rowIndexes.get(
-                        surface);
+        final RowCorrelationIndex rowIndex = rowIndexes.get(surface);
 
         if (rowIndex != null)
         {
-            rowIndex.observeSurfaceWidget(
-                    root,
-                    widget);
+            rowIndex.observeSurfaceWidget(root, widget);
         }
     }
 
@@ -1477,8 +1100,7 @@ public final class FontLayoutService
             int previousOriginalY,
             int previousRelativeY)
     {
-        if (widget == null
-                || rowIndexes.isEmpty())
+        if (widget == null || rowIndexes.isEmpty())
         {
             return;
         }
@@ -1495,12 +1117,9 @@ public final class FontLayoutService
         }
     }
 
-    private boolean containsIdentity(
-            List<Widget> widgets,
-            Widget target)
+    private boolean containsIdentity(List<Widget> widgets, Widget target)
     {
-        if (widgets == null
-                || target == null)
+        if (widgets == null || target == null)
         {
             return false;
         }
@@ -1516,25 +1135,18 @@ public final class FontLayoutService
         return false;
     }
 
-    private void removeIdentity(
-            List<Widget> widgets,
-            Widget target)
+    private void removeIdentity(List<Widget> widgets, Widget target)
     {
-        if (widgets == null
-                || target == null)
+        if (widgets == null || target == null)
         {
             return;
         }
 
-        for (int i = widgets.size() - 1;
-             i >= 0;
-             i--)
+        for (int i = widgets.size() - 1; i >= 0; i--)
         {
-            if (widgets.get(
-                    i) == target)
+            if (widgets.get(i) == target)
             {
-                widgets.remove(
-                        i);
+                widgets.remove(i);
             }
         }
     }
@@ -1544,40 +1156,30 @@ public final class FontLayoutService
             String targetText,
             Widget excludedWidget)
     {
-        if (rowWidgets == null
-                || rowWidgets.isEmpty()
-                || targetText == null)
+        if (rowWidgets == null || rowWidgets.isEmpty() || targetText == null)
         {
             return null;
         }
 
-        Widget match =
-                null;
+        Widget match = null;
 
-        int matches =
-                0;
+        int matches = 0;
 
         for (Widget widget : rowWidgets)
         {
-            if (widget == null
-                    || widget == excludedWidget)
+            if (widget == null || widget == excludedWidget)
             {
                 continue;
             }
 
-            final String semantic =
-                    textNormalizer.normalizeSemantic(
-                            widget.getText());
+            final String semantic = textNormalizer.normalizeSemantic(widget.getText());
 
-            if (semantic == null
-                    || !semantic.equalsIgnoreCase(
-                    targetText))
+            if (semantic == null || !semantic.equalsIgnoreCase(targetText))
             {
                 continue;
             }
 
-            match =
-                    widget;
+            match = widget;
 
             matches++;
 
@@ -1605,10 +1207,7 @@ public final class FontLayoutService
             List<Widget> rowWidgets,
             FallbackCorrelationContext fallbackContext)
     {
-        if (targetText == null
-                || lineWidget == null
-                || surface == null
-                || fallbackContext == null)
+        if (targetText == null || lineWidget == null || surface == null || fallbackContext == null)
         {
             return null;
         }
@@ -1624,9 +1223,7 @@ public final class FontLayoutService
             return rowMatch;
         }
 
-        final List<Widget> matches =
-                fallbackContext.findMatches(
-                        targetText);
+        final List<Widget> matches = fallbackContext.findMatches(targetText);
 
         if (matches.isEmpty())
         {
@@ -1640,10 +1237,7 @@ public final class FontLayoutService
          */
         for (Widget widget : matches)
         {
-            if (widget.getOriginalY()
-                    == lineWidget.getOriginalY()
-                    && widget.getRelativeY()
-                    == lineWidget.getRelativeY())
+            if (widget.getOriginalY() == lineWidget.getOriginalY() && widget.getRelativeY() == lineWidget.getRelativeY())
             {
                 return widget;
             }
@@ -1654,19 +1248,15 @@ public final class FontLayoutService
          *
          * unique OriginalY.
          */
-        Widget originalYMatch =
-                null;
+        Widget originalYMatch = null;
 
-        int originalYMatches =
-                0;
+        int originalYMatches = 0;
 
         for (Widget widget : matches)
         {
-            if (widget.getOriginalY()
-                    == lineWidget.getOriginalY())
+            if (widget.getOriginalY() == lineWidget.getOriginalY())
             {
-                originalYMatch =
-                        widget;
+                originalYMatch = widget;
 
                 originalYMatches++;
             }
@@ -1682,19 +1272,15 @@ public final class FontLayoutService
          *
          * unique RelativeY.
          */
-        Widget relativeYMatch =
-                null;
+        Widget relativeYMatch = null;
 
-        int relativeYMatches =
-                0;
+        int relativeYMatches = 0;
 
         for (Widget widget : matches)
         {
-            if (widget.getRelativeY()
-                    == lineWidget.getRelativeY())
+            if (widget.getRelativeY() == lineWidget.getRelativeY())
             {
-                relativeYMatch =
-                        widget;
+                relativeYMatch = widget;
 
                 relativeYMatches++;
             }
@@ -1739,77 +1325,54 @@ public final class FontLayoutService
             return Collections.emptyList();
         }
 
-        final List<Widget> result =
-                new ArrayList<>();
+        final List<Widget> result = new ArrayList<>();
 
         for (String rawPrefix : rawPrefixComponents)
         {
-            final String targetText =
-                    textNormalizer.normalizeSemantic(
-                            rawPrefix);
+            final String targetText = textNormalizer.normalizeSemantic(rawPrefix);
 
-            if (targetText == null
-                    || targetText.isEmpty())
+            if (targetText == null || targetText.isEmpty())
             {
                 continue;
             }
 
-            final Widget rowMatch =
-                    matchRow(
-                            rowWidgets,
-                            targetText,
-                            bodyWidget);
+            final Widget rowMatch = matchRow(rowWidgets, targetText, bodyWidget);
 
-            if (rowMatch != null
-                    && !containsIdentity(
-                    result,
-                    rowMatch))
+            if (rowMatch != null && !containsIdentity(result, rowMatch))
             {
-                result.add(
-                        rowMatch);
+                result.add(rowMatch);
 
                 continue;
             }
 
-            final List<Widget> matches =
-                    fallbackContext.findMatches(
-                            targetText);
+            final List<Widget> matches = fallbackContext.findMatches(targetText);
 
             if (matches.isEmpty())
             {
                 continue;
             }
 
-            Widget selected =
-                    null;
+            Widget selected = null;
 
             /*
              * Prefer the exact body row.
              */
             for (Widget candidate : matches)
             {
-                if (candidate == bodyWidget
-                        || containsIdentity(
-                        result,
-                        candidate))
+                if (candidate == bodyWidget || containsIdentity(result, candidate))
                 {
                     continue;
                 }
 
-                if (candidate.getOriginalY()
-                        == bodyWidget.getOriginalY()
-                        && candidate.getRelativeY()
-                        == bodyWidget.getRelativeY())
+                if (candidate.getOriginalY() == bodyWidget.getOriginalY() && candidate.getRelativeY() == bodyWidget.getRelativeY())
                 {
                     if (selected != null)
                     {
-                        selected =
-                                null;
+                        selected = null;
                         break;
                     }
 
-                    selected =
-                            candidate;
+                    selected = candidate;
                 }
             }
 
@@ -1818,24 +1381,18 @@ public final class FontLayoutService
                 /*
                  * Then prefer a unique OriginalY match.
                  */
-                int originalYMatches =
-                        0;
+                int originalYMatches = 0;
 
                 for (Widget candidate : matches)
                 {
-                    if (candidate == bodyWidget
-                            || containsIdentity(
-                            result,
-                            candidate))
+                    if (candidate == bodyWidget || containsIdentity(result, candidate))
                     {
                         continue;
                     }
 
-                    if (candidate.getOriginalY()
-                            == bodyWidget.getOriginalY())
+                    if (candidate.getOriginalY() == bodyWidget.getOriginalY())
                     {
-                        selected =
-                                candidate;
+                        selected = candidate;
 
                         originalYMatches++;
                     }
@@ -1843,8 +1400,7 @@ public final class FontLayoutService
 
                 if (originalYMatches != 1)
                 {
-                    selected =
-                            null;
+                    selected = null;
                 }
             }
 
@@ -1853,24 +1409,18 @@ public final class FontLayoutService
                 /*
                  * Then prefer a unique RelativeY match.
                  */
-                int relativeYMatches =
-                        0;
+                int relativeYMatches = 0;
 
                 for (Widget candidate : matches)
                 {
-                    if (candidate == bodyWidget
-                            || containsIdentity(
-                            result,
-                            candidate))
+                    if (candidate == bodyWidget || containsIdentity(result, candidate))
                     {
                         continue;
                     }
 
-                    if (candidate.getRelativeY()
-                            == bodyWidget.getRelativeY())
+                    if (candidate.getRelativeY() == bodyWidget.getRelativeY())
                     {
-                        selected =
-                                candidate;
+                        selected = candidate;
 
                         relativeYMatches++;
                     }
@@ -1878,8 +1428,7 @@ public final class FontLayoutService
 
                 if (relativeYMatches != 1)
                 {
-                    selected =
-                            null;
+                    selected = null;
                 }
             }
 
@@ -1890,42 +1439,31 @@ public final class FontLayoutService
                  *
                  * exactly one remaining semantic match.
                  */
-                Widget onlyRemaining =
-                        null;
+                Widget onlyRemaining = null;
 
-                int remaining =
-                        0;
+                int remaining = 0;
 
                 for (Widget candidate : matches)
                 {
-                    if (candidate == bodyWidget
-                            || containsIdentity(
-                            result,
-                            candidate))
+                    if (candidate == bodyWidget || containsIdentity(result, candidate))
                     {
                         continue;
                     }
 
-                    onlyRemaining =
-                            candidate;
+                    onlyRemaining = candidate;
 
                     remaining++;
                 }
 
                 if (remaining == 1)
                 {
-                    selected =
-                            onlyRemaining;
+                    selected = onlyRemaining;
                 }
             }
 
-            if (selected != null
-                    && !containsIdentity(
-                    result,
-                    selected))
+            if (selected != null && !containsIdentity(result, selected))
             {
-                result.add(
-                        selected);
+                result.add(selected);
             }
         }
 
@@ -1943,9 +1481,7 @@ public final class FontLayoutService
             Widget rowAnchor,
             List<Widget> rowWidgets)
     {
-        if (nativeLayout == null
-                || rowAnchor == null
-                || nativeLayout.rankIconSpriteId < 0)
+        if (nativeLayout == null || rowAnchor == null || nativeLayout.rankIconSpriteId < 0)
         {
             return null;
         }
@@ -1973,9 +1509,7 @@ public final class FontLayoutService
             return rowMatch;
         }
 
-        final Widget root =
-                client.getWidget(
-                        InterfaceID.Chatbox.SCROLLAREA);
+        final Widget root = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
 
         if (root == null)
         {
@@ -2007,10 +1541,7 @@ public final class FontLayoutService
                 performanceMetrics.recordRankShallowRecovery();
             }
 
-            observeWidgetFromSurfaceScan(
-                    Surface.CHATBOX,
-                    root,
-                    shallowMatch);
+            observeWidgetFromSurfaceScan(Surface.CHATBOX, root, shallowMatch);
 
             return shallowMatch;
         }
@@ -2038,9 +1569,7 @@ public final class FontLayoutService
             if (fallbackMatch != null)
             {
                 performanceMetrics.recordRankFallbackHit();
-            }
-            else
-            {
+            } else {
                 performanceMetrics.recordRankFallbackMiss();
             }
         }
@@ -2050,10 +1579,7 @@ public final class FontLayoutService
          */
         if (fallbackMatch != null)
         {
-            observeWidgetFromSurfaceScan(
-                    Surface.CHATBOX,
-                    root,
-                    fallbackMatch);
+            observeWidgetFromSurfaceScan(Surface.CHATBOX, root, fallbackMatch);
         }
 
         return fallbackMatch;
@@ -2064,14 +1590,11 @@ public final class FontLayoutService
             Widget rowAnchor,
             List<Widget> rowWidgets)
     {
-        boolean spriteMatched =
-                false;
+        boolean spriteMatched = false;
 
-        boolean xMatched =
-                false;
+        boolean xMatched = false;
 
-        if (rowWidgets == null
-                || rowWidgets.isEmpty())
+        if (rowWidgets == null || rowWidgets.isEmpty())
         {
             if (performanceMetrics != null)
             {
@@ -2090,32 +1613,24 @@ public final class FontLayoutService
 
             if (performanceMetrics != null)
             {
-                performanceMetrics.recordRankNodesExamined(
-                        1);
+                performanceMetrics.recordRankNodesExamined(1);
             }
 
-            if (widget.getSpriteId()
-                    != nativeLayout.rankIconSpriteId)
+            if (widget.getSpriteId() != nativeLayout.rankIconSpriteId)
             {
                 continue;
             }
 
-            spriteMatched =
-                    true;
+            spriteMatched = true;
 
-            if (widget.getOriginalX()
-                    != nativeLayout.rankIconX)
+            if (widget.getOriginalX() != nativeLayout.rankIconX)
             {
                 continue;
             }
 
-            xMatched =
-                    true;
+            xMatched = true;
 
-            if (widget.getOriginalY()
-                    != rowAnchor.getOriginalY()
-                    && widget.getRelativeY()
-                    != rowAnchor.getRelativeY())
+            if (widget.getOriginalY() != rowAnchor.getOriginalY() && widget.getRelativeY() != rowAnchor.getRelativeY())
             {
                 continue;
             }
@@ -2128,13 +1643,9 @@ public final class FontLayoutService
             if (!spriteMatched)
             {
                 performanceMetrics.recordRankRowNoSprite();
-            }
-            else if (!xMatched)
-            {
+            } else if (!xMatched) {
                 performanceMetrics.recordRankRowXMismatch();
-            }
-            else
-            {
+            } else {
                 performanceMetrics.recordRankRowYMismatch();
             }
         }
@@ -2246,18 +1757,10 @@ public final class FontLayoutService
 
         if (performanceMetrics != null)
         {
-            performanceMetrics.recordRankNodesExamined(
-                    1);
+            performanceMetrics.recordRankNodesExamined(1);
         }
 
-        return widget.getSpriteId()
-                == spriteId
-                && widget.getOriginalX()
-                == originalX
-                && (widget.getOriginalY()
-                == originalY
-                || widget.getRelativeY()
-                == relativeY)
+        return widget.getSpriteId() == spriteId && widget.getOriginalX() == originalX && (widget.getOriginalY() == originalY || widget.getRelativeY() == relativeY)
                 ? widget
                 : null;
     }
@@ -2283,16 +1786,12 @@ public final class FontLayoutService
                 == spriteId
                 && widget.getOriginalX()
                 == originalX
-                && (widget.getOriginalY()
-                == originalY
-                || widget.getRelativeY()
-                == relativeY))
+                && (widget.getOriginalY() == originalY || widget.getRelativeY() == relativeY))
         {
             return widget;
         }
 
-        final Widget[] dynamicChildren =
-                widget.getDynamicChildren();
+        final Widget[] dynamicChildren = widget.getDynamicChildren();
 
         if (dynamicChildren != null)
         {
@@ -2313,8 +1812,7 @@ public final class FontLayoutService
             }
         }
 
-        final Widget[] staticChildren =
-                widget.getStaticChildren();
+        final Widget[] staticChildren = widget.getStaticChildren();
 
         if (staticChildren != null)
         {
@@ -2335,8 +1833,7 @@ public final class FontLayoutService
             }
         }
 
-        final Widget[] nestedChildren =
-                widget.getNestedChildren();
+        final Widget[] nestedChildren = widget.getNestedChildren();
 
         if (nestedChildren != null)
         {
@@ -2372,19 +1869,14 @@ public final class FontLayoutService
 
         private Map<String, List<Widget>> widgetsBySemantic;
 
-        FallbackCorrelationContext(
-                Surface surface)
+        FallbackCorrelationContext(Surface surface)
         {
-            this.surface =
-                    surface;
+            this.surface = surface;
         }
 
-        List<Widget> findMatches(
-                String targetText)
+        List<Widget> findMatches(String targetText)
         {
-            if (targetText == null
-                    || targetText.isEmpty()
-                    || surface == null)
+            if (targetText == null || targetText.isEmpty() || surface == null)
             {
                 return Collections.emptyList();
             }
@@ -2408,10 +1900,7 @@ public final class FontLayoutService
                 performanceMetrics.recordFallbackReuse();
             }
 
-            final List<Widget> matches =
-                    widgetsBySemantic.get(
-                            semanticKey(
-                                    targetText));
+            final List<Widget> matches = widgetsBySemantic.get(semanticKey(targetText));
 
             return matches != null
                     ? matches
@@ -2420,16 +1909,11 @@ public final class FontLayoutService
 
         private void buildIndex()
         {
-            widgetsBySemantic =
-                    new HashMap<>();
+            widgetsBySemantic = new HashMap<>();
 
-            final Widget root =
-                    surface == Surface.SPLIT_PRIVATE
-                            ? client.getWidget(
-                            InterfaceID.PM_CHAT,
-                            0)
-                            : client.getWidget(
-                            InterfaceID.Chatbox.SCROLLAREA);
+            final Widget root = surface == Surface.SPLIT_PRIVATE
+                    ? client.getWidget(InterfaceID.PM_CHAT, 0)
+                    : client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
 
             if (root == null)
             {
@@ -2441,26 +1925,16 @@ public final class FontLayoutService
                 performanceMetrics.recordSurfaceSearch();
             }
 
-            indexWidget(
-                    root,
-                    root);
+            indexWidget(root, root);
 
-            indexWidgets(
-                    root,
-                    root.getDynamicChildren());
+            indexWidgets(root, root.getDynamicChildren());
 
-            indexWidgets(
-                    root,
-                    root.getStaticChildren());
+            indexWidgets(root, root.getStaticChildren());
 
-            indexWidgets(
-                    root,
-                    root.getNestedChildren());
+            indexWidgets(root, root.getNestedChildren());
         }
 
-        private void indexWidgets(
-                Widget root,
-                Widget[] widgets)
+        private void indexWidgets(Widget root, Widget[] widgets)
         {
             if (widgets == null)
             {
@@ -2469,15 +1943,11 @@ public final class FontLayoutService
 
             for (Widget widget : widgets)
             {
-                indexWidget(
-                        root,
-                        widget);
+                indexWidget(root, widget);
             }
         }
 
-        private void indexWidget(
-                Widget root,
-                Widget widget)
+        private void indexWidget(Widget root, Widget widget)
         {
             if (widget == null)
             {
@@ -2486,8 +1956,7 @@ public final class FontLayoutService
 
             if (performanceMetrics != null)
             {
-                performanceMetrics.recordWidgetsExamined(
-                        1);
+                performanceMetrics.recordWidgetsExamined(1);
             }
 
             /*
@@ -2495,35 +1964,23 @@ public final class FontLayoutService
              * Teach the persistent row index about every widget encountered,
              * including textless sprite widgets such as channel rank icons.
              */
-            observeWidgetFromSurfaceScan(
-                    surface,
-                    root,
-                    widget);
+            observeWidgetFromSurfaceScan(surface, root, widget);
 
-            final String semantic =
-                    textNormalizer.normalizeSemantic(
-                            widget.getText());
+            final String semantic = textNormalizer.normalizeSemantic(widget.getText());
 
-            if (semantic == null
-                    || semantic.isEmpty())
+            if (semantic == null || semantic.isEmpty())
             {
                 return;
             }
 
             widgetsBySemantic
-                    .computeIfAbsent(
-                            semanticKey(
-                                    semantic),
-                            ignored -> new ArrayList<>())
-                    .add(
-                            widget);
+                    .computeIfAbsent(semanticKey(semantic), ignored -> new ArrayList<>())
+                    .add(widget);
         }
 
-        private String semanticKey(
-                String text)
+        private String semanticKey(String text)
         {
-            return text.toLowerCase(
-                    Locale.ROOT);
+            return text.toLowerCase(Locale.ROOT);
         }
     }
 
@@ -2533,24 +1990,16 @@ public final class FontLayoutService
      * ================================================================
      */
 
-    private Surface determineSurface(
-            int scriptId,
-            int parentWidgetId)
+    private Surface determineSurface(int scriptId, int parentWidgetId)
     {
-        if (scriptId
-                != FontMeasurementService.CHAT_BODY_SCRIPT)
+        if (scriptId != FontMeasurementService.CHAT_BODY_SCRIPT)
         {
             return Surface.CHATBOX;
         }
 
-        final Widget splitPrivate =
-                client.getWidget(
-                        InterfaceID.PM_CHAT,
-                        0);
+        final Widget splitPrivate = client.getWidget(InterfaceID.PM_CHAT, 0);
 
-        if (splitPrivate != null
-                && parentWidgetId
-                == splitPrivate.getId())
+        if (splitPrivate != null && parentWidgetId == splitPrivate.getId())
         {
             return Surface.SPLIT_PRIVATE;
         }
@@ -2572,105 +2021,62 @@ public final class FontLayoutService
             return;
         }
 
-        for (Map.Entry<Widget, NativeWidgetState> entry
-                : nativeWidgetStates.entrySet())
+        for (Map.Entry<Widget, NativeWidgetState> entry : nativeWidgetStates.entrySet())
         {
-            final Widget widget =
-                    entry.getKey();
+            final Widget widget = entry.getKey();
 
-            final NativeWidgetState state =
-                    entry.getValue();
+            final NativeWidgetState state = entry.getValue();
 
-            if (widget == null
-                    || state == null)
+            if (widget == null || state == null)
             {
                 continue;
             }
 
-            boolean changed =
-                    false;
+            boolean changed = false;
 
             /*
              * Restore a field only when it still equals Chat XL's last-applied value.
              */
-            if (state.fontIdCaptured
-                    && widget.getFontId()
-                    == state.appliedFontId
-                    && widget.getFontId()
-                    != state.nativeFontId)
+            if (state.fontIdCaptured && widget.getFontId() == state.appliedFontId && widget.getFontId() != state.nativeFontId)
             {
-                widget.setFontId(
-                        state.nativeFontId);
+                widget.setFontId(state.nativeFontId);
 
-                changed =
-                        true;
+                changed = true;
             }
 
-            if (state.lineHeightCaptured
-                    && widget.getLineHeight()
-                    == state.appliedLineHeight
-                    && widget.getLineHeight()
-                    != state.nativeLineHeight)
+            if (state.lineHeightCaptured && widget.getLineHeight() == state.appliedLineHeight && widget.getLineHeight() != state.nativeLineHeight)
             {
-                widget.setLineHeight(
-                        state.nativeLineHeight);
+                widget.setLineHeight(state.nativeLineHeight);
 
-                changed =
-                        true;
+                changed = true;
             }
 
-            if (state.textCaptured
-                    && sameText(
-                    widget.getText(),
-                    state.appliedText)
-                    && !sameText(
-                    widget.getText(),
-                    state.nativeText))
+            if (state.textCaptured && sameText(widget.getText(), state.appliedText) && !sameText(widget.getText(), state.nativeText))
             {
-                widget.setText(
-                        state.nativeText);
+                widget.setText(state.nativeText);
 
-                changed =
-                        true;
+                changed = true;
             }
 
-            if (state.originalXCaptured
-                    && widget.getOriginalX()
-                    == state.appliedOriginalX
-                    && widget.getOriginalX()
-                    != state.nativeOriginalX)
+            if (state.originalXCaptured && widget.getOriginalX() == state.appliedOriginalX && widget.getOriginalX() != state.nativeOriginalX)
             {
-                widget.setOriginalX(
-                        state.nativeOriginalX);
+                widget.setOriginalX(state.nativeOriginalX);
 
-                changed =
-                        true;
+                changed = true;
             }
 
-            if (state.originalYCaptured
-                    && widget.getOriginalY()
-                    == state.appliedOriginalY
-                    && widget.getOriginalY()
-                    != state.nativeOriginalY)
+            if (state.originalYCaptured && widget.getOriginalY() == state.appliedOriginalY && widget.getOriginalY() != state.nativeOriginalY)
             {
-                widget.setOriginalY(
-                        state.nativeOriginalY);
+                widget.setOriginalY(state.nativeOriginalY);
 
-                changed =
-                        true;
+                changed = true;
             }
 
-            if (state.relativeYCaptured
-                    && widget.getRelativeY()
-                    == state.appliedRelativeY
-                    && widget.getRelativeY()
-                    != state.nativeRelativeY)
+            if (state.relativeYCaptured && widget.getRelativeY() == state.appliedRelativeY && widget.getRelativeY() != state.nativeRelativeY)
             {
-                widget.setRelativeY(
-                        state.nativeRelativeY);
+                widget.setRelativeY(state.nativeRelativeY);
 
-                changed =
-                        true;
+                changed = true;
             }
 
             if (state.originalWidthCaptured
@@ -2679,11 +2085,9 @@ public final class FontLayoutService
                     && widget.getOriginalWidth()
                     != state.nativeOriginalWidth)
             {
-                widget.setOriginalWidth(
-                        state.nativeOriginalWidth);
+                widget.setOriginalWidth(state.nativeOriginalWidth);
 
-                changed =
-                        true;
+                changed = true;
             }
 
             if (state.originalHeightCaptured
@@ -2692,11 +2096,9 @@ public final class FontLayoutService
                     && widget.getOriginalHeight()
                     != state.nativeOriginalHeight)
             {
-                widget.setOriginalHeight(
-                        state.nativeOriginalHeight);
+                widget.setOriginalHeight(state.nativeOriginalHeight);
 
-                changed =
-                        true;
+                changed = true;
             }
 
             if (changed)
@@ -2710,11 +2112,9 @@ public final class FontLayoutService
 
     public void reset()
     {
-        pending =
-                null;
+        pending = null;
 
-        pendingFontProfile =
-                null;
+        pendingFontProfile = null;
 
         pendingYOffsets.clear();
 
@@ -2769,15 +2169,11 @@ public final class FontLayoutService
 
         private final ChatFontProfile fontProfile;
 
-        private ActiveFontState(
-                ChatFont chatFont,
-                ChatFontProfile fontProfile)
+        private ActiveFontState(ChatFont chatFont, ChatFontProfile fontProfile)
         {
-            this.chatFont =
-                    chatFont;
+            this.chatFont = chatFont;
 
-            this.fontProfile =
-                    fontProfile;
+            this.fontProfile = fontProfile;
         }
     }
 
@@ -2802,39 +2198,24 @@ public final class FontLayoutService
                 int expectedSpriteId,
                 int yOffset)
         {
-            this.expectedSemanticText =
-                    expectedSemanticText;
+            this.expectedSemanticText = expectedSemanticText;
 
-            this.expectedSpriteId =
-                    expectedSpriteId;
+            this.expectedSpriteId = expectedSpriteId;
 
-            this.yOffset =
-                    yOffset;
+            this.yOffset = yOffset;
         }
 
-        private static PendingYOffset forText(
-                String expectedSemanticText,
-                int yOffset)
+        private static PendingYOffset forText(String expectedSemanticText, int yOffset)
         {
-            return new PendingYOffset(
-                    expectedSemanticText,
-                    -1,
-                    yOffset);
+            return new PendingYOffset(expectedSemanticText, -1, yOffset);
         }
 
-        private static PendingYOffset forSprite(
-                int expectedSpriteId,
-                int yOffset)
+        private static PendingYOffset forSprite(int expectedSpriteId, int yOffset)
         {
-            return new PendingYOffset(
-                    null,
-                    expectedSpriteId,
-                    yOffset);
+            return new PendingYOffset(null, expectedSpriteId, yOffset);
         }
 
-        private boolean matches(
-                Widget widget,
-                ChatTextNormalizer textNormalizer)
+        private boolean matches(Widget widget, ChatTextNormalizer textNormalizer)
         {
             if (widget == null)
             {
@@ -2843,8 +2224,7 @@ public final class FontLayoutService
 
             if (expectedSpriteId >= 0)
             {
-                return widget.getSpriteId()
-                        == expectedSpriteId;
+                return widget.getSpriteId() == expectedSpriteId;
             }
 
             if (expectedSemanticText == null)
@@ -2852,13 +2232,9 @@ public final class FontLayoutService
                 return false;
             }
 
-            final String currentSemanticText =
-                    textNormalizer.normalizeSemantic(
-                            widget.getText());
+            final String currentSemanticText = textNormalizer.normalizeSemantic(widget.getText());
 
-            return currentSemanticText != null
-                    && currentSemanticText.equalsIgnoreCase(
-                    expectedSemanticText);
+            return currentSemanticText != null && currentSemanticText.equalsIgnoreCase(expectedSemanticText);
         }
     }
 

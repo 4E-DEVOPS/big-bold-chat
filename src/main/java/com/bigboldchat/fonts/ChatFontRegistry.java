@@ -15,61 +15,33 @@ public final class ChatFontRegistry
 
     static
     {
-        final EnumMap<ChatFont, ChatFontProfile> profiles =
-                new EnumMap<>(
-                        ChatFont.class);
+        final EnumMap<ChatFont, ChatFontProfile> profiles = new EnumMap<>(ChatFont.class);
 
-        register(
-                profiles,
-                new Plain11());
+        register(profiles, new Plain11());
 
-        register(
-                profiles,
-                new Plain12());
+        register(profiles, new Plain12());
 
-        register(
-                profiles,
-                new Bold12());
+        register(profiles, new Bold12());
 
-        register(
-                profiles,
-                new QuillSmall());
+        register(profiles, new QuillSmall());
 
-        register(
-                profiles,
-                new QuillMedium());
+        register(profiles, new QuillMedium());
 
-        register(
-                profiles,
-                new Barbarian());
+        register(profiles, new Barbarian());
 
-        register(
-                profiles,
-                new Tahoma11());
+        register(profiles, new Tahoma11());
 
-        register(
-                profiles,
-                new Verdana11());
+        register(profiles, new Verdana11());
 
-        register(
-                profiles,
-                new Verdana11Bold());
+        register(profiles, new Verdana11Bold());
 
-        register(
-                profiles,
-                new Verdana13());
+        register(profiles, new Verdana13());
 
-        register(
-                profiles,
-                new Verdana13Bold());
+        register(profiles, new Verdana13Bold());
 
-        register(
-                profiles,
-                new Verdana15());
+        register(profiles, new Verdana15());
 
-        PROFILES =
-                Collections.unmodifiableMap(
-                        profiles);
+        PROFILES = Collections.unmodifiableMap(profiles);
     }
 
     private ChatFontRegistry()
@@ -82,41 +54,32 @@ public final class ChatFontRegistry
     /**
      * Returns the selected profile, falling back to Plain 12.
      */
-    public static ChatFontProfile get(
-            ChatFont chatFont)
+    public static ChatFontProfile get(ChatFont chatFont)
     {
         if (chatFont == null)
         {
-            return PROFILES.get(
-                    ChatFont.PLAIN_12);
+            return PROFILES.get(ChatFont.PLAIN_12);
         }
 
-        final ChatFontProfile profile =
-                PROFILES.get(
-                        chatFont);
+        final ChatFontProfile profile = PROFILES.get(chatFont);
 
         if (profile != null)
         {
             return profile;
         }
 
-        return PROFILES.get(
-                ChatFont.PLAIN_12);
+        return PROFILES.get(ChatFont.PLAIN_12);
     }
 
     private static void register(
             EnumMap<ChatFont, ChatFontProfile> profiles,
             ChatFontProfile profile)
     {
-        if (profiles == null
-                || profile == null
-                || profile.getChatFont() == null)
+        if (profiles == null || profile == null || profile.getChatFont() == null)
         {
             return;
         }
 
-        profiles.put(
-                profile.getChatFont(),
-                profile);
+        profiles.put(profile.getChatFont(), profile);
     }
 }

@@ -21,36 +21,30 @@ public final class PerformanceMetrics
      */
 
     // Measure Script PRE processing time.
-    private final TimingMetric pre199 =
-            new TimingMetric();
+    private final TimingMetric pre199 = new TimingMetric();
 
-    private final TimingMetric pre203 =
-            new TimingMetric();
+    private final TimingMetric pre203 = new TimingMetric();
 
-    private final TimingMetric pre4483 =
-            new TimingMetric();
+    private final TimingMetric pre4483 = new TimingMetric();
 
     // Measure Script POST processing time.
-    private final TimingMetric post199 =
-            new TimingMetric();
+    private final TimingMetric post199 = new TimingMetric();
 
-    private final TimingMetric post203 =
-            new TimingMetric();
+    private final TimingMetric post203 = new TimingMetric();
 
-    private final TimingMetric post4483 =
-            new TimingMetric();
+    private final TimingMetric post4483 = new TimingMetric();
 
     // Measure construction measurement time.
-    private final TimingMetric measurement =
-            new TimingMetric();
+    private final TimingMetric measurement = new TimingMetric();
 
     // Measure semantic text normalization time.
-    private final TimingMetric normalization =
-            new TimingMetric();
+    private final TimingMetric normalization = new TimingMetric();
 
     // Measure uncached FontTypeFace resolution time.
-    private final TimingMetric fontResolution =
-            new TimingMetric();
+    private final TimingMetric fontResolution = new TimingMetric();
+
+    // Measure chatbox geometry application time.
+    private final TimingMetric resizeApply = new TimingMetric();
 
     /*
      * COUNTERS
@@ -133,55 +127,53 @@ public final class PerformanceMetrics
 
     private long refreshOther;
 
-    private long reportStartedAt =
-            System.nanoTime();
+    // Count chatbox-resize geometry activity.
+    private long resizeApplies;
+
+    private long resizeNoops;
+
+    private long resizeWidthChanges;
+
+    private long resizeHeightChanges;
+
+    private long resizeMissingWidgets;
+
+    private long resizeRestores;
+
+    private long reportStartedAt = System.nanoTime();
 
     /*
      * RECORDING
      */
 
-    public void recordPre(
-            int scriptId,
-            long elapsedNanos)
+    public void recordPre(int scriptId, long elapsedNanos)
     {
-        final TimingMetric metric =
-                preMetric(
-                        scriptId);
+        final TimingMetric metric = preMetric(scriptId);
 
         if (metric != null)
         {
-            metric.record(
-                    elapsedNanos);
+            metric.record(elapsedNanos);
         }
     }
 
-    public void recordPost(
-            int scriptId,
-            long elapsedNanos)
+    public void recordPost(int scriptId, long elapsedNanos)
     {
-        final TimingMetric metric =
-                postMetric(
-                        scriptId);
+        final TimingMetric metric = postMetric(scriptId);
 
         if (metric != null)
         {
-            metric.record(
-                    elapsedNanos);
+            metric.record(elapsedNanos);
         }
     }
 
-    public void recordMeasurement(
-            long elapsedNanos)
+    public void recordMeasurement(long elapsedNanos)
     {
-        measurement.record(
-                elapsedNanos);
+        measurement.record(elapsedNanos);
     }
 
-    public void recordNormalization(
-            long elapsedNanos)
+    public void recordNormalization(long elapsedNanos)
     {
-        normalization.record(
-                elapsedNanos);
+        normalization.record(elapsedNanos);
     }
 
     public void recordFontCacheHit()
@@ -189,22 +181,18 @@ public final class PerformanceMetrics
         fontCacheHits++;
     }
 
-    public void recordFontCacheMiss(
-            long elapsedNanos)
+    public void recordFontCacheMiss(long elapsedNanos)
     {
         fontCacheMisses++;
 
-        fontResolution.record(
-                elapsedNanos);
+        fontResolution.record(elapsedNanos);
     }
 
-    public void recordWidgetsExamined(
-            int count)
+    public void recordWidgetsExamined(int count)
     {
         if (count > 0)
         {
-            widgetsExamined +=
-                    count;
+            widgetsExamined += count;
         }
     }
 
@@ -213,8 +201,7 @@ public final class PerformanceMetrics
         surfaceSearches++;
     }
 
-    public void recordRowSearches(
-            int candidates)
+    public void recordRowSearches(int candidates)
     {
         rowSearches++;
 
@@ -294,13 +281,11 @@ public final class PerformanceMetrics
         rankFallbackMisses++;
     }
 
-    public void recordRankNodesExamined(
-            int count)
+    public void recordRankNodesExamined(int count)
     {
         if (count > 0)
         {
-            rankNodesExamined +=
-                    count;
+            rankNodesExamined += count;
         }
     }
 
@@ -314,8 +299,42 @@ public final class PerformanceMetrics
         revalidates++;
     }
 
-    public void recordRefreshChat(
-            RefreshReason reason)
+    public void recordResizeApply(
+            long elapsedNanos,
+            boolean widthChanged,
+            boolean heightChanged)
+    {
+        resizeApply.record(elapsedNanos);
+
+        resizeApplies++;
+
+        if (!widthChanged && !heightChanged)
+        {
+            resizeNoops++;
+        }
+
+        if (widthChanged)
+        {
+            resizeWidthChanges++;
+        }
+
+        if (heightChanged)
+        {
+            resizeHeightChanges++;
+        }
+    }
+
+    public void recordResizeMissingWidgets()
+    {
+        resizeMissingWidgets++;
+    }
+
+    public void recordResizeRestore()
+    {
+        resizeRestores++;
+    }
+
+    public void recordRefreshChat(RefreshReason reason)
     {
         refreshChatCalls++;
 
@@ -355,72 +374,54 @@ public final class PerformanceMetrics
 
     public void reportIfDue()
     {
-        final long now =
-                System.nanoTime();
+        final long now = System.nanoTime();
 
-        if (now
-                - reportStartedAt
-                < REPORT_INTERVAL_NANOS)
+        if (now - reportStartedAt < REPORT_INTERVAL_NANOS)
         {
             return;
         }
 
-        report(
-                now);
+        report(now);
     }
 
     public void reportNow()
     {
-        report(
-                System.nanoTime());
+        report(System.nanoTime());
     }
 
-    private void report(
-            long now)
+    private void report(long now)
     {
-        final long elapsedNanos =
-                now
-                        - reportStartedAt;
+        final long elapsedNanos = now - reportStartedAt;
 
         if (elapsedNanos <= 0L)
         {
             return;
         }
 
-        final double elapsedSeconds =
-                elapsedNanos
-                        / 1_000_000_000.0;
+        final double elapsedSeconds = elapsedNanos / 1_000_000_000.0;
 
-        log.debug(
-                "[Chat XL][Performance] Window={}",
-                String.format(
-                        Locale.ROOT,
-                        "%.3fs",
-                        elapsedSeconds));
+        log.debug("[Chat XL][Performance] Window={}", String.format(
+                Locale.ROOT,
+                "%.3fs",
+                elapsedSeconds));
 
         log.debug(
                 "[Chat XL][Performance] PRE"
                         + " | 199={}"
                         + " | 203={}"
                         + " | 4483={}",
-                formatTiming(
-                        pre199),
-                formatTiming(
-                        pre203),
-                formatTiming(
-                        pre4483));
+                formatTiming(pre199),
+                formatTiming(pre203),
+                formatTiming(pre4483));
 
         log.debug(
                 "[Chat XL][Performance] POST"
                         + " | 199={}"
                         + " | 203={}"
                         + " | 4483={}",
-                formatTiming(
-                        post199),
-                formatTiming(
-                        post203),
-                formatTiming(
-                        post4483));
+                formatTiming(post199),
+                formatTiming(post203),
+                formatTiming(post4483));
 
         log.debug(
                 "[Chat XL][Performance] SERVICES"
@@ -429,12 +430,9 @@ public final class PerformanceMetrics
                         + " | FontResolve={}"
                         + " | FontCacheHits={}"
                         + " | FontCacheMisses={}",
-                formatTiming(
-                        measurement),
-                formatTiming(
-                        normalization),
-                formatTiming(
-                        fontResolution),
+                formatTiming(measurement),
+                formatTiming(normalization),
+                formatTiming(fontResolution),
                 fontCacheHits,
                 fontCacheMisses);
 
@@ -487,6 +485,23 @@ public final class PerformanceMetrics
                 revalidates);
 
         log.debug(
+                "[Chat XL][Performance] RESIZE"
+                        + " | Apply={}"
+                        + " | Applies={}"
+                        + " | Noops={}"
+                        + " | WidthChanges={}"
+                        + " | HeightChanges={}"
+                        + " | MissingWidgets={}"
+                        + " | Restores={}",
+                formatTiming(resizeApply),
+                resizeApplies,
+                resizeNoops,
+                resizeWidthChanges,
+                resizeHeightChanges,
+                resizeMissingWidgets,
+                resizeRestores);
+
+        log.debug(
                 "[Chat XL][Performance] REFRESH"
                         + " | Total={}"
                         + " | Startup={}"
@@ -501,16 +516,14 @@ public final class PerformanceMetrics
                 refreshWidthChanged,
                 refreshOther);
 
-        resetWindow(
-                now);
+        resetWindow(now);
     }
 
     /*
      * HELPERS
      */
 
-    private TimingMetric preMetric(
-            int scriptId)
+    private TimingMetric preMetric(int scriptId)
     {
         switch (scriptId)
         {
@@ -528,8 +541,7 @@ public final class PerformanceMetrics
         }
     }
 
-    private TimingMetric postMetric(
-            int scriptId)
+    private TimingMetric postMetric(int scriptId)
     {
         switch (scriptId)
         {
@@ -547,11 +559,9 @@ public final class PerformanceMetrics
         }
     }
 
-    private static String formatTiming(
-            TimingMetric metric)
+    private static String formatTiming(TimingMetric metric)
     {
-        if (metric == null
-                || metric.count == 0L)
+        if (metric == null || metric.count == 0L)
         {
             return "calls=0 avg=0.000ms max=0.000ms";
         }
@@ -564,8 +574,7 @@ public final class PerformanceMetrics
                 metric.maxMilliseconds());
     }
 
-    private void resetWindow(
-            long now)
+    private void resetWindow(long now)
     {
         pre199.reset();
         pre203.reset();
@@ -578,96 +587,79 @@ public final class PerformanceMetrics
         measurement.reset();
         normalization.reset();
         fontResolution.reset();
+        resizeApply.reset();
 
-        fontCacheHits =
-                0L;
+        fontCacheHits = 0L;
 
-        fontCacheMisses =
-                0L;
+        fontCacheMisses = 0L;
 
-        widgetsExamined =
-                0L;
+        widgetsExamined = 0L;
 
-        rowSearches =
-                0L;
+        rowSearches = 0L;
 
-        rowCandidates =
-                0L;
+        rowCandidates = 0L;
 
-        rowIndexBuilds =
-                0L;
+        rowIndexBuilds = 0L;
 
-        rowIndexRepairs =
-                0L;
+        rowIndexRepairs = 0L;
 
-        rowIndexReuses =
-                0L;
+        rowIndexReuses = 0L;
 
-        surfaceSearches =
-                0L;
+        surfaceSearches = 0L;
 
-        fallbackSearches =
-                0L;
+        fallbackSearches = 0L;
 
-        fallbackBuilds =
-                0L;
+        fallbackBuilds = 0L;
 
-        fallbackReuses =
-                0L;
+        fallbackReuses = 0L;
 
-        rankSearches =
-                0L;
+        rankSearches = 0L;
 
-        rankFallbacks =
-                0L;
+        rankFallbacks = 0L;
 
-        rankRowNoSprite =
-                0L;
+        rankRowNoSprite = 0L;
 
-        rankRowXMismatch =
-                0L;
+        rankRowXMismatch = 0L;
 
-        rankRowYMismatch =
-                0L;
+        rankRowYMismatch = 0L;
 
-        rankShallowRecoveries =
-                0L;
+        rankShallowRecoveries = 0L;
 
-        rankFallbackHits =
-                0L;
+        rankFallbackHits = 0L;
 
-        rankFallbackMisses =
-                0L;
+        rankFallbackMisses = 0L;
 
-        rankNodesExamined =
-                0L;
+        rankNodesExamined = 0L;
 
-        widgetMutations =
-                0L;
+        widgetMutations = 0L;
 
-        revalidates =
-                0L;
+        revalidates = 0L;
 
-        refreshChatCalls =
-                0L;
+        refreshChatCalls = 0L;
 
-        refreshStartup =
-                0L;
+        refreshStartup = 0L;
 
-        refreshFontChanged =
-                0L;
+        refreshFontChanged = 0L;
 
-        refreshShutdown =
-                0L;
+        refreshShutdown = 0L;
 
-        refreshWidthChanged =
-                0L;
+        refreshWidthChanged = 0L;
 
-        refreshOther =
-                0L;
+        refreshOther = 0L;
 
-        reportStartedAt =
-                now;
+        resizeApplies = 0L;
+
+        resizeNoops = 0L;
+
+        resizeWidthChanges = 0L;
+
+        resizeHeightChanges = 0L;
+
+        resizeMissingWidgets = 0L;
+
+        resizeRestores = 0L;
+
+        reportStartedAt = now;
     }
 
     public enum RefreshReason
@@ -685,8 +677,7 @@ public final class PerformanceMetrics
         private long totalNanos;
         private long maxNanos;
 
-        private void record(
-                long elapsedNanos)
+        private void record(long elapsedNanos)
         {
             if (elapsedNanos < 0L)
             {
@@ -695,14 +686,11 @@ public final class PerformanceMetrics
 
             count++;
 
-            totalNanos +=
-                    elapsedNanos;
+            totalNanos += elapsedNanos;
 
-            if (elapsedNanos
-                    > maxNanos)
+            if (elapsedNanos > maxNanos)
             {
-                maxNanos =
-                        elapsedNanos;
+                maxNanos = elapsedNanos;
             }
         }
 
@@ -713,27 +701,21 @@ public final class PerformanceMetrics
                 return 0.0;
             }
 
-            return totalNanos
-                    / (double) count
-                    / 1_000_000.0;
+            return totalNanos / (double) count / 1_000_000.0;
         }
 
         private double maxMilliseconds()
         {
-            return maxNanos
-                    / 1_000_000.0;
+            return maxNanos / 1_000_000.0;
         }
 
         private void reset()
         {
-            count =
-                    0L;
+            count = 0L;
 
-            totalNanos =
-                    0L;
+            totalNanos = 0L;
 
-            maxNanos =
-                    0L;
+            maxNanos = 0L;
         }
     }
 }
