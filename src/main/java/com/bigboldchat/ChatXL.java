@@ -5,6 +5,7 @@ import com.bigboldchat.chat.FontLayoutService;
 import com.bigboldchat.chat.FontMeasurementService;
 import com.bigboldchat.chatbox.ChatboxResizeService;
 import com.bigboldchat.debug.ChatDiagnostics;
+import com.bigboldchat.debug.ChatMessageTests;
 import com.bigboldchat.debug.PerformanceMetrics;
 
 import com.google.inject.Provides;
@@ -66,6 +67,9 @@ public class ChatXL extends Plugin
 
 	@Inject
 	private ExternalPluginManager externalPluginManager;
+
+	@Inject
+	private ChatMessageTests chatMessageTests;
 
 	/*
 	 * DIAGNOSTICS & PERFORMANCE
@@ -244,9 +248,15 @@ public class ChatXL extends Plugin
 			return;
 		}
 
-		if ("chatxl-messages".equalsIgnoreCase(command))
+		if ("chatxl-updates".equalsIgnoreCase(command))
 		{
-			clientThread.invokeLater(this::showMessageTests);
+			clientThread.invokeLater(this::showUpdateTests);
+			return;
+		}
+
+		if ("chatxl-text".equalsIgnoreCase(command))
+		{
+			clientThread.invokeLater(chatMessageTests::show);
 		}
 	}
 
@@ -283,7 +293,7 @@ public class ChatXL extends Plugin
 		}
 	}
 
-	private void showMessageTests()
+	private void showUpdateTests()
 	{
 		showInstallMessage();
 
