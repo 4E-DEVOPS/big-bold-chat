@@ -8,19 +8,17 @@ import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetSizeMode;
 
 /**
- * Owns Chat XL's resizable-layout chatbox geometry.
+ * Owns resizable-layout chatbox geometry.
  *
- * Width changes are applied before chat construction so text is measured against
- * the committed width. Height changes only update widget geometry and do not
- * require a chat rebuild.
+ * Width changes are applied before chat construction so text is
+ * measured against the committed width. Height changes only
+ * update widget geometry and do not require a chat rebuild.
  */
 public final class ChatboxResizeService
 {
-	private static final int NATIVE_WIDTH = 519;
-	private static final int NATIVE_HEIGHT = 165;
-
 	private final Client client;
 	private final PerformanceMetrics performanceMetrics;
+	private final ChatboxControlsLayout controlsLayout;
 
 	private boolean resizedLayoutApplied;
 
@@ -28,6 +26,7 @@ public final class ChatboxResizeService
 	{
 		this.client = client;
 		this.performanceMetrics = performanceMetrics;
+		this.controlsLayout = new ChatboxControlsLayout(client);
 	}
 
 	/*
@@ -97,8 +96,6 @@ public final class ChatboxResizeService
 		final Widget slot = getSlot(layout);
 		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
-		final Widget controls = client.getWidget(InterfaceID.Chatbox.CONTROLS);
-		final Widget scrollArea = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
 
 		if (slot == null || universe == null || chatArea == null)
 		{
@@ -117,18 +114,26 @@ public final class ChatboxResizeService
 			return ResizeResult.NOT_APPLIED;
 		}
 
-		final boolean widthChanged = slot.getWidth() != width || universe.getWidth() != width || chatArea.getWidth() != width;
-		final boolean heightChanged = slot.getHeight() != height || universe.getHeight() != height;
-		final boolean controlsChanged = controls != null && controls.getWidth() != width;
+		final boolean widthChanged =
+				slot.getWidth() != width
+						|| universe.getWidth() != width
+						|| chatArea.getWidth() != width;
+
+		final boolean heightChanged =
+				slot.getHeight() != height
+						|| universe.getHeight() != height;
+
+		final boolean controlsChanged = !controlsLayout.matches(width);
 
 		if (widthChanged || heightChanged || controlsChanged)
 		{
-			applyGeometry(slot, universe, chatArea, controls, width, height);
-		}
-
-		if (heightChanged)
-		{
-			updateScroll(scrollArea);
+			applyGeometry(
+					slot,
+					universe,
+					chatArea,
+					width,
+					height,
+					controlsChanged);
 		}
 
 		resizedLayoutApplied = true;
@@ -142,10 +147,14 @@ public final class ChatboxResizeService
 			Widget slot,
 			Widget universe,
 			Widget chatArea,
-			Widget controls,
 			int width,
-			int height)
+			int height,
+			boolean controlsChanged)
 	{
+		/*
+		 * Resize the top-level chat slot first so dependent chatbox children
+		 * resolve against the requested outer geometry.
+		 */
 		if (slot.getWidth() != width || slot.getHeight() != height)
 		{
 			slot.setSize(width, height);
@@ -155,6 +164,10 @@ public final class ChatboxResizeService
 			recordRevalidate();
 		}
 
+		/*
+		 * UNIVERSE normally fills using MINUS sizing. Pin it to the explicit
+		 * committed dimensions while ChatXL owns the resizable layout.
+		 */
 		if (universe.getWidth() != width || universe.getHeight() != height)
 		{
 			universe.setSize(width, height, WidgetSizeMode.ABSOLUTE, WidgetSizeMode.ABSOLUTE);
@@ -165,48 +178,29 @@ public final class ChatboxResizeService
 			recordRevalidate();
 		}
 
+		/*
+		 * CHATAREA's width is absolute and does not auto follow the UNIVERSE width.
+		 */
 		if (chatArea.getWidth() != width)
 		{
 			chatArea.setOriginalWidth(width);
 			recordMutation();
 		}
 
-		if (controls != null && controls.getWidth() != width)
+		/*
+		 * The tab/control bar must be updated before the child revalidation
+		 * cascade so its descendants resolve against the final width.
+		 */
+		if (controlsChanged)
 		{
-			controls.setOriginalWidth(width);
-			recordMutation();
-		}
-	}
-
-	/*
-	 * ================================================================
-	 * GEOMETRY HELPERS
-	 * ================================================================
-	 */
-	private void updateScroll(Widget scrollArea)
-	{
-		if (scrollArea == null)
-		{
-			return;
+			recordMutations(controlsLayout.apply(width));
 		}
 
-		final int height = scrollArea.getHeight();
-		final int scrollHeight = scrollArea.getScrollHeight();
-
-		if (scrollHeight < height)
-		{
-			scrollArea.setScrollHeight(height);
-			recordMutation();
-		}
-
-		if (scrollArea.getScrollY() != 0)
-		{
-			scrollArea.setScrollY(0);
-			recordMutation();
-		}
-
-		scrollArea.revalidate();
-		recordRevalidate();
+		/*
+		 * Revalidate only static/dynamic chatbox descendants. Deliberately stop
+		 * at SCROLLAREA so RuneScape remains responsible for message-row layout.
+		 */
+		recordRevalidates(ChatboxWidgets.revalidateChildren(universe));
 	}
 
 	/*
@@ -234,38 +228,28 @@ public final class ChatboxResizeService
 			return;
 		}
 
-		slot.setSize(NATIVE_WIDTH, NATIVE_HEIGHT);
+		slot.setSize(ChatboxGeometry.NATIVE_WIDTH, ChatboxGeometry.NATIVE_SLOT_HEIGHT);
 		slot.setForcedPosition(-1, -1);
+		recordMutation();
 		slot.revalidate();
+		recordRevalidate();
 
 		universe.setSize(0, 0, WidgetSizeMode.MINUS, WidgetSizeMode.MINUS);
 		universe.setForcedPosition(-1, -1);
+		recordMutation();
 		universe.revalidate();
+		recordRevalidate();
 
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
 
 		if (chatArea != null)
 		{
-			chatArea.setOriginalWidth(NATIVE_WIDTH);
+			chatArea.setOriginalWidth(ChatboxGeometry.NATIVE_WIDTH);
 			recordMutation();
 		}
 
-		final Widget controls = client.getWidget(InterfaceID.Chatbox.CONTROLS);
-
-		if (controls != null)
-		{
-			controls.setOriginalWidth(NATIVE_WIDTH);
-			recordMutation();
-
-			controls.revalidate();
-			recordRevalidate();
-		}
-
-		if (chatArea != null)
-		{
-			chatArea.revalidate();
-			recordRevalidate();
-		}
+		recordMutations(controlsLayout.restoreNative());
+		recordRevalidates(ChatboxWidgets.revalidateChildren(universe));
 
 		resizedLayoutApplied = false;
 
@@ -281,9 +265,9 @@ public final class ChatboxResizeService
 	 * ================================================================
 	 */
 	private void recordApply(
-		long started,
-		boolean widthChanged,
-		boolean heightChanged)
+			long started,
+			boolean widthChanged,
+			boolean heightChanged)
 	{
 		if (performanceMetrics == null)
 		{
@@ -312,6 +296,19 @@ public final class ChatboxResizeService
 		}
 	}
 
+	private void recordMutations(int count)
+	{
+		if (performanceMetrics == null || count <= 0)
+		{
+			return;
+		}
+
+		for (int i = 0; i < count; i++)
+		{
+			performanceMetrics.recordWidgetMutation();
+		}
+	}
+
 	private void recordRevalidate()
 	{
 		if (performanceMetrics != null)
@@ -320,22 +317,32 @@ public final class ChatboxResizeService
 		}
 	}
 
+	private void recordRevalidates(int count)
+	{
+		if (performanceMetrics == null || count <= 0)
+		{
+			return;
+		}
+
+		for (int i = 0; i < count; i++)
+		{
+			performanceMetrics.recordRevalidate();
+		}
+	}
+
 	public static final class ResizeResult
 	{
 		private static final ResizeResult NOT_APPLIED =
-				new ResizeResult(
-						false,
-						false,
-						false);
+				new ResizeResult(false, false, false);
 
 		private final boolean applied;
 		private final boolean widthChanged;
 		private final boolean heightChanged;
 
 		private ResizeResult(
-			boolean applied,
-			boolean widthChanged,
-			boolean heightChanged)
+				boolean applied,
+				boolean widthChanged,
+				boolean heightChanged)
 		{
 			this.applied = applied;
 			this.widthChanged = widthChanged;
