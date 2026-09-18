@@ -16,6 +16,7 @@ import net.runelite.api.FontID;
 import net.runelite.api.FontTypeFace;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetUtil;
 
 /**
  * Measures chat text, wrapping, row allocation, and presentation geometry.
@@ -30,16 +31,21 @@ public final class FontMeasurementService
     static final int CHANNEL_BODY_SCRIPT = 4483;
 
     /*
+     * Native Script 4483 rank-icon geometry:
+     *      [channel] +1px [icon] +1px [username]:
+     */
+    private static final int RANK_ICON_GAP = 1;
+
+    /*
      * Native OS separation between:
      *      [username] -> [message body]
      */
     private static final int BODY_GAP = 3;
 
     /*
-     * Native Script 4483 rank-icon geometry:
-     *      [channel] +1px [icon] +1px [username]:
+     * Separation between text and scrollbar.
      */
-    private static final int RANK_ICON_GAP = 1;
+    private static final int SCROLLBAR_PADDING = 3;
 
     private final Client client;
     private final ChatTextNormalizer textNormalizer;
@@ -344,9 +350,13 @@ public final class FontMeasurementService
             selectedBodyX = selectedChannelLayout.bodyX;
         }
 
+        final int rightPadding = isSplitPrivate(parentWidgetId)
+                ? 0
+                : SCROLLBAR_PADDING;
+
         final int nativeBodyWidth = rightBoundary - nativeBodyX;
 
-        final int selectedBodyWidth = rightBoundary - selectedBodyX;
+        final int selectedBodyWidth = rightBoundary - selectedBodyX - rightPadding;
 
         if (nativeBodyWidth <= 0 || selectedBodyWidth <= 0)
         {
@@ -381,7 +391,7 @@ public final class FontMeasurementService
          * Apply PRIVATE_CHAT_GAP to Split Private's bottom-relative row Y.
          * Positive increases the gap; negative reduces it.
          */
-        final int privateChatGap = isSplitPrivateChatConstruction(scriptId, parentWidgetId)
+        final int privateChatGap = isSplitPrivate(parentWidgetId)
                 ? fontProfile.getPrivateChatGap()
                 : 0;
 
@@ -505,16 +515,9 @@ public final class FontMeasurementService
      * PRIVATE CHAT
      * ================================================================
      */
-    private boolean isSplitPrivateChatConstruction(int scriptId, int parentWidgetId)
+    private boolean isSplitPrivate(int parentWidgetId)
     {
-        if (scriptId != CHAT_BODY_SCRIPT)
-        {
-            return false;
-        }
-
-        final Widget splitPrivate = client.getWidget(InterfaceID.PM_CHAT, 0);
-
-        return splitPrivate != null && parentWidgetId == splitPrivate.getId();
+        return WidgetUtil.componentToInterface(parentWidgetId) == InterfaceID.PM_CHAT;
     }
 
     /*

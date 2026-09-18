@@ -20,6 +20,7 @@ import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetUtil;
 
 /**
  * Applies Chat XL construction geometry and widget presentation.
@@ -264,7 +265,7 @@ public final class FontLayoutService
             return;
         }
 
-        final Surface surface = determineSurface(state.scriptId, state.parentWidgetId);
+        final Surface surface = determineSurface(state.parentWidgetId);
 
         final List<Widget> rowWidgets = collectRow(lineWidget, surface);
 
@@ -1990,21 +1991,11 @@ public final class FontLayoutService
      * ================================================================
      */
 
-    private Surface determineSurface(int scriptId, int parentWidgetId)
+    private Surface determineSurface(int parentWidgetId)
     {
-        if (scriptId != FontMeasurementService.CHAT_BODY_SCRIPT)
-        {
-            return Surface.CHATBOX;
-        }
-
-        final Widget splitPrivate = client.getWidget(InterfaceID.PM_CHAT, 0);
-
-        if (splitPrivate != null && parentWidgetId == splitPrivate.getId())
-        {
-            return Surface.SPLIT_PRIVATE;
-        }
-
-        return Surface.CHATBOX;
+        return WidgetUtil.componentToInterface(parentWidgetId) == InterfaceID.PM_CHAT
+                ? Surface.SPLIT_PRIVATE
+                : Surface.CHATBOX;
     }
 
     /*
