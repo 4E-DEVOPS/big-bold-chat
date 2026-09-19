@@ -20,15 +20,15 @@ final class ChatboxBackgroundService {
 	private static final int BORDER_OFFSET = 12;
 
 	private static final int[] BORDER_SPRITES = {
-					SpriteID.V2StoneBorders.SIDE_PANEL_CORNER_TOP_LEFT,
-					SpriteID.V2StoneBorders.SIDE_PANEL_CORNER_TOP_RIGHT,
-					SpriteID.V2StoneBorders.SIDE_PANEL_CORNER_BOTTOM_LEFT,
-					SpriteID.V2StoneBorders.SIDE_PANEL_CORNER_BOTTOM_RIGHT,
-					SpriteID.V2StoneBorders.SIDE_PANEL_EDGE_TOP,
-					SpriteID.V2StoneBorders.SIDE_PANEL_EDGE_LEFT,
-					SpriteID.V2StoneBorders.SIDE_PANEL_EDGE_BOTTOM,
-					SpriteID.V2StoneBorders.SIDE_PANEL_EDGE_RIGHT
-			};
+			SpriteID.V2StoneBorders.SIDE_PANEL_CORNER_TOP_LEFT,
+			SpriteID.V2StoneBorders.SIDE_PANEL_CORNER_TOP_RIGHT,
+			SpriteID.V2StoneBorders.SIDE_PANEL_CORNER_BOTTOM_LEFT,
+			SpriteID.V2StoneBorders.SIDE_PANEL_CORNER_BOTTOM_RIGHT,
+			SpriteID.V2StoneBorders.SIDE_PANEL_EDGE_TOP,
+			SpriteID.V2StoneBorders.SIDE_PANEL_EDGE_LEFT,
+			SpriteID.V2StoneBorders.SIDE_PANEL_EDGE_BOTTOM,
+			SpriteID.V2StoneBorders.SIDE_PANEL_EDGE_RIGHT
+	};
 
 	private final Client client;
 
@@ -297,15 +297,15 @@ final class ChatboxBackgroundService {
 		final int innerHeight = Math.max(0, height - 2 * CORNER_SIZE);
 
 		final int[][] rectangles = {
-						{0, 0, CORNER_SIZE, CORNER_SIZE},
-						{width - CORNER_SIZE, 0, CORNER_SIZE, CORNER_SIZE},
-						{0, height - CORNER_SIZE, CORNER_SIZE, CORNER_SIZE},
-						{width - CORNER_SIZE, height - CORNER_SIZE, CORNER_SIZE, CORNER_SIZE},
-						{CORNER_SIZE, -BORDER_OFFSET - 1, innerWidth, CORNER_SIZE},
-						{-BORDER_OFFSET - 1, CORNER_SIZE, CORNER_SIZE, innerHeight},
-						{CORNER_SIZE, height - CORNER_SIZE + BORDER_OFFSET, innerWidth, CORNER_SIZE},
-						{width - CORNER_SIZE + BORDER_OFFSET, CORNER_SIZE, CORNER_SIZE, innerHeight}
-				};
+				{0, 0, CORNER_SIZE, CORNER_SIZE},
+				{width - CORNER_SIZE, 0, CORNER_SIZE, CORNER_SIZE},
+				{0, height - CORNER_SIZE, CORNER_SIZE, CORNER_SIZE},
+				{width - CORNER_SIZE, height - CORNER_SIZE, CORNER_SIZE, CORNER_SIZE},
+				{CORNER_SIZE, -BORDER_OFFSET - 1, innerWidth, CORNER_SIZE},
+				{-BORDER_OFFSET - 1, CORNER_SIZE, CORNER_SIZE, innerHeight},
+				{CORNER_SIZE, height - CORNER_SIZE + BORDER_OFFSET, innerWidth, CORNER_SIZE},
+				{width - CORNER_SIZE + BORDER_OFFSET, CORNER_SIZE, CORNER_SIZE, innerHeight}
+		};
 
 		for (int i = 0; i < borderPieces.length; i++) {
 			final Widget piece = borderPieces[i];
