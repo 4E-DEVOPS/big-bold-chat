@@ -1,7 +1,7 @@
 package com.bigboldchat.chat;
 
 import com.bigboldchat.chat.FontLayoutService.Surface;
-import com.bigboldchat.metrics.PerformanceMetrics;
+import com.bigboldchat.debug.PerformanceMetrics;
 
 import java.util.ArrayList;
 import java.util.Collections;

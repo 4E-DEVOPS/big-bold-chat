@@ -1,4 +1,4 @@
-package com.bigboldchat.metrics;
+package com.bigboldchat.debug;
 
 import java.util.Locale;
 

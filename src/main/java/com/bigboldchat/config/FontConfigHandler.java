@@ -1,7 +1,7 @@
 package com.bigboldchat.config;
 
 import com.bigboldchat.chat.FontLayoutService;
-import com.bigboldchat.metrics.PerformanceMetrics;
+import com.bigboldchat.debug.PerformanceMetrics;
 
 import net.runelite.api.Client;
 import net.runelite.client.callback.ClientThread;
