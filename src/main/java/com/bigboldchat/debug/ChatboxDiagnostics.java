@@ -45,7 +45,7 @@ public final class ChatboxDiagnostics {
 		this.client = client;
 	}
 
-	public boolean onCommandExecuted(CommandExecuted event) {
+	public synchronized boolean onCommandExecuted(CommandExecuted event) {
 		if (event == null || !COMMAND.equalsIgnoreCase(event.getCommand())) {
 			return false;
 		}
@@ -61,7 +61,7 @@ public final class ChatboxDiagnostics {
 		return true;
 	}
 
-	public void onScriptPreFired(ScriptPreFired event) {
+	public synchronized void onScriptPreFired(ScriptPreFired event) {
 		if (!armed || event == null) {
 			return;
 		}
@@ -90,7 +90,7 @@ public final class ChatboxDiagnostics {
 		resizeTraceFrames.push(frame);
 	}
 
-	public void onScriptPostFired(ScriptPostFired event) {
+	public synchronized void onScriptPostFired(ScriptPostFired event) {
 		if (!armed || event == null || resizeTraceFrames.isEmpty()) {
 			return;
 		}
@@ -384,7 +384,7 @@ public final class ChatboxDiagnostics {
 		return strings.toString();
 	}
 
-	public void reset() {
+	public synchronized void reset() {
 		resizeTraceFrames.clear();
 		armed = false;
 	}
