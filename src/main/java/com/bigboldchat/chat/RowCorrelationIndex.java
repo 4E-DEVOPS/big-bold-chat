@@ -214,11 +214,7 @@ final class RowCorrelationIndex {
 	}
 
 	void observeSurfaceWidget(Widget root, Widget widget) {
-		if (root == null
-				|| widget == null
-				|| indexedRoot != root
-				|| widgetsByRow == null
-				|| rowByWidget == null) {
+		if (root == null || widget == null || indexedRoot != root || widgetsByRow == null || rowByWidget == null) {
 			return;
 		}
 
@@ -306,7 +302,8 @@ final class RowCorrelationIndex {
 		removeWatchedMove(widget);
 		watchedMoves.put(widget, new WatchedRowMove(previousRow, adjustedRow));
 
-		final List<Widget> watchedWidgets = watchedWidgetsByPreviousRow.computeIfAbsent(previousRow, ignored -> new ArrayList<>());
+		final List<Widget> watchedWidgets = watchedWidgetsByPreviousRow.computeIfAbsent(
+				previousRow, ignored -> new ArrayList<>());
 		if (!containsIdentity(watchedWidgets, widget)) {
 			watchedWidgets.add(widget);
 		}
@@ -403,6 +400,7 @@ final class RowCorrelationIndex {
 		watchedMoves.clear();
 		watchedWidgetsByPreviousRow.clear();
 	}
+
 	private void recordRowWidgetExamined() {
 		if (performanceMetrics != null) {
 			performanceMetrics.recordWidgetsExamined(1);
@@ -480,5 +478,4 @@ final class RowCorrelationIndex {
 			return result;
 		}
 	}
-
 }

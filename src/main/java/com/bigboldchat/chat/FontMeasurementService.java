@@ -178,8 +178,8 @@ public final class FontMeasurementService {
 		}
 
 		final List<String> rawPrefixComponents = scriptId == GAME_BODY_SCRIPT
-						? new ArrayList<>()
-						: findPrefixComponents(objectStack, objectStackSize, semanticBody);
+				? new ArrayList<>()
+				: findPrefixComponents(objectStack, objectStackSize, semanticBody);
 
 		/*
 		 * Script 199 is the ordinary prefix-less GAME / system-message
@@ -232,11 +232,9 @@ public final class FontMeasurementService {
 			 * rendered prefix with configured inline-icon spacing.
 			 */
 			selectedRawPrefixText = isFriendsChatPrefix(rawPrefix)
-							? applyInlineIconUsernameSpacing(
-							rawPrefix,
-							fontProfile.getFriendsChatPlayerIconSpacing(),
-							'\u00A0')
-							: rawPrefix;
+					? applyInlineIconUsernameSpacing(rawPrefix, fontProfile.getFriendsChatPlayerIconSpacing(),
+					'\u00A0')
+					: rawPrefix;
 
 			/*
 			 * Replace malformed FontID 1446 colons in the selected prefix only.
@@ -251,28 +249,13 @@ public final class FontMeasurementService {
 			selectedBodyX = lineX + selectedPrefixLayoutWidth + BODY_GAP;
 		} else {
 			nativeChannelLayout = measureChannelPrefixLayout(
-							nativeFont,
-							rawPrefixComponents,
-							intStack,
-							intStackSize,
-							lineX,
-							false,
-							0,
-							0,
-							nativeFontProfile.getAccountBuildIconPadding(),
-							0);
+					nativeFont, rawPrefixComponents, intStack, intStackSize, lineX, false, 0, 0,
+					nativeFontProfile.getAccountBuildIconPadding(), 0);
 
 			selectedChannelLayout = measureChannelPrefixLayout(
-							selectedFont,
-							rawPrefixComponents,
-							intStack,
-							intStackSize,
-							lineX,
-							replaceMalformedColons,
-							fontProfile.getRankIconRightAdjustment(),
-							fontProfile.getRankIconSizeAdjustment(),
-							fontProfile.getAccountBuildIconPadding(),
-							fontProfile.getChannelAccountBuildIconSpacing());
+					selectedFont, rawPrefixComponents, intStack, intStackSize, lineX, replaceMalformedColons,
+					fontProfile.getRankIconRightAdjustment(), fontProfile.getRankIconSizeAdjustment(),
+					fontProfile.getAccountBuildIconPadding(), fontProfile.getChannelAccountBuildIconSpacing());
 
 			if (nativeChannelLayout == null || selectedChannelLayout == null) {
 				return null;
@@ -292,7 +275,7 @@ public final class FontMeasurementService {
 		}
 
 		final int nativeLines = calculateWrappedLineCount(nativeFont, measurementBody, nativeBodyWidth);
-		final int selectedLines = calculateWrappedLineCount( selectedFont, selectedMeasurementBody, selectedBodyWidth);
+		final int selectedLines = calculateWrappedLineCount(selectedFont, selectedMeasurementBody, selectedBodyWidth);
 		if (nativeLines <= 0 || selectedLines <= 0) {
 			return null;
 		}
@@ -465,10 +448,7 @@ public final class FontMeasurementService {
 			final int spriteIdCandidate = intStack[commonPayloadStart - 3];
 			final int widthCandidate = intStack[commonPayloadStart - 2];
 			final int heightCandidate = intStack[commonPayloadStart - 1];
-			if (spriteIdCandidate >= 0
-					&& widthCandidate > 0
-					&& widthCandidate <= 32
-					&& heightCandidate > 0
+			if (spriteIdCandidate >= 0 && widthCandidate > 0 && widthCandidate <= 32 && heightCandidate > 0
 					&& heightCandidate <= 32) {
 				layout.rankIconSpriteId = spriteIdCandidate;
 				layout.rankIconWidth = Math.max(1, widthCandidate + rankIconSizeAdjustment);
@@ -514,7 +494,6 @@ public final class FontMeasurementService {
 				 * toward the minimum, and consecutive inline images are not separated.
 				 */
 				cursor += rankIconRightAdjustment;
-
 			} else if (layout.hasTitle) {
 				cursor += BODY_GAP;
 			}
@@ -522,7 +501,6 @@ public final class FontMeasurementService {
 			layout.senderX = cursor;
 			cursor += layout.senderWidth;
 			cursor += BODY_GAP;
-
 		} else if (layout.hasTitle) {
 			cursor += BODY_GAP; // Title-only Clan / Guest Clan system message.
 		}
@@ -780,9 +758,7 @@ public final class FontMeasurementService {
 			return 1;
 		}
 
-		final String normalized = text
-				.replace("\r\n", "\n")
-				.replace('\r', '\n');
+		final String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
 		final String[] explicitLines = normalized.split("\n", -1);
 		int totalLines = 0;
 

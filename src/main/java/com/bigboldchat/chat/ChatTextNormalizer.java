@@ -21,14 +21,15 @@ public final class ChatTextNormalizer {
 	public ChatTextNormalizer() {
 		this(null);
 	}
+
 	public ChatTextNormalizer(PerformanceMetrics performanceMetrics) {
 		this.performanceMetrics = performanceMetrics;
 	}
 
 	String normalizeSemantic(String text) {
 		final long started = performanceMetrics != null && performanceMetrics.isEnabled()
-						? System.nanoTime()
-						: 0L;
+				? System.nanoTime()
+				: 0L;
 
 		try {
 			if (text == null) {
@@ -40,13 +41,13 @@ public final class ChatTextNormalizer {
 			 */
 			if (text.indexOf('<') < 0) {
 				final String normalized = text.indexOf('\u00A0') >= 0
-								? text.replace('\u00A0', ' ')
-								: text;
+						? text.replace('\u00A0', ' ')
+						: text;
 
 				return normalized.trim();
 			}
 
-			final String withLineBreaks = LINE_BREAK_PATTERN.matcher(text) .replaceAll("\n");
+			final String withLineBreaks = LINE_BREAK_PATTERN.matcher(text).replaceAll("\n");
 			final String withVisibleAtCharacters = AT_PATTERN.matcher(withLineBreaks).replaceAll("@");
 			final String semantic = Text.removeTags(withVisibleAtCharacters).replace('\u00A0', ' ').trim();
 			if (!semantic.isEmpty()) {
@@ -57,17 +58,15 @@ public final class ChatTextNormalizer {
 			return extractImages(withVisibleAtCharacters);
 		} finally {
 			if (performanceMetrics != null && performanceMetrics.isEnabled()) {
-				performanceMetrics.recordNormalization(
-						System.nanoTime()
-								- started);
+				performanceMetrics.recordNormalization(System.nanoTime() - started);
 			}
 		}
 	}
 
 	String measureSemantic(String text) {
 		final long started = performanceMetrics != null && performanceMetrics.isEnabled()
-						? System.nanoTime()
-						: 0L;
+				? System.nanoTime()
+				: 0L;
 
 		try {
 			if (text == null) {
@@ -79,8 +78,8 @@ public final class ChatTextNormalizer {
 			 */
 			if (text.indexOf('<') < 0) {
 				final String normalized = text.indexOf('\u00A0') >= 0
-								? text.replace('\u00A0', ' ')
-								: text;
+						? text.replace('\u00A0', ' ')
+						: text;
 
 				return normalized.trim();
 			}
@@ -90,9 +89,7 @@ public final class ChatTextNormalizer {
 			return withVisibleAtCharacters.replace('\u00A0', ' ').trim();
 		} finally {
 			if (performanceMetrics != null && performanceMetrics.isEnabled()) {
-				performanceMetrics.recordNormalization(
-						System.nanoTime()
-								- started);
+				performanceMetrics.recordNormalization(System.nanoTime() - started);
 			}
 		}
 	}
