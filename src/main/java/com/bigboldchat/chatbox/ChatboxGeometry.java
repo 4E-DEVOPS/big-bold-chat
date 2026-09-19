@@ -15,6 +15,9 @@ public final class ChatboxGeometry
 
 	private ChatboxGeometry()
 	{
+		/*
+		 * CHATBOX GEOMETRY
+		 */
 	}
 
 	public static int bodyHeight(int slotHeight)

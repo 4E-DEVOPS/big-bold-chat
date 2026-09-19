@@ -75,13 +75,10 @@ public final class ChatboxResizeService
 		{
 			case RESIZABLE_CLASSIC:
 				return client.getWidget(InterfaceID.ToplevelOsrsStretch.CHAT_CONTAINER);
-
 			case RESIZABLE_MODERN:
 				return client.getWidget(InterfaceID.ToplevelPreEoc.CHAT_CONTAINER);
-
 			case FIXED:
 				return client.getWidget(InterfaceID.Toplevel.CHAT_CONTAINER);
-
 			default:
 				return null;
 		}
@@ -116,9 +113,7 @@ public final class ChatboxResizeService
 
 		final int scriptId = event.getScriptId();
 
-		if (scriptId == ScriptID.TOPLEVEL_REDRAW
-				|| scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE
-				|| scriptId == ScriptID.MESSAGE_LAYER_OPEN)
+		if (scriptId == ScriptID.TOPLEVEL_REDRAW || scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE || scriptId == ScriptID.MESSAGE_LAYER_OPEN)
 		{
 			applySize(width, height);
 		}
@@ -134,7 +129,6 @@ public final class ChatboxResizeService
 		final long started = performanceMetrics != null && performanceMetrics.isEnabled()
 				? System.nanoTime()
 				: 0L;
-
 		final ChatboxLayout layout = getLayout();
 
 		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN)
@@ -164,24 +158,13 @@ public final class ChatboxResizeService
 			return ResizeResult.NOT_APPLIED;
 		}
 
-		final boolean widthChanged =
-				slot.getWidth() != width
-						|| universe.getWidth() != width
-						|| chatArea.getWidth() != width;
-
+		final boolean widthChanged = slot.getWidth() != width || universe.getWidth() != width || chatArea.getWidth() != width;
 		final boolean heightChanged = slot.getHeight() != height || universe.getHeight() != height;
-
 		final boolean controlsChanged = !controlsLayout.matches(width);
 
 		if (widthChanged || heightChanged || controlsChanged)
 		{
-			applyGeometry(
-					slot,
-					universe,
-					chatArea,
-					width,
-					height,
-					controlsChanged);
+			applyGeometry(slot, universe, chatArea, width, height, controlsChanged);
 		}
 
 		final ChatboxBackgroundService.Result backgroundResult =
@@ -332,8 +315,7 @@ public final class ChatboxResizeService
 
 		performanceMetrics.recordResizeApply(
 				System.nanoTime() - started,
-				widthChanged,
-				heightChanged);
+				widthChanged, heightChanged);
 	}
 
 	private void recordMissingWidgets()

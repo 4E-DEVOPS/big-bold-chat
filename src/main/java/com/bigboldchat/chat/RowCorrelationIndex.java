@@ -23,30 +23,21 @@ import net.runelite.api.widgets.Widget;
 final class RowCorrelationIndex
 {
     private final Client client;
-
     private final Surface surface;
-
     private final PerformanceMetrics performanceMetrics;
 
     private Widget indexedRoot;
 
     private Map<RowKey, List<Widget>> widgetsByRow;
-
     private IdentityHashMap<Widget, RowKey> rowByWidget;
 
     private final IdentityHashMap<Widget, WatchedRowMove> watchedMoves = new IdentityHashMap<>();
-
     private final Map<RowKey, List<Widget>> watchedWidgetsByPreviousRow = new HashMap<>();
 
-    RowCorrelationIndex(
-            Client client,
-            Surface surface,
-            PerformanceMetrics performanceMetrics)
+    RowCorrelationIndex(Client client, Surface surface, PerformanceMetrics performanceMetrics)
     {
         this.client = client;
-
         this.surface = surface;
-
         this.performanceMetrics = performanceMetrics;
     }
 
@@ -70,20 +61,16 @@ final class RowCorrelationIndex
         final RowKey targetRow = RowKey.of(lineWidget);
 
         boolean rebuilt = false;
-
         boolean repaired = false;
 
         if (widgetsByRow == null || rowByWidget == null || indexedRoot != root)
         {
             build(root);
-
             rebuilt = true;
         } else {
-            // Repair watched widgets that returned to this row.
-            repaired |= repairWatchedWidgetsForRow(targetRow);
+            repaired |= repairWatchedWidgetsForRow(targetRow); // Repair watched widgets that returned to this row.
 
             final RowKey indexedAnchorRow = rowByWidget.get(lineWidget);
-
             if (indexedAnchorRow == null)
             {
                 /*
@@ -92,7 +79,6 @@ final class RowCorrelationIndex
                  * enumerating the surface once.
                  */
                 build(root);
-
                 rebuilt = true;
             } else if (!indexedAnchorRow.equals(targetRow)) {
                 // Re-key the moved anchor row and its known siblings.
@@ -120,9 +106,7 @@ final class RowCorrelationIndex
         if (!rebuilt && !containsIdentity(candidates, lineWidget))
         {
             build(root);
-
             rebuilt = true;
-
             candidates = widgetsByRow.get(targetRow);
         }
 
@@ -171,7 +155,6 @@ final class RowCorrelationIndex
             recordRowWidgetExamined();
 
             final RowKey currentRow = RowKey.of(widget);
-
             final RowKey recordedRow = rowByWidget.get(widget);
 
             if (recordedRow == null)
@@ -185,9 +168,7 @@ final class RowCorrelationIndex
                 if (!indexedRow.equals(currentRow))
                 {
                     removeWidgetFromRow(widget, indexedRow);
-
                     addWidgetToRow(widget, currentRow);
-
                     repaired = true;
                 }
 
@@ -197,9 +178,7 @@ final class RowCorrelationIndex
             if (!recordedRow.equals(currentRow))
             {
                 moveIndexedWidget(widget, recordedRow, currentRow);
-
                 reconcileWatchedMoveAfterExternalGeometryChange(widget, currentRow);
-
                 repaired = true;
             }
         }
@@ -255,7 +234,6 @@ final class RowCorrelationIndex
             if (!recordedRow.equals(currentRow))
             {
                 moveIndexedWidget(widget, recordedRow, currentRow);
-
                 repaired = true;
             }
 
@@ -281,30 +259,23 @@ final class RowCorrelationIndex
         }
 
         final RowKey currentRow = RowKey.of(widget);
-
         final RowKey recordedRow = rowByWidget.get(widget);
 
         if (recordedRow == null)
         {
             addWidgetToRow(widget, currentRow);
-
             rowByWidget.put(widget, currentRow);
-
             return;
         }
 
         if (!recordedRow.equals(currentRow))
         {
             moveIndexedWidget(widget, recordedRow, currentRow);
-
             reconcileWatchedMoveAfterExternalGeometryChange(widget, currentRow);
         }
     }
 
-    void onWidgetGeometryChangedByChatXl(
-            Widget widget,
-            int previousOriginalY,
-            int previousRelativeY)
+    void onWidgetGeometryChangedByChatXl(Widget widget, int previousOriginalY, int previousRelativeY)
     {
         if (widget == null || rowByWidget == null)
         {
@@ -312,7 +283,6 @@ final class RowCorrelationIndex
         }
 
         final RowKey previousRow = new RowKey(previousOriginalY, previousRelativeY);
-
         final RowKey recordedRow = rowByWidget.get(widget);
 
         if (recordedRow == null)
@@ -333,10 +303,7 @@ final class RowCorrelationIndex
         }
     }
 
-    private void moveIndexedWidget(
-            Widget widget,
-            RowKey oldRow,
-            RowKey newRow)
+    private void moveIndexedWidget(Widget widget, RowKey oldRow, RowKey newRow)
     {
         if (widget == null || newRow == null || rowByWidget == null || widgetsByRow == null)
         {
@@ -349,7 +316,6 @@ final class RowCorrelationIndex
         }
 
         addWidgetToRow(widget, newRow);
-
         rowByWidget.put(widget, newRow);
     }
 
@@ -390,10 +356,7 @@ final class RowCorrelationIndex
         }
     }
 
-    private void watchMove(
-            Widget widget,
-            RowKey previousRow,
-            RowKey adjustedRow)
+    private void watchMove(Widget widget, RowKey previousRow, RowKey adjustedRow)
     {
         if (widget == null || previousRow == null || adjustedRow == null)
         {
@@ -401,7 +364,6 @@ final class RowCorrelationIndex
         }
 
         removeWatchedMove(widget);
-
         watchedMoves.put(widget, new WatchedRowMove(previousRow, adjustedRow));
 
         final List<Widget> watchedWidgets = watchedWidgetsByPreviousRow.computeIfAbsent(previousRow, ignored -> new ArrayList<>());
@@ -459,19 +421,13 @@ final class RowCorrelationIndex
     private void build(Widget root)
     {
         indexedRoot = root;
-
         widgetsByRow = new HashMap<>();
-
         rowByWidget = new IdentityHashMap<>();
 
         indexWidget(root);
-
         indexWidgets(root.getDynamicChildren());
-
         indexWidgets(root.getStaticChildren());
-
         indexWidgets(root.getNestedChildren());
-
         pruneWatchedMovesAfterBuild();
     }
 
@@ -498,9 +454,7 @@ final class RowCorrelationIndex
         recordRowWidgetExamined();
 
         final RowKey row = RowKey.of(widget);
-
         addWidgetToRow(widget, row);
-
         rowByWidget.put(widget, row);
     }
 
@@ -516,7 +470,6 @@ final class RowCorrelationIndex
         for (Widget widget : watchedWidgets)
         {
             final WatchedRowMove watchedMove = watchedMoves.get(widget);
-
             final RowKey indexedRow = rowByWidget.get(widget);
 
             if (watchedMove == null || indexedRow == null || !watchedMove.adjustedRow.equals(indexedRow))
@@ -529,9 +482,7 @@ final class RowCorrelationIndex
     private void clear()
     {
         indexedRoot = null;
-
         widgetsByRow = null;
-
         rowByWidget = null;
 
         watchedMoves.clear();
@@ -582,13 +533,11 @@ final class RowCorrelationIndex
     private static final class WatchedRowMove
     {
         private final RowKey previousRow;
-
         private final RowKey adjustedRow;
 
         private WatchedRowMove(RowKey previousRow, RowKey adjustedRow)
         {
             this.previousRow = previousRow;
-
             this.adjustedRow = adjustedRow;
         }
     }
@@ -596,13 +545,11 @@ final class RowCorrelationIndex
     private static final class RowKey
     {
         private final int originalY;
-
         private final int relativeY;
 
         private RowKey(int originalY, int relativeY)
         {
             this.originalY = originalY;
-
             this.relativeY = relativeY;
         }
 
@@ -625,7 +572,6 @@ final class RowCorrelationIndex
             }
 
             final RowKey rowKey = (RowKey) other;
-
             return originalY == rowKey.originalY && relativeY == rowKey.relativeY;
         }
 
@@ -633,7 +579,6 @@ final class RowCorrelationIndex
         public int hashCode()
         {
             int result = originalY;
-
             result = 31 * result + relativeY;
 
             return result;

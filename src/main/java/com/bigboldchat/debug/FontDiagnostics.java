@@ -30,7 +30,7 @@ import net.runelite.client.util.Text;
 @Slf4j
 public final class FontDiagnostics
 {
-    private static final String COMMAND = "chatxl-font-trace";
+    private static final String COMMAND = "debug-font";
 
     private static final int GAME_BODY_SCRIPT = 199;
     private static final int CHAT_BODY_SCRIPT = 203;
@@ -84,8 +84,7 @@ public final class FontDiagnostics
         armed = !armed;
         finishTrace();
 
-        log.debug(
-                "[Chat XL][Font Diagnostic] {}", armed
+        log.debug("[Chat XL][Font Diagnostic] {}", armed
                         ? "ARMED"
                         : "DISARMED");
 
@@ -130,23 +129,16 @@ public final class FontDiagnostics
         final TraceFrame frame = new TraceFrame();
 
         frame.scriptId = scriptId;
-
         frame.sequence = ++traceSequence;
-
         frame.rootFrame = traceFrames.isEmpty();
-
         frame.before = snapshotChatWidgets();
-
         frame.intTailBefore = traceIntStackTail();
-
         frame.stringsBefore = traceObjectStackStrings();
-
         traceFrames.push(frame);
 
         if (isVerboseTrace())
         {
-            log.debug(
-                    "[Chat XL][Font Diagnostic]"
+            log.debug("[Chat XL][Font Diagnostic]"
                             + " PRE"
                             + " | sequence={}"
                             + " | depth={}"
@@ -180,8 +172,7 @@ public final class FontDiagnostics
 
         if (frame.scriptId != scriptId)
         {
-            log.debug(
-                    "[Chat XL][Font Diagnostic]"
+            log.debug("[Chat XL][Font Diagnostic]"
                             + " STACK MISMATCH"
                             + " | expectedScriptId={}"
                             + " | actualScriptId={}"
@@ -199,13 +190,11 @@ public final class FontDiagnostics
         final IdentityHashMap<Widget, WidgetState> after = snapshotChatWidgets();
 
         final boolean logChanges = isVerboseTrace() && TRACE_WIDGET_CHANGES;
-
         final int mutations = logMutations(frame, after, logChanges);
 
         if (isVerboseTrace())
         {
-            log.debug(
-                    "[Chat XL][Font Diagnostic]"
+            log.debug("[Chat XL][Font Diagnostic]"
                             + " POST"
                             + " | sequence={}"
                             + " | depth={}"
@@ -228,8 +217,7 @@ public final class FontDiagnostics
         {
             logSupportedSummary(frame, mutations);
         } else {
-            log.debug(
-                    "[Chat XL][Font Diagnostic]"
+            log.debug("[Chat XL][Font Diagnostic]"
                             + " END"
                             + " | mode={}"
                             + " | rootScriptId={}"
@@ -247,19 +235,14 @@ public final class FontDiagnostics
     private void startTrace(TraceMode mode, int scriptId)
     {
         traceFrames.clear();
-
         traceMode = mode;
-
         rootScriptId = scriptId;
-
         traceSequence = 0;
 
         if (isVerboseTrace())
         {
             log.debug("[Chat XL][Font Diagnostic]" + " ========================================");
-
-            log.debug(
-                    "[Chat XL][Font Diagnostic]"
+            log.debug("[Chat XL][Font Diagnostic]"
                             + " START"
                             + " | mode={}"
                             + " | revision={}"
@@ -267,7 +250,6 @@ public final class FontDiagnostics
                     traceMode,
                     REVISION,
                     rootScriptId);
-
             logConfiguredProfile();
         }
     }
@@ -275,11 +257,8 @@ public final class FontDiagnostics
     private void finishTrace()
     {
         traceFrames.clear();
-
         traceMode = TraceMode.NONE;
-
         rootScriptId = -1;
-
         traceSequence = 0;
     }
 
@@ -302,13 +281,11 @@ public final class FontDiagnostics
         }
 
         final ChatFont selected = getConfiguredFont();
-
         final ChatFontProfile profile = ChatFontRegistry.get(selected);
 
         if (profile == null)
         {
-            log.debug(
-                    "[Chat XL][Font Diagnostic]"
+            log.debug("[Chat XL][Font Diagnostic]"
                             + " SUPPORTED"
                             + " | scriptId={}"
                             + " | font={}"
@@ -325,8 +302,7 @@ public final class FontDiagnostics
             return;
         }
 
-        log.debug(
-                "[Chat XL][Font Diagnostic]"
+        log.debug("[Chat XL][Font Diagnostic]"
                         + " SUPPORTED"
                         + " | scriptId={}"
                         + " | font={}"
@@ -349,7 +325,6 @@ public final class FontDiagnostics
     private void logConfiguredProfile()
     {
         final ChatFont selected = getConfiguredFont();
-
         final ChatFontProfile profile = ChatFontRegistry.get(selected);
 
         if (profile == null)
@@ -359,8 +334,7 @@ public final class FontDiagnostics
             return;
         }
 
-        log.debug(
-                "[Chat XL][Font Diagnostic]"
+        log.debug("[Chat XL][Font Diagnostic]"
                         + " PROFILE"
                         + " | font={}"
                         + " | fontId={}"
@@ -404,9 +378,7 @@ public final class FontDiagnostics
         for (Map.Entry<Widget, WidgetState> entry : after.entrySet())
         {
             final Widget widget = entry.getKey();
-
             final WidgetState afterState = entry.getValue();
-
             final WidgetState beforeState = frame.before.get(widget);
 
             if (beforeState == null)
@@ -415,8 +387,7 @@ public final class FontDiagnostics
 
                 if (logChanges)
                 {
-                    log.debug(
-                            "[Chat XL][Font Diagnostic]"
+                    log.debug("[Chat XL][Font Diagnostic]"
                                     + " CHANGE"
                                     + " | sequence={}"
                                     + " | scriptId={}"
@@ -441,8 +412,7 @@ public final class FontDiagnostics
 
             if (logChanges)
             {
-                log.debug(
-                        "[Chat XL][Font Diagnostic]"
+                log.debug("[Chat XL][Font Diagnostic]"
                                 + " CHANGE"
                                 + " | sequence={}"
                                 + " | scriptId={}"
@@ -469,8 +439,7 @@ public final class FontDiagnostics
 
             if (logChanges)
             {
-                log.debug(
-                        "[Chat XL][Font Diagnostic]"
+                log.debug("[Chat XL][Font Diagnostic]"
                                 + " CHANGE"
                                 + " | sequence={}"
                                 + " | scriptId={}"
@@ -496,7 +465,6 @@ public final class FontDiagnostics
     private IdentityHashMap<Widget, WidgetState> snapshotChatWidgets()
     {
         final IdentityHashMap<Widget, WidgetState> result = new IdentityHashMap<>();
-
         final IdentityHashMap<Widget, Boolean> visited = new IdentityHashMap<>();
 
         collectWidgetTree(
@@ -530,7 +498,6 @@ public final class FontDiagnostics
         final String semanticText = normalizeSemantic(widget.getText());
 
         final boolean hasText = semanticText != null && !semanticText.isEmpty();
-
         final boolean hasSprite = widget.getSpriteId() >= 0;
 
         if (hasText || hasSprite)
@@ -539,9 +506,7 @@ public final class FontDiagnostics
         }
 
         collectWidgetArray(widget.getDynamicChildren(), surface, result, visited);
-
         collectWidgetArray(widget.getStaticChildren(), surface, result, visited);
-
         collectWidgetArray(widget.getNestedChildren(), surface, result, visited);
     }
 
@@ -569,8 +534,7 @@ public final class FontDiagnostics
     {
         final IdentityHashMap<Widget, WidgetState> snapshot = snapshotChatWidgets();
 
-        log.debug(
-                "[Chat XL][Font Diagnostic]"
+        log.debug("[Chat XL][Font Diagnostic]"
                         + " VISIBLE CHAT DUMP"
                         + " | reason='{}'"
                         + " | widgets={}",
@@ -581,8 +545,7 @@ public final class FontDiagnostics
 
         for (Map.Entry<Widget, WidgetState> entry : snapshot.entrySet())
         {
-            log.debug(
-                    "[Chat XL][Font Diagnostic]"
+            log.debug("[Chat XL][Font Diagnostic]"
                             + " WIDGET"
                             + " | identity={}"
                             + " | {}",
@@ -600,7 +563,6 @@ public final class FontDiagnostics
     private String traceIntStackTail()
     {
         final int[] stack = client.getIntStack();
-
         final int size = client.getIntStackSize();
 
         if (stack == null || size <= 0 || size > stack.length)
@@ -609,11 +571,7 @@ public final class FontDiagnostics
         }
 
         final int start = Math.max(0, size - INT_STACK_TAIL_SIZE);
-
-        return Arrays.toString(Arrays.copyOfRange(
-                stack,
-                start,
-                size));
+        return Arrays.toString(Arrays.copyOfRange(stack, start, size));
     }
 
     private String traceObjectStackStrings()
@@ -755,37 +713,22 @@ public final class FontDiagnostics
         private WidgetState(Surface surface, Widget widget, String text)
         {
             this.surface = surface;
-
             this.id = widget.getId();
-
             this.parentId = widget.getParentId();
-
             this.text = text != null
                     ? text
                     : "";
-
             this.spriteId = widget.getSpriteId();
-
             this.fontId = widget.getFontId();
-
             this.lineHeight = widget.getLineHeight();
-
             this.originalX = widget.getOriginalX();
-
             this.originalY = widget.getOriginalY();
-
             this.originalWidth = widget.getOriginalWidth();
-
             this.originalHeight = widget.getOriginalHeight();
-
             this.relativeX = widget.getRelativeX();
-
             this.relativeY = widget.getRelativeY();
-
             this.width = widget.getWidth();
-
             this.height = widget.getHeight();
-
             this.hidden = widget.isHidden();
         }
 

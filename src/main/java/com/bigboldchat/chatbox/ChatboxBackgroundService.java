@@ -372,8 +372,7 @@ final class ChatboxBackgroundService
                 changed = true;
             }
 
-            if (piece.getOriginalWidth() != rectangle[2]
-                    || piece.getOriginalHeight() != rectangle[3])
+            if (piece.getOriginalWidth() != rectangle[2] || piece.getOriginalHeight() != rectangle[3])
             {
                 piece.setSize(rectangle[2], rectangle[3]);
                 result.mutations++;

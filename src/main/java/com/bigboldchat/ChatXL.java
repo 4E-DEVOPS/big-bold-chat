@@ -53,19 +53,14 @@ public class ChatXL extends Plugin
 
 	@Inject
 	private Client client;
-
 	@Inject
 	private ClientThread clientThread;
-
 	@Inject
 	private Configurations config;
-
 	@Inject
 	private ConfigManager configManager;
-
 	@Inject
 	private ExternalPluginManager externalPluginManager;
-
 	@Inject
 	private ChatMessageTests chatMessageTests;
 
@@ -93,28 +88,11 @@ public class ChatXL extends Plugin
 	protected void startUp()
 	{
 		performanceMetrics = new PerformanceMetrics();
-
 		chatboxResizeService = new ChatboxResizeService(client, performanceMetrics);
 		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
-		fontLayoutService = new FontLayoutService(
-				client,
-				config,
-				fontMeasurementService,
-				performanceMetrics);
-
-		chatboxConfigHandler = new ChatboxConfigHandler(
-				client,
-				clientThread,
-				config,
-				chatboxResizeService,
-				performanceMetrics);
-
-		fontConfigHandler = new FontConfigHandler(
-				client,
-				clientThread,
-				fontLayoutService,
-				performanceMetrics);
-
+		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);
+		chatboxConfigHandler = new ChatboxConfigHandler(client, clientThread, config, chatboxResizeService, performanceMetrics);
+		fontConfigHandler = new FontConfigHandler(client, clientThread, fontLayoutService, performanceMetrics);
 		chatboxDiagnostics = new ChatboxDiagnostics(client);
 		fontDiagnostics = new FontDiagnostics(client, config);
 
@@ -353,11 +331,7 @@ public class ChatXL extends Plugin
 	private boolean isBeingUninstalled()
 	{
 		final String internalName = ExternalPluginManager.getInternalName(getClass());
-
-		return internalName != null
-				&& !externalPluginManager
-				.getInstalledExternalPlugins()
-				.contains(internalName);
+		return internalName != null && !externalPluginManager.getInstalledExternalPlugins().contains(internalName);
 	}
 
 	private void showUpdateMessage()

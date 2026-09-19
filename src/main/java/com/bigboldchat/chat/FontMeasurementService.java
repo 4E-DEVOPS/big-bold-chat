@@ -97,14 +97,12 @@ public final class FontMeasurementService
         final int objectStackSize = client.getObjectStackSize();
 
         final String rawBody = findBody(objectStack, objectStackSize);
-
         if (rawBody == null)
         {
             return null;
         }
 
         final String semanticBody = textNormalizer.normalizeSemantic(rawBody);
-
         if (semanticBody == null || semanticBody.isEmpty())
         {
             return null;
@@ -127,7 +125,6 @@ public final class FontMeasurementService
         // Preserve inline images while measuring wrapping.
         final String measurementBody = textNormalizer.measureSemantic(rawBody);
         final String selectedMeasurementBody = textNormalizer.measureSemantic(selectedRawBodyText);
-
         if (measurementBody == null || selectedMeasurementBody == null)
         {
             return null;
@@ -135,7 +132,6 @@ public final class FontMeasurementService
 
         final int[] intStack = client.getIntStack();
         final int intStackSize = client.getIntStackSize();
-
         if (intStack == null || intStackSize < 11 || intStackSize > intStack.length)
         {
             return null;
@@ -182,7 +178,6 @@ public final class FontMeasurementService
         }
 
         final Widget lineWidget = client.getWidget(lineWidgetId);
-
         if (lineWidget == null)
         {
             return null;
@@ -313,10 +308,8 @@ public final class FontMeasurementService
         final int rightPadding = isSplitPrivate(parentWidgetId)
                 ? 0
                 : SCROLLBAR_PADDING;
-
         final int nativeBodyWidth = rightBoundary - nativeBodyX;
         final int selectedBodyWidth = rightBoundary - selectedBodyX - rightPadding;
-
         if (nativeBodyWidth <= 0 || selectedBodyWidth <= 0)
         {
             return null;
@@ -324,7 +317,6 @@ public final class FontMeasurementService
 
         final int nativeLines = calculateWrappedLineCount(nativeFont, measurementBody, nativeBodyWidth);
         final int selectedLines = calculateWrappedLineCount( selectedFont, selectedMeasurementBody, selectedBodyWidth);
-
         if (nativeLines <= 0 || selectedLines <= 0)
         {
             return null;
@@ -332,7 +324,6 @@ public final class FontMeasurementService
 
         // Apply the selected profile's line-height adjustment.
         final int lineHeightAdjustment = fontProfile.getLineHeightAdjustment();
-
         final int selectedLineHeight = Math.max(1, nativeLineHeight + lineHeightAdjustment);
 
         final int rowYOffset = fontProfile.getRowYOffset();
@@ -346,9 +337,7 @@ public final class FontMeasurementService
 
         // Compensate construction height for native and selected wrapped-line counts.
         final int desiredHeight = selectedLines * selectedLineHeight;
-
         final int injectedValue = ceilDiv(desiredHeight, nativeLines);
-
         if (injectedValue <= 0)
         {
             return null;
@@ -507,7 +496,6 @@ public final class FontMeasurementService
          * immediately before the common Script-4483 payload.
          */
         final int commonPayloadStart = intStackSize - 11;
-
         if (layout.hasSender && commonPayloadStart >= 3)
         {
             final int spriteIdCandidate = intStack[commonPayloadStart - 3];
@@ -617,7 +605,6 @@ public final class FontMeasurementService
     private FontTypeFace resolveFont(int fontId)
     {
         final FontTypeFace cachedFont = fontCache.get(fontId);
-
         if (cachedFont != null)
         {
             if (performanceMetrics != null)
@@ -634,7 +621,6 @@ public final class FontMeasurementService
 
         try {
             final Widget probe = client.getWidget(InterfaceID.Chatbox.INPUT);
-
             if (probe == null)
             {
                 return null;
@@ -678,11 +664,9 @@ public final class FontMeasurementService
         }
 
         final int safeSize = Math.min(size, stack.length);
-
         for (int i = safeSize - 1; i >= 0; i--)
         {
             final Object value = stack[i];
-
             if (!(value instanceof String))
             {
                 continue;
@@ -705,18 +689,15 @@ public final class FontMeasurementService
     private List<String> findPrefixComponents(Object[] stack, int size, String semanticBody)
     {
         final List<String> result = new ArrayList<>();
-
         if (stack == null || size <= 0 || semanticBody == null)
         {
             return result;
         }
 
         final int safeSize = Math.min(size, stack.length);
-
         for (int i = 0; i < safeSize; i++)
         {
             final Object value = stack[i];
-
             if (!(value instanceof String))
             {
                 continue;
@@ -800,14 +781,12 @@ public final class FontMeasurementService
         }
 
         final int imageEnd = rawText.indexOf('>', imageStart);
-
         if (imageEnd < 0 || imageEnd >= rawText.length() - 1)
         {
             return rawText;
         }
 
         int existingSpacing = 0;
-
         for (int i = imageEnd + 1; i < rawText.length(); i++)
         {
             final char ch = rawText.charAt(i);
@@ -815,7 +794,6 @@ public final class FontMeasurementService
             if (ch == ' ' || ch == '\u00A0' || ch == '\t')
             {
                 existingSpacing++;
-
                 continue;
             }
 
@@ -823,14 +801,12 @@ public final class FontMeasurementService
         }
 
         final int spacingToAdd = Math.max(0, spacing - existingSpacing);
-
         if (spacingToAdd == 0)
         {
             return rawText;
         }
 
         final StringBuilder gap = new StringBuilder(spacingToAdd);
-
         for (int i = 0; i < spacingToAdd; i++)
         {
             gap.append(spacingCharacter);
@@ -849,7 +825,6 @@ public final class FontMeasurementService
     private boolean isFriendsChatPrefix(String rawPrefix)
     {
         final String semanticPrefix = textNormalizer.normalizeSemantic(rawPrefix);
-
         if (semanticPrefix == null || semanticPrefix.length() < 3 || semanticPrefix.charAt(0) != '[')
         {
             return false;
@@ -987,8 +962,10 @@ public final class FontMeasurementService
         String renderedTitleText = ""; // Exact title text rendered after correlation.
         String senderText = ""; // Native semantic sender used for correlation.
         String renderedSenderText = ""; // Exact selected raw sender markup rendered after correlation.
+
         boolean hasTitle;
         boolean hasSender;
+
         int titleX;
         int titleWidth;
         int rankIconSpriteId = -1;
@@ -1003,12 +980,16 @@ public final class FontMeasurementService
     static final class ConstructionMeasurement
     {
         int scriptId;
+
         String semanticBody; // Native semantic body used for correlation.
         String selectedRawBodyText; // Exact selected raw body rendered after correlation.
+
         ChatFont selectedChatFont;
         int selectedFontId;
+
         List<String> rawPrefixComponents;
         String selectedRawPrefixText; // Exact selected raw Script-203 prefix rendered in POST.
+
         int rowValueIndex;
         int verticalValueIndex;
         int rowYIndex;
@@ -1036,8 +1017,10 @@ public final class FontMeasurementService
         int nativeShadow;
         int nativePrefixWidth;
         int selectedPrefixLayoutWidth;
+
         ChannelPrefixLayout nativeChannelLayout;
         ChannelPrefixLayout selectedChannelLayout;
+
         int nativeBodyX;
         int nativeBodyWidth;
         int selectedBodyX;

@@ -69,12 +69,7 @@ public final class ChatboxDiagnostics
 
         if (parent != null)
         {
-            logResizeChanges(
-                    parent,
-                    current,
-                    "BEFORE_CHILD",
-                    event.getScriptId());
-
+            logResizeChanges(parent, current, "BEFORE_CHILD", event.getScriptId());
             parent.checkpoint = current;
         }
 
@@ -86,7 +81,6 @@ public final class ChatboxDiagnostics
         frame.intTailBefore = traceIntStackTail();
         frame.stringsBefore = traceObjectStackStrings();
         frame.arguments = traceScriptArguments(event);
-
         resizeTraceFrames.push(frame);
     }
 
@@ -107,8 +101,7 @@ public final class ChatboxDiagnostics
 
         if (frame.scriptId != event.getScriptId())
         {
-            log.debug(
-                    "[Chat XL][Resize Diagnostic]"
+            log.debug("[Chat XL][Resize Diagnostic]"
                             + " STACK MISMATCH"
                             + " | expectedScriptId={}"
                             + " | actualScriptId={}"
@@ -116,7 +109,6 @@ public final class ChatboxDiagnostics
                     frame.scriptId,
                     event.getScriptId(),
                     resizeTraceFrames.size());
-
             resizeTraceFrames.clear();
             return;
         }
@@ -134,11 +126,7 @@ public final class ChatboxDiagnostics
             parent.checkpoint = current;
         }
     }
-    private void logResizeChanges(
-            ResizeTraceFrame frame,
-            ResizeSnapshot current,
-            String phase,
-            int nextScriptId)
+    private void logResizeChanges(ResizeTraceFrame frame, ResizeSnapshot current, String phase, int nextScriptId)
     {
         if (frame == null || frame.checkpoint == null || current == null)
         {
@@ -152,8 +140,7 @@ public final class ChatboxDiagnostics
             return;
         }
 
-        log.debug(
-                "[Chat XL][Resize Diagnostic]"
+        log.debug("[Chat XL][Resize Diagnostic]"
                         + " SCRIPT"
                         + " | phase={}"
                         + " | depth={}"
@@ -177,8 +164,7 @@ public final class ChatboxDiagnostics
 
         for (String change : changes)
         {
-            log.debug(
-                    "[Chat XL][Resize Diagnostic]"
+            log.debug("[Chat XL][Resize Diagnostic]"
                             + " CHANGE"
                             + " | scriptId={}"
                             + " | {}",
@@ -198,8 +184,7 @@ public final class ChatboxDiagnostics
 
         if (before.topLevel != after.topLevel)
         {
-            changes.add(
-                    "component=TOPLEVEL"
+            changes.add("component=TOPLEVEL"
                             + " | id="
                             + before.topLevel
                             + "->"
@@ -230,20 +215,9 @@ public final class ChatboxDiagnostics
     {
         final Map<String, ResizeWidgetState> widgets = new LinkedHashMap<>();
 
-        putResizeWidget(
-                widgets,
-                "SLOT_FIXED",
-                client.getWidget(InterfaceID.Toplevel.CHAT_CONTAINER));
-
-        putResizeWidget(
-                widgets,
-                "SLOT_CLASSIC",
-                client.getWidget(InterfaceID.ToplevelOsrsStretch.CHAT_CONTAINER));
-
-        putResizeWidget(
-                widgets,
-                "SLOT_MODERN",
-                client.getWidget(InterfaceID.ToplevelPreEoc.CHAT_CONTAINER));
+        putResizeWidget(widgets, "SLOT_FIXED", client.getWidget(InterfaceID.Toplevel.CHAT_CONTAINER));
+        putResizeWidget(widgets, "SLOT_CLASSIC", client.getWidget(InterfaceID.ToplevelOsrsStretch.CHAT_CONTAINER));
+        putResizeWidget(widgets, "SLOT_MODERN", client.getWidget(InterfaceID.ToplevelPreEoc.CHAT_CONTAINER));
 
         final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
         final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
@@ -253,55 +227,20 @@ public final class ChatboxDiagnostics
         putResizeWidget(widgets, "CHATAREA", chatArea);
         putResizeWidget(widgets, "CHAT_BACKGROUND", background);
         putResizeWidget(widgets, "CHAT_BACKGROUND_BODY", firstDynamicChild(background));
-        putResizeWidget(
-                widgets,
-                "CONTROLS",
-                client.getWidget(InterfaceID.Chatbox.CONTROLS));
-        putResizeWidget(
-                widgets,
-                "CONTROLS_BACKGROUND",
-                client.getWidget(InterfaceID.Chatbox.CONTROLS_BACKGROUND_GRAPHIC));
-        putResizeWidget(
-                widgets,
-                "SCROLLAREA",
-                client.getWidget(InterfaceID.Chatbox.SCROLLAREA));
-        putResizeWidget(
-                widgets,
-                "CHATSCROLLBAR",
-                client.getWidget(InterfaceID.Chatbox.CHATSCROLLBAR));
+        putResizeWidget(widgets, "CONTROLS", client.getWidget(InterfaceID.Chatbox.CONTROLS));
+        putResizeWidget(widgets, "CONTROLS_BACKGROUND", client.getWidget(InterfaceID.Chatbox.CONTROLS_BACKGROUND_GRAPHIC));
+        putResizeWidget(widgets, "SCROLLAREA", client.getWidget(InterfaceID.Chatbox.SCROLLAREA));
+        putResizeWidget(widgets, "CHATSCROLLBAR", client.getWidget(InterfaceID.Chatbox.CHATSCROLLBAR));
 
-        putResizeWidget(
-                widgets,
-                "TAB_ALL",
-                client.getWidget(InterfaceID.Chatbox.CHAT_ALL));
-        putResizeWidget(
-                widgets,
-                "TAB_GAME",
-                client.getWidget(InterfaceID.Chatbox.CHAT_GAME));
-        putResizeWidget(
-                widgets,
-                "TAB_PUBLIC",
-                client.getWidget(InterfaceID.Chatbox.CHAT_PUBLIC));
-        putResizeWidget(
-                widgets,
-                "TAB_PRIVATE",
-                client.getWidget(InterfaceID.Chatbox.CHAT_PRIVATE));
-        putResizeWidget(
-                widgets,
-                "TAB_FRIENDSCHAT",
-                client.getWidget(InterfaceID.Chatbox.CHAT_FRIENDSCHAT));
-        putResizeWidget(
-                widgets,
-                "TAB_CLAN",
-                client.getWidget(InterfaceID.Chatbox.CHAT_CLAN));
-        putResizeWidget(
-                widgets,
-                "TAB_TRADE",
-                client.getWidget(InterfaceID.Chatbox.CHAT_TRADE));
+        putResizeWidget(widgets, "TAB_ALL", client.getWidget(InterfaceID.Chatbox.CHAT_ALL));
+        putResizeWidget(widgets, "TAB_GAME", client.getWidget(InterfaceID.Chatbox.CHAT_GAME));
+        putResizeWidget(widgets, "TAB_PUBLIC", client.getWidget(InterfaceID.Chatbox.CHAT_PUBLIC));
+        putResizeWidget(widgets, "TAB_PRIVATE", client.getWidget(InterfaceID.Chatbox.CHAT_PRIVATE));
+        putResizeWidget(widgets, "TAB_FRIENDSCHAT", client.getWidget(InterfaceID.Chatbox.CHAT_FRIENDSCHAT));
+        putResizeWidget(widgets, "TAB_CLAN", client.getWidget(InterfaceID.Chatbox.CHAT_CLAN));
+        putResizeWidget(widgets, "TAB_TRADE", client.getWidget(InterfaceID.Chatbox.CHAT_TRADE));
 
-        return new ResizeSnapshot(
-                client.getTopLevelInterfaceId(),
-                widgets);
+        return new ResizeSnapshot(client.getTopLevelInterfaceId(), widgets);
     }
 
     private static void putResizeWidget(Map<String, ResizeWidgetState> widgets, String label, Widget widget)
@@ -317,7 +256,6 @@ public final class ChatboxDiagnostics
         }
 
         final Widget[] children = widget.getDynamicChildren();
-
         return children != null && children.length > 0
                 ? children[0]
                 : null;
@@ -341,10 +279,7 @@ public final class ChatboxDiagnostics
 
                 if (value.length() > MAX_LOGGED_STRING_LENGTH)
                 {
-                    value = value.substring(
-                            0,
-                            MAX_LOGGED_STRING_LENGTH)
-                            + "...";
+                    value = value.substring(0, MAX_LOGGED_STRING_LENGTH) + "...";
                 }
 
                 values.add("'" + value + "'");
@@ -354,13 +289,7 @@ public final class ChatboxDiagnostics
             if (argument instanceof Widget)
             {
                 final Widget widget = (Widget) argument;
-
-                values.add(
-                        "Widget(id="
-                                + widget.getId()
-                                + ", identity="
-                                + System.identityHashCode(widget)
-                                + ")");
+                values.add("Widget(id=" + widget.getId() + ", identity=" + System.identityHashCode(widget) + ")");
                 continue;
             }
 
@@ -372,7 +301,6 @@ public final class ChatboxDiagnostics
     private String traceIntStackTail()
     {
         final int[] stack = client.getIntStack();
-
         final int size = client.getIntStackSize();
 
         if (stack == null || size <= 0 || size > stack.length)
@@ -388,7 +316,6 @@ public final class ChatboxDiagnostics
     private String traceObjectStackStrings()
     {
         final Object[] stack = client.getObjectStack();
-
         final int size = client.getObjectStackSize();
 
         if (stack == null || size <= 0 || size > stack.length)
@@ -588,28 +515,17 @@ public final class ChatboxDiagnostics
 
             if (before == null)
             {
-                return "component="
-                        + label
-                        + " | state=MISSING->"
-                        + after.describe();
+                return "component=" + label + " | state=MISSING->" + after.describe();
             }
 
             if (after == null)
             {
-                return "component="
-                        + label
-                        + " | state="
-                        + before.describe()
-                        + "->MISSING";
+                return "component=" + label + " | state=" + before.describe() + "->MISSING";
             }
 
             final StringBuilder difference = new StringBuilder();
 
-            appendDifference(
-                    difference,
-                    "present",
-                    before.present,
-                    after.present);
+            appendDifference(difference, "present", before.present, after.present);
 
             if (!before.present && !after.present)
             {
@@ -618,142 +534,38 @@ public final class ChatboxDiagnostics
                         : "component=" + label + " | " + difference;
             }
 
-            appendDifference(
-                    difference,
-                    "identity",
-                    before.identity,
-                    after.identity);
-            appendDifference(
-                    difference,
-                    "id",
-                    before.id,
-                    after.id);
-            appendDifference(
-                    difference,
-                    "parentId",
-                    before.parentId,
-                    after.parentId);
-            appendDifference(
-                    difference,
-                    "parentIdentity",
-                    before.parentIdentity,
-                    after.parentIdentity);
-            appendDifference(
-                    difference,
-                    "index",
-                    before.index,
-                    after.index);
-            appendDifference(
-                    difference,
-                    "type",
-                    before.type,
-                    after.type);
+            appendDifference(difference, "identity", before.identity, after.identity);
+            appendDifference(difference, "id", before.id, after.id);
+            appendDifference(difference, "parentId", before.parentId, after.parentId);
+            appendDifference(difference, "parentIdentity", before.parentIdentity, after.parentIdentity);
+            appendDifference(difference, "index", before.index, after.index);
+            appendDifference(difference, "type", before.type, after.type);
 
-            appendDifference(
-                    difference,
-                    "originalX",
-                    before.originalX,
-                    after.originalX);
-            appendDifference(
-                    difference,
-                    "originalY",
-                    before.originalY,
-                    after.originalY);
-            appendDifference(
-                    difference,
-                    "originalWidth",
-                    before.originalWidth,
-                    after.originalWidth);
-            appendDifference(
-                    difference,
-                    "originalHeight",
-                    before.originalHeight,
-                    after.originalHeight);
+            appendDifference(difference, "originalX", before.originalX, after.originalX);
+            appendDifference(difference, "originalY", before.originalY, after.originalY);
+            appendDifference(difference, "originalWidth", before.originalWidth, after.originalWidth);
+            appendDifference(difference, "originalHeight", before.originalHeight, after.originalHeight);
 
-            appendDifference(
-                    difference,
-                    "relativeX",
-                    before.relativeX,
-                    after.relativeX);
-            appendDifference(
-                    difference,
-                    "relativeY",
-                    before.relativeY,
-                    after.relativeY);
-            appendDifference(
-                    difference,
-                    "width",
-                    before.width,
-                    after.width);
-            appendDifference(
-                    difference,
-                    "height",
-                    before.height,
-                    after.height);
+            appendDifference(difference, "relativeX", before.relativeX, after.relativeX);
+            appendDifference(difference, "relativeY", before.relativeY, after.relativeY);
+            appendDifference(difference, "width", before.width, after.width);
+            appendDifference(difference, "height", before.height, after.height);
 
-            appendDifference(
-                    difference,
-                    "widthMode",
-                    before.widthMode,
-                    after.widthMode);
-            appendDifference(
-                    difference,
-                    "heightMode",
-                    before.heightMode,
-                    after.heightMode);
-            appendDifference(
-                    difference,
-                    "xMode",
-                    before.xPositionMode,
-                    after.xPositionMode);
-            appendDifference(
-                    difference,
-                    "yMode",
-                    before.yPositionMode,
-                    after.yPositionMode);
+            appendDifference(difference, "widthMode", before.widthMode, after.widthMode);
+            appendDifference(difference, "heightMode", before.heightMode, after.heightMode);
+            appendDifference(difference, "xMode", before.xPositionMode, after.xPositionMode);
+            appendDifference(difference, "yMode", before.yPositionMode, after.yPositionMode);
 
-            appendDifference(
-                    difference,
-                    "spriteId",
-                    before.spriteId,
-                    after.spriteId);
-            appendDifference(
-                    difference,
-                    "spriteTiling",
-                    before.spriteTiling,
-                    after.spriteTiling);
-            appendDifference(
-                    difference,
-                    "hidden",
-                    before.hidden,
-                    after.hidden);
+            appendDifference(difference, "spriteId", before.spriteId, after.spriteId);
+            appendDifference(difference, "spriteTiling", before.spriteTiling, after.spriteTiling);
+            appendDifference(difference, "hidden", before.hidden, after.hidden);
 
-            appendDifference(
-                    difference,
-                    "scrollY",
-                    before.scrollY,
-                    after.scrollY);
-            appendDifference(
-                    difference,
-                    "scrollHeight",
-                    before.scrollHeight,
-                    after.scrollHeight);
+            appendDifference(difference, "scrollY", before.scrollY, after.scrollY);
+            appendDifference(difference, "scrollHeight", before.scrollHeight, after.scrollHeight);
 
-            appendDifference(
-                    difference,
-                    "staticChildren",
-                    before.staticChildren,
-                    after.staticChildren);
-            appendDifference(
-                    difference,
-                    "dynamicChildren",
-                    before.dynamicChildren,
-                    after.dynamicChildren);
-            appendDifference(
-                    difference,
-                    "nestedChildren",
-                    before.nestedChildren,
-                    after.nestedChildren);
+            appendDifference(difference, "staticChildren", before.staticChildren, after.staticChildren);
+            appendDifference(difference, "dynamicChildren", before.dynamicChildren, after.dynamicChildren);
+            appendDifference(difference, "nestedChildren", before.nestedChildren, after.nestedChildren);
 
             return difference.length() == 0
                     ? null

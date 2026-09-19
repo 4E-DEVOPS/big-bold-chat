@@ -18,29 +18,17 @@ public final class ChatFontRegistry
         final EnumMap<ChatFont, ChatFontProfile> profiles = new EnumMap<>(ChatFont.class);
 
         register(profiles, new Plain11());
-
         register(profiles, new Plain12());
-
         register(profiles, new Bold12());
-
         register(profiles, new QuillSmall());
-
         register(profiles, new QuillMedium());
-
         register(profiles, new Barbarian());
-
         register(profiles, new Tahoma11());
-
         register(profiles, new Verdana11());
-
         register(profiles, new Verdana11Bold());
-
         register(profiles, new Verdana13());
-
         register(profiles, new Verdana13Bold());
-
         register(profiles, new Verdana15());
-
         PROFILES = Collections.unmodifiableMap(profiles);
     }
 
@@ -71,9 +59,7 @@ public final class ChatFontRegistry
         return PROFILES.get(ChatFont.PLAIN_12);
     }
 
-    private static void register(
-            EnumMap<ChatFont, ChatFontProfile> profiles,
-            ChatFontProfile profile)
+    private static void register(EnumMap<ChatFont, ChatFontProfile> profiles, ChatFontProfile profile)
     {
         if (profiles == null || profile == null || profile.getChatFont() == null)
         {

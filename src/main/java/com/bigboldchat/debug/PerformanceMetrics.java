@@ -12,7 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class PerformanceMetrics
 {
-    private static final String COMMAND = "chatxl-perf";
+    private static final String COMMAND = "debug-performance";
     private static final long REPORT_INTERVAL_NANOS = 10_000_000_000L;
 
     private static final int GAME_BODY_SCRIPT = 199;
@@ -25,16 +25,12 @@ public final class PerformanceMetrics
 
     // Measure Script PRE processing time.
     private final TimingMetric pre199 = new TimingMetric();
-
     private final TimingMetric pre203 = new TimingMetric();
-
     private final TimingMetric pre4483 = new TimingMetric();
 
     // Measure Script POST processing time.
     private final TimingMetric post199 = new TimingMetric();
-
     private final TimingMetric post203 = new TimingMetric();
-
     private final TimingMetric post4483 = new TimingMetric();
 
     // Measure construction measurement time.
@@ -55,7 +51,6 @@ public final class PerformanceMetrics
 
     // Count FontTypeFace cache activity.
     private long fontCacheHits;
-
     private long fontCacheMisses;
 
     // Count widgets examined during chat correlation.
@@ -72,9 +67,7 @@ public final class PerformanceMetrics
 
     // Count persistent row-index full builds, local repairs, and direct reuses.
     private long rowIndexBuilds;
-
     private long rowIndexRepairs;
-
     private long rowIndexReuses;
 
     // Count correlation fallback requests.
@@ -88,27 +81,21 @@ public final class PerformanceMetrics
 
     // Count rank-icon searches, full-tree fallbacks, and examined nodes.
     private long rankSearches;
-
     private long rankFallbacks;
-
     private long rankNodesExamined;
 
     /*
      * Classify strict row-first rank misses before shallow recovery.
      */
     private long rankRowNoSprite;
-
     private long rankRowXMismatch;
-
     private long rankRowYMismatch;
-
     private long rankShallowRecoveries;
 
     /*
      * Classify recursive fallback results.
      */
     private long rankFallbackHits;
-
     private long rankFallbackMisses;
 
     // Count widget mutations.
@@ -119,31 +106,21 @@ public final class PerformanceMetrics
 
     // Count initiated chat refreshes.
     private long refreshChatCalls;
-
     private long refreshStartup;
-
     private long refreshFontChanged;
-
     private long refreshShutdown;
-
     private long refreshWidthChanged;
-
     private long refreshOther;
 
     // Count chatbox-resize geometry activity.
     private long resizeApplies;
-
     private long resizeNoops;
-
     private long resizeWidthChanges;
-
     private long resizeHeightChanges;
-
     private long resizeMissingWidgets;
-
     private long resizeRestores;
-
     private long reportStartedAt;
+
     private boolean enabled;
 
     public boolean isEnabled()
@@ -167,8 +144,7 @@ public final class PerformanceMetrics
             resetWindow(System.nanoTime());
         }
 
-        log.debug(
-                "[Chat XL][Performance] {}", enabled
+        log.debug("[Chat XL][Performance] {}", enabled
                         ? "ARMED"
                         : "DISARMED");
 
@@ -247,7 +223,6 @@ public final class PerformanceMetrics
         }
 
         fontCacheMisses++;
-
         fontResolution.record(elapsedNanos);
     }
 
@@ -470,7 +445,6 @@ public final class PerformanceMetrics
         }
 
         resizeApply.record(elapsedNanos);
-
         resizeApplies++;
 
         if (!widthChanged && !heightChanged)
@@ -529,19 +503,15 @@ public final class PerformanceMetrics
             case STARTUP:
                 refreshStartup++;
                 break;
-
             case FONT_CHANGED:
                 refreshFontChanged++;
                 break;
-
             case SHUTDOWN:
                 refreshShutdown++;
                 break;
-
             case WIDTH_CHANGED:
                 refreshWidthChanged++;
                 break;
-
             default:
                 refreshOther++;
                 break;
@@ -590,13 +560,10 @@ public final class PerformanceMetrics
 
         final double elapsedSeconds = elapsedNanos / 1_000_000_000.0;
 
-        log.debug("[Chat XL][Performance] Window={}", String.format(
-                Locale.ROOT,
-                "%.3fs",
-                elapsedSeconds));
+        log.debug("[Chat XL][Performance] Window={}",
+                String.format(Locale.ROOT, "%.3fs", elapsedSeconds));
 
-        log.debug(
-                "[Chat XL][Performance] PRE"
+        log.debug("[Chat XL][Performance] PRE"
                         + " | 199={}"
                         + " | 203={}"
                         + " | 4483={}",
@@ -604,8 +571,7 @@ public final class PerformanceMetrics
                 formatTiming(pre203),
                 formatTiming(pre4483));
 
-        log.debug(
-                "[Chat XL][Performance] POST"
+        log.debug("[Chat XL][Performance] POST"
                         + " | 199={}"
                         + " | 203={}"
                         + " | 4483={}",
@@ -613,8 +579,7 @@ public final class PerformanceMetrics
                 formatTiming(post203),
                 formatTiming(post4483));
 
-        log.debug(
-                "[Chat XL][Performance] SERVICES"
+        log.debug("[Chat XL][Performance] SERVICES"
                         + " | Measurement={}"
                         + " | Normalize={}"
                         + " | FontResolve={}"
@@ -626,8 +591,7 @@ public final class PerformanceMetrics
                 fontCacheHits,
                 fontCacheMisses);
 
-        log.debug(
-                "[Chat XL][Performance] CORRELATION"
+        log.debug("[Chat XL][Performance] CORRELATION"
                         + " | Widgets={}"
                         + " | RowSearches={}"
                         + " | RowCandidates={}"
@@ -667,15 +631,13 @@ public final class PerformanceMetrics
                 rankFallbackMisses,
                 rankNodesExamined);
 
-        log.debug(
-                "[Chat XL][Performance] PRESENTATION"
+        log.debug("[Chat XL][Performance] PRESENTATION"
                         + " | Mutations={}"
                         + " | Revalidates={}",
                 widgetMutations,
                 revalidates);
 
-        log.debug(
-                "[Chat XL][Performance] RESIZE"
+        log.debug("[Chat XL][Performance] RESIZE"
                         + " | Apply={}"
                         + " | Applies={}"
                         + " | Noops={}"
@@ -691,8 +653,7 @@ public final class PerformanceMetrics
                 resizeMissingWidgets,
                 resizeRestores);
 
-        log.debug(
-                "[Chat XL][Performance] REFRESH"
+        log.debug("[Chat XL][Performance] REFRESH"
                         + " | Total={}"
                         + " | Startup={}"
                         + " | FontChanged={}"
@@ -719,13 +680,10 @@ public final class PerformanceMetrics
         {
             case GAME_BODY_SCRIPT:
                 return pre199;
-
             case CHAT_BODY_SCRIPT:
                 return pre203;
-
             case CHANNEL_BODY_SCRIPT:
                 return pre4483;
-
             default:
                 return null;
         }
@@ -737,13 +695,10 @@ public final class PerformanceMetrics
         {
             case GAME_BODY_SCRIPT:
                 return post199;
-
             case CHAT_BODY_SCRIPT:
                 return post203;
-
             case CHANNEL_BODY_SCRIPT:
                 return post4483;
-
             default:
                 return null;
         }

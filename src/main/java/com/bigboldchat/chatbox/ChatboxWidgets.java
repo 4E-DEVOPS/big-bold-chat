@@ -45,6 +45,7 @@ final class ChatboxWidgets
 			}
 
 			child.revalidate();
+
 			count++;
 
 			if (child.getId() == InterfaceID.Chatbox.SCROLLAREA)

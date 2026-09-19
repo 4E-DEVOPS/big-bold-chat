@@ -17,7 +17,7 @@ import net.runelite.client.game.ChatIconManager;
  */
 public final class ChatMessageTests
 {
-    private static final String COMMAND = "chatxl-text";
+    private static final String COMMAND = "debug-text";
     private static final String CHANNEL_NAME = "CHANNEL";
 
     private static final int FRIENDS_CHAT_ICON = 67;
@@ -121,20 +121,9 @@ public final class ChatMessageTests
     {
         addChatTest(ChatMessageType.PRIVATECHAT, "Private");
         addChatTest(ChatMessageType.PRIVATECHATOUT, "Private");
-
-        addChatTest(
-                ChatMessageType.MODPRIVATECHAT,
-                IconID.PLAYER_MODERATOR.toString() + "PMod");
-
-        addChatTest(
-                ChatMessageType.LOGINLOGOUTNOTIFICATION,
-                "",
-                "Player has logged in.");
-
-        addChatTest(
-                ChatMessageType.LOGINLOGOUTNOTIFICATION,
-                "",
-                "Player has logged out.");
+        addChatTest(ChatMessageType.MODPRIVATECHAT, IconID.PLAYER_MODERATOR.toString() + "PMod");
+        addChatTest(ChatMessageType.LOGINLOGOUTNOTIFICATION, "", "Player has logged in.");
+        addChatTest(ChatMessageType.LOGINLOGOUTNOTIFICATION, "", "Player has logged out.");
     }
 
     /*
@@ -166,7 +155,6 @@ public final class ChatMessageTests
                 iconTag(FRIENDS_CHAT_ICON) + "Player",
                 "ChatXL FRIENDSCHAT test.",
                 CHANNEL_NAME);
-
         addChatTest(
                 ChatMessageType.FRIENDSCHATNOTIFICATION,
                 "",
@@ -178,7 +166,6 @@ public final class ChatMessageTests
                 clanRank + IconID.IRONMAN.toString() + "Player",
                 "ChatXL CLAN_CHAT test.",
                 CHANNEL_NAME);
-
         addChatTest(
                 ChatMessageType.CLAN_MESSAGE,
                 "",
@@ -190,7 +177,6 @@ public final class ChatMessageTests
                 guestRank + "Player",
                 "ChatXL CLAN_GUEST_CHAT test.",
                 CHANNEL_NAME);
-
         addChatTest(
                 ChatMessageType.CLAN_GUEST_MESSAGE,
                 "",
@@ -202,7 +188,6 @@ public final class ChatMessageTests
                 gimRank + IconID.GROUP_IRONMAN.toString() + "Player",
                 "ChatXL CLAN_GIM_CHAT test.",
                 CHANNEL_NAME);
-
         addChatTest(
                 ChatMessageType.CLAN_GIM_MESSAGE,
                 "",

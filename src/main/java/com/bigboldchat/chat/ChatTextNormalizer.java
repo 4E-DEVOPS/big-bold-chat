@@ -23,7 +23,6 @@ public final class ChatTextNormalizer
     {
         this(null);
     }
-
     public ChatTextNormalizer(PerformanceMetrics performanceMetrics)
     {
         this.performanceMetrics = performanceMetrics;
@@ -56,11 +55,8 @@ public final class ChatTextNormalizer
             }
 
             final String withLineBreaks = LINE_BREAK_PATTERN.matcher(text) .replaceAll("\n");
-
             final String withVisibleAtCharacters = AT_PATTERN.matcher(withLineBreaks).replaceAll("@");
-
             final String semantic = Text.removeTags(withVisibleAtCharacters).replace('\u00A0', ' ').trim();
-
             if (!semantic.isEmpty())
             {
                 return semantic;
@@ -105,9 +101,7 @@ public final class ChatTextNormalizer
             }
 
             final String withLineBreaks = LINE_BREAK_PATTERN.matcher(text).replaceAll("\n");
-
             final String withVisibleAtCharacters = AT_PATTERN.matcher(withLineBreaks).replaceAll("@");
-
             return withVisibleAtCharacters.replace('\u00A0', ' ').trim();
         } finally {
             if (performanceMetrics != null && performanceMetrics.isEnabled())
@@ -132,6 +126,7 @@ public final class ChatTextNormalizer
     /*
      * HELPERS
      */
+
     private String extractImages(String text)
     {
         if (text == null || text.isEmpty())
@@ -140,9 +135,7 @@ public final class ChatTextNormalizer
         }
 
         final Matcher matcher = IMAGE_PATTERN.matcher(text);
-
         final StringBuilder images = new StringBuilder();
-
         while (matcher.find())
         {
             images.append("<img=").append(matcher.group(1)).append('>');
