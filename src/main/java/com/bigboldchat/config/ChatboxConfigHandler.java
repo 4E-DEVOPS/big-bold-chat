@@ -23,6 +23,9 @@ public final class ChatboxConfigHandler {
 	private final PerformanceMetrics performanceMetrics;
 
 	private boolean active = true;
+	private boolean commitQueued;
+	private int committedWidth;
+	private int committedHeight;
 
 	public ChatboxConfigHandler(
 			Client client,
@@ -35,6 +38,8 @@ public final class ChatboxConfigHandler {
 		this.config = config;
 		this.resizeService = resizeService;
 		this.performanceMetrics = performanceMetrics;
+		this.committedWidth = config.chatboxWidth();
+		this.committedHeight = config.chatboxHeight();
 	}
 
 	public boolean onConfigChanged(ConfigChanged event) {
@@ -42,37 +47,17 @@ public final class ChatboxConfigHandler {
 			return false;
 		}
 
-		if (WIDTH_KEY.equals(event.getKey())) {
-			clientThread.invokeLater(() -> {
-				if (!active) {
-					return;
-				}
-
-				final ChatboxResizeService.ResizeResult result = applyConfiguredSize();
-				if (result == null || !result.isApplied() || !result.isWidthChanged()) {
-					return;
-				}
-
-				if (performanceMetrics != null) {
-					performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.WIDTH_CHANGED);
-				}
-
-				client.refreshChat();
-			});
-
-			return true;
+		if (!WIDTH_KEY.equals(event.getKey()) && !HEIGHT_KEY.equals(event.getKey())) {
+			return false;
 		}
 
-		if (HEIGHT_KEY.equals(event.getKey())) {
-			clientThread.invokeLater(this::applyConfiguredSize);
-			return true;
-		}
-
-		return false;
+		queueCommit();
+		return true;
 	}
 
 	public void deactivate() {
 		active = false;
+		commitQueued = false;
 	}
 
 	public ChatboxResizeService.ResizeResult applyConfiguredSize() {
@@ -80,8 +65,55 @@ public final class ChatboxConfigHandler {
 			return null;
 		}
 
-		return resizeService.applySize(
-				config.chatboxWidth(),
-				config.chatboxHeight());
+		final int width = config.chatboxWidth();
+		final int height = config.chatboxHeight();
+		final ChatboxResizeService.ResizeResult result = resizeService.applySize(width, height);
+		if (result != null && result.isApplied()) {
+			committedWidth = width;
+			committedHeight = height;
+		}
+
+		return result;
+	}
+
+	private void queueCommit() {
+		if (commitQueued) {
+			return;
+		}
+
+		commitQueued = true;
+		clientThread.invokeLater(this::drainCommit);
+	}
+
+	private void drainCommit() {
+		commitQueued = false;
+		if (!active || resizeService == null || config == null) {
+			return;
+		}
+
+		final int width = config.chatboxWidth();
+		final int height = config.chatboxHeight();
+		final boolean widthChanged = width != committedWidth;
+		final boolean heightChanged = height != committedHeight;
+		if (!widthChanged && !heightChanged) {
+			return;
+		}
+
+		final ChatboxResizeService.ResizeResult result = resizeService.applySize(width, height);
+		if (result == null || !result.isApplied()) {
+			return;
+		}
+
+		committedWidth = width;
+		committedHeight = height;
+
+		if (performanceMetrics != null) {
+			performanceMetrics.recordRefreshChat(
+					widthChanged
+							? PerformanceMetrics.RefreshReason.WIDTH_CHANGED
+							: PerformanceMetrics.RefreshReason.HEIGHT_CHANGED);
+		}
+
+		client.refreshChat();
 	}
 }

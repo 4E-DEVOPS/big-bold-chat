@@ -26,6 +26,13 @@ import net.runelite.api.widgets.Widget;
 public final class ChatboxDiagnostics {
 	private static final String COMMAND = "debug-chatbox";
 
+	/*
+	 * Reference plugins use these native rebuild paths for resizable chat.
+	 * Diagnostics observe them only; ChatXL never invokes them.
+	 */
+	private static final int RESIZES_CHAT = 924;
+	private static final int REWRAPS_CHAT = 663;
+
 	private static final int INT_STACK_TAIL_SIZE = 16;
 	private static final int MAX_LOGGED_STRING_LENGTH = 200;
 
@@ -74,6 +81,12 @@ public final class ChatboxDiagnostics {
 		frame.intTailBefore = traceIntStackTail();
 		frame.stringsBefore = traceObjectStackStrings();
 		frame.arguments = traceScriptArguments(event);
+
+		if (isRebuildCandidate(frame.scriptId)) {
+			frame.candidateEntry = current;
+			logRebuildState(frame, "PRE", snapshotChatState());
+		}
+
 		resizeTraceFrames.push(frame);
 	}
 
@@ -104,6 +117,10 @@ public final class ChatboxDiagnostics {
 
 		final ResizeSnapshot current = snapshotResizeWidgets();
 
+		if (isRebuildCandidate(frame.scriptId)) {
+			logRebuildResult(frame, current);
+		}
+
 		logResizeChanges(frame, current, "POST", -1);
 
 		resizeTraceFrames.pop();
@@ -112,6 +129,55 @@ public final class ChatboxDiagnostics {
 		if (parent != null) {
 			parent.checkpoint = current;
 		}
+	}
+
+	private static boolean isRebuildCandidate(int scriptId) {
+		return scriptId == RESIZES_CHAT || scriptId == REWRAPS_CHAT;
+	}
+
+	private void logRebuildResult(ResizeTraceFrame frame, ResizeSnapshot current) {
+		final ChatStateSnapshot after = snapshotChatState();
+
+		logRebuildState(frame, "POST", after);
+
+		final List<String> changes = compareResizeSnapshots(frame.candidateEntry, current);
+		if (changes.isEmpty()) {
+			log.debug(
+					"[Chat XL][Chatbox Diagnostic]"
+							+ " REBUILD CHANGE"
+							+ " | scriptId={}"
+							+ " | none",
+					frame.scriptId);
+			return;
+		}
+
+		for (String change : changes) {
+			log.debug(
+					"[Chat XL][Chatbox Diagnostic]"
+							+ " REBUILD CHANGE"
+							+ " | scriptId={}"
+							+ " | {}",
+					frame.scriptId,
+					change);
+		}
+	}
+
+	private void logRebuildState(ResizeTraceFrame frame, String phase, ChatStateSnapshot state) {
+		log.debug(
+				"[Chat XL][Chatbox Diagnostic]"
+						+ " REBUILD"
+						+ " | phase={}"
+						+ " | depth={}"
+						+ " | scriptId={}"
+						+ " | args={}"
+						+ " | intTail={}"
+						+ " | {}",
+				phase,
+				frame.depth,
+				frame.scriptId,
+				frame.arguments,
+				frame.intTailBefore,
+				state.describe());
 	}
 
 	private void logResizeChanges(ResizeTraceFrame frame, ResizeSnapshot current, String phase, int nextScriptId) {
@@ -236,6 +302,13 @@ public final class ChatboxDiagnostics {
 				: null;
 	}
 
+	private ChatStateSnapshot snapshotChatState() {
+		return new ChatStateSnapshot(
+				client.getWidget(InterfaceID.Chatbox.SCROLLAREA),
+				client.getWidget(InterfaceID.Chatbox.CHATSCROLLBAR),
+				client.getWidget(InterfaceID.Chatbox.CHATAREA));
+	}
+
 	private String traceScriptArguments(ScriptPreFired event) {
 		if (event == null || event.getScriptEvent() == null || event.getScriptEvent().getArguments() == null) {
 			return "[]";
@@ -321,10 +394,151 @@ public final class ChatboxDiagnostics {
 		private int depth;
 
 		private ResizeSnapshot checkpoint;
+		private ResizeSnapshot candidateEntry;
 
 		private String intTailBefore;
 		private String stringsBefore;
 		private String arguments;
+	}
+
+	private static final class ChatStateSnapshot {
+		private final boolean scrollAreaPresent;
+		private final int viewportHeight;
+		private final int scrollHeight;
+		private final int scrollY;
+		private final int staticChildren;
+		private final int dynamicChildren;
+		private final int nestedChildren;
+
+		private final boolean scrollbarPresent;
+		private final int scrollbarX;
+		private final int scrollbarY;
+		private final int scrollbarWidth;
+		private final int scrollbarHeight;
+
+		private final int chatAreaDynamicChildren;
+		private final ChildRange childRange;
+
+		private ChatStateSnapshot(Widget scrollArea, Widget scrollbar, Widget chatArea) {
+			scrollAreaPresent = scrollArea != null;
+			viewportHeight = scrollArea != null
+					? scrollArea.getHeight()
+					: 0;
+			scrollHeight = scrollArea != null
+					? scrollArea.getScrollHeight()
+					: 0;
+			scrollY = scrollArea != null
+					? scrollArea.getScrollY()
+					: 0;
+			staticChildren = scrollArea != null
+					? childCount(scrollArea.getStaticChildren())
+					: 0;
+			dynamicChildren = scrollArea != null
+					? childCount(scrollArea.getDynamicChildren())
+					: 0;
+			nestedChildren = scrollArea != null
+					? childCount(scrollArea.getNestedChildren())
+					: 0;
+
+			scrollbarPresent = scrollbar != null;
+			scrollbarX = scrollbar != null
+					? scrollbar.getRelativeX()
+					: 0;
+			scrollbarY = scrollbar != null
+					? scrollbar.getRelativeY()
+					: 0;
+			scrollbarWidth = scrollbar != null
+					? scrollbar.getWidth()
+					: 0;
+			scrollbarHeight = scrollbar != null
+					? scrollbar.getHeight()
+					: 0;
+
+			chatAreaDynamicChildren = chatArea != null
+					? childCount(chatArea.getDynamicChildren())
+					: 0;
+			childRange = ChildRange.of(scrollArea);
+		}
+
+		private String describe() {
+			return "scrollArea=[present="
+					+ scrollAreaPresent
+					+ ", height="
+					+ viewportHeight
+					+ ", scrollHeight="
+					+ scrollHeight
+					+ ", scrollY="
+					+ scrollY
+					+ ", static="
+					+ staticChildren
+					+ ", dynamic="
+					+ dynamicChildren
+					+ ", nested="
+					+ nestedChildren
+					+ "]"
+					+ " | directChildY="
+					+ childRange.describe()
+					+ " | scrollbar=[present="
+					+ scrollbarPresent
+					+ ", x="
+					+ scrollbarX
+					+ ", y="
+					+ scrollbarY
+					+ ", width="
+					+ scrollbarWidth
+					+ ", height="
+					+ scrollbarHeight
+					+ "]"
+					+ " | chatAreaDynamic="
+					+ chatAreaDynamicChildren;
+		}
+
+		private static int childCount(Widget[] children) {
+			return children != null
+					? children.length
+					: 0;
+		}
+	}
+
+	private static final class ChildRange {
+		private int count;
+		private int minY = Integer.MAX_VALUE;
+		private int maxY = Integer.MIN_VALUE;
+
+		private static ChildRange of(Widget widget) {
+			final ChildRange range = new ChildRange();
+			if (widget == null) {
+				return range;
+			}
+
+			range.add(widget.getStaticChildren());
+			range.add(widget.getDynamicChildren());
+			return range;
+		}
+
+		private void add(Widget[] children) {
+			if (children == null) {
+				return;
+			}
+
+			for (Widget child : children) {
+				if (child == null) {
+					continue;
+				}
+
+				count++;
+				minY = Math.min(minY, child.getRelativeY());
+				maxY = Math.max(maxY, child.getRelativeY());
+			}
+		}
+
+		private String describe() {
+			if (count == 0) {
+				return "[count=0]";
+			}
+
+			return "[count=" + count + ", min=" + minY + ", max=" + maxY + "]";
+		}
 	}
 
 	private static final class ResizeSnapshot {
