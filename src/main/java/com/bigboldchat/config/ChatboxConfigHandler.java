@@ -23,7 +23,8 @@ public final class ChatboxConfigHandler {
 	private final PerformanceMetrics performanceMetrics;
 
 	private volatile boolean active = true;
-	private volatile boolean commitQueued;
+	private boolean commitQueued;
+	private boolean boundsChanged;
 	private int committedWidth;
 	private int committedHeight;
 
@@ -51,13 +52,22 @@ public final class ChatboxConfigHandler {
 			return false;
 		}
 
-		queueCommit();
+		queueCommit(false);
 		return true;
 	}
 
-	public void deactivate() {
+	public void onCanvasSizeChanged() {
+		if (!active) {
+			return;
+		}
+
+		queueCommit(true);
+	}
+
+	public synchronized void deactivate() {
 		active = false;
 		commitQueued = false;
+		boundsChanged = false;
 	}
 
 	public ChatboxResizeService.ResizeResult applyConfiguredSize() {
@@ -76,7 +86,12 @@ public final class ChatboxConfigHandler {
 		return result;
 	}
 
-	private void queueCommit() {
+	private synchronized void queueCommit(boolean boundsChanged) {
+		if (!active) {
+			return;
+		}
+
+		this.boundsChanged |= boundsChanged;
 		if (commitQueued) {
 			return;
 		}
@@ -86,7 +101,13 @@ public final class ChatboxConfigHandler {
 	}
 
 	private void drainCommit() {
-		commitQueued = false;
+		final boolean reapplyBounds;
+		synchronized (this) {
+			commitQueued = false;
+			reapplyBounds = boundsChanged;
+			boundsChanged = false;
+		}
+
 		if (!active || resizeService == null || config == null) {
 			return;
 		}
@@ -95,7 +116,7 @@ public final class ChatboxConfigHandler {
 		final int height = config.chatboxHeight();
 		final boolean widthChanged = width != committedWidth;
 		final boolean heightChanged = height != committedHeight;
-		if (!widthChanged && !heightChanged) {
+		if (!widthChanged && !heightChanged && !reapplyBounds) {
 			return;
 		}
 

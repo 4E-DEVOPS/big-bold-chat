@@ -141,8 +141,8 @@ public final class ChatboxResizeService {
 		 * Configuration remains the desired size. Constrain only the live
 		 * geometry so the desired dimensions survive temporary canvas limits.
 		 */
-		final int effectiveWidth = ChatboxBounds.effectiveWidth(width, client.getCanvasWidth());
-		final int effectiveHeight = ChatboxBounds.effectiveHeight(height, client.getCanvasHeight());
+		final int effectiveWidth = ChatboxBounds.effectiveWidth(client, layout, slot, width);
+		final int effectiveHeight = ChatboxBounds.effectiveHeight(client, height);
 		final boolean widthChanged = slot.getWidth() != effectiveWidth
 				|| universe.getWidth() != effectiveWidth
 				|| chatArea.getWidth() != effectiveWidth;
@@ -294,8 +294,8 @@ public final class ChatboxResizeService {
 
 		/*
 		 * Doesn't revalidate UNIVERSE after these resolved-size setters.
-		 * MINUS/MINUS would resolve against the client root again instead
-		 * of retaining the native chat-slot dimensions.
+		 * MINUS/MINUS would resolve against the client root again
+		 * instead of retaining the native chat-slot dimensions.
 		 */
 		universe.setWidth(ChatboxGeometry.NATIVE_WIDTH);
 		universe.setHeight(ChatboxGeometry.NATIVE_SLOT_HEIGHT);

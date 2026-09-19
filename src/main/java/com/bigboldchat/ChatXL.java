@@ -19,6 +19,7 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.MessageNode;
+import net.runelite.api.events.CanvasSizeChanged;
 import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.ScriptPostFired;
@@ -194,6 +195,22 @@ public class ChatXL extends Plugin {
 		}
 
 		debugManager.onLoggedIn();
+	}
+
+	/*
+	 * ================================================================
+	 * CANVAS SIZE
+	 * ================================================================
+	 */
+	@Subscribe
+	public void onCanvasSizeChanged(CanvasSizeChanged event) {
+		if (event == null) {
+			return;
+		}
+
+		if (chatboxConfigHandler != null) {
+			chatboxConfigHandler.onCanvasSizeChanged();
+		}
 	}
 
 	/*
