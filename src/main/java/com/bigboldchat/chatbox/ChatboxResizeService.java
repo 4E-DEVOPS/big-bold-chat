@@ -86,7 +86,9 @@ public final class ChatboxResizeService {
 		}
 
 		final int scriptId = event.getScriptId();
-		if (scriptId == ScriptID.BUILD_CHATBOX || scriptId == ScriptID.SPLITPM_CHANGED || scriptId == TOPLEVEL_RELAYOUT) {
+		if (scriptId == ScriptID.BUILD_CHATBOX
+				|| scriptId == ScriptID.SPLITPM_CHANGED
+				|| scriptId == TOPLEVEL_RELAYOUT) {
 			applySize(width, height);
 		}
 	}
@@ -136,7 +138,9 @@ public final class ChatboxResizeService {
 			return ResizeResult.NOT_APPLIED;
 		}
 
-		final boolean widthChanged = slot.getWidth() != width || universe.getWidth() != width || chatArea.getWidth() != width;
+		final boolean widthChanged = slot.getWidth() != width
+				|| universe.getWidth() != width
+				|| chatArea.getWidth() != width;
 		final boolean heightChanged = slot.getHeight() != height || universe.getHeight() != height;
 		final boolean controlsChanged = !controlsLayout.matches(width);
 		if (widthChanged || heightChanged || controlsChanged) {
