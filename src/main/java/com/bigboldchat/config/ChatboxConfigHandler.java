@@ -22,8 +22,8 @@ public final class ChatboxConfigHandler {
 	private final ChatboxResizeService resizeService;
 	private final PerformanceMetrics performanceMetrics;
 
-	private boolean active = true;
-	private boolean commitQueued;
+	private volatile boolean active = true;
+	private volatile boolean commitQueued;
 	private int committedWidth;
 	private int committedHeight;
 
@@ -114,6 +114,10 @@ public final class ChatboxConfigHandler {
 							: PerformanceMetrics.RefreshReason.HEIGHT_CHANGED);
 		}
 
+		/*
+		 * Geometry is committed first; refreshChat lets the native chat
+		 * presentation reconcile message rows and scroll state against it.
+		 */
 		client.refreshChat();
 	}
 }

@@ -19,7 +19,7 @@ public final class FontConfigHandler {
 	private final FontLayoutService layoutService;
 	private final PerformanceMetrics performanceMetrics;
 
-	private boolean active = true;
+	private volatile boolean active = true;
 
 	public FontConfigHandler(
 			Client client,

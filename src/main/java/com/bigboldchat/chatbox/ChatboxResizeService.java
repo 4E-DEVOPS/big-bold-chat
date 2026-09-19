@@ -13,9 +13,8 @@ import net.runelite.api.widgets.WidgetSizeMode;
 /**
  * Owns resizable-layout chatbox geometry.
  *
- * Width changes are applied before chat construction so text is
- * measured against the committed width. Height changes only
- * update widget geometry and do not require a chat rebuild.
+ * Geometry changes are applied before native chat presentation is refreshed
+ * so message rows and scroll state resolve against the committed viewport.
  */
 public final class ChatboxResizeService {
 	/*
