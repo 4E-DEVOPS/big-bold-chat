@@ -6,10 +6,8 @@ import net.runelite.api.widgets.Widget;
 /**
  * Targeted widget-tree helpers for the chatbox.
  */
-final class ChatboxWidgets
-{
-	private ChatboxWidgets()
-	{
+final class ChatboxWidgets {
+	private ChatboxWidgets() {
 	}
 
 	/**
@@ -18,29 +16,23 @@ final class ChatboxWidgets
 	 *
 	 * @return number of widgets revalidated
 	 */
-	static int revalidateChildren(Widget widget)
-	{
-		if (widget == null)
-		{
+	static int revalidateChildren(Widget widget) {
+		if (widget == null) {
 			return 0;
 		}
 
 		return revalidateAll(widget.getStaticChildren()) + revalidateAll(widget.getDynamicChildren());
 	}
 
-	private static int revalidateAll(Widget[] children)
-	{
-		if (children == null)
-		{
+	private static int revalidateAll(Widget[] children) {
+		if (children == null) {
 			return 0;
 		}
 
 		int count = 0;
 
-		for (Widget child : children)
-		{
-			if (child == null)
-			{
+		for (Widget child : children) {
+			if (child == null) {
 				continue;
 			}
 
@@ -48,8 +40,7 @@ final class ChatboxWidgets
 
 			count++;
 
-			if (child.getId() == InterfaceID.Chatbox.SCROLLAREA)
-			{
+			if (child.getId() == InterfaceID.Chatbox.SCROLLAREA) {
 				continue;
 			}
 

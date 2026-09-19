@@ -8,12 +8,10 @@ import net.runelite.api.widgets.WidgetPositionMode;
 /**
  * Owns the resizable chat control/tab bar geometry.
  */
-public final class ChatboxControlsLayout
-{
+public final class ChatboxControlsLayout {
 	private static final int TAB_NATIVE_WIDTH = 56;
 
-	private static final int[] TAB_NATIVE_X =
-	{
+	private static final int[] TAB_NATIVE_X = {
 		458,
 		396,
 		334,
@@ -23,8 +21,7 @@ public final class ChatboxControlsLayout
 		86
 	};
 
-	private static final int[] TAB_COMPONENTS =
-	{
+	private static final int[] TAB_COMPONENTS = {
 		InterfaceID.Chatbox.CHAT_ALL,
 		InterfaceID.Chatbox.CHAT_GAME,
 		InterfaceID.Chatbox.CHAT_PUBLIC,
@@ -36,8 +33,7 @@ public final class ChatboxControlsLayout
 
 	private final Client client;
 
-	public ChatboxControlsLayout(Client client)
-	{
+	public ChatboxControlsLayout(Client client) {
 		this.client = client;
 	}
 
@@ -46,48 +42,40 @@ public final class ChatboxControlsLayout
 	 *
 	 * @return number of widget fields mutated
 	 */
-	int apply(int width)
-	{
+	int apply(int width) {
 		int mutations = 0;
 
 		final Widget controls = client.getWidget(InterfaceID.Chatbox.CONTROLS);
 		final Widget background = client.getWidget(InterfaceID.Chatbox.CONTROLS_BACKGROUND_GRAPHIC);
 
-		if (controls != null && controls.getOriginalWidth() != width)
-		{
+		if (controls != null && controls.getOriginalWidth() != width) {
 			controls.setOriginalWidth(width);
 			mutations++;
 		}
 
-		if (background != null && background.getOriginalWidth() != width)
-		{
+		if (background != null && background.getOriginalWidth() != width) {
 			background.setOriginalWidth(width);
 			mutations++;
 		}
 
 		final Widget[] tabs = getReadyTabs();
-
-		if (tabs == null)
-		{
+		if (tabs == null) {
 			return mutations;
 		}
 
 		final int widthDelta = width - ChatboxGeometry.NATIVE_WIDTH;
 		final int tabCount = tabs.length;
 
-		for (int i = 0; i < tabCount; i++)
-		{
+		for (int i = 0; i < tabCount; i++) {
 			final Widget tab = tabs[i];
 			final int targetX = spreadX(i, widthDelta, tabCount);
 
-			if (tab.getOriginalWidth() != TAB_NATIVE_WIDTH)
-			{
+			if (tab.getOriginalWidth() != TAB_NATIVE_WIDTH) {
 				tab.setOriginalWidth(TAB_NATIVE_WIDTH);
 				mutations++;
 			}
 
-			if (tab.getOriginalX() != targetX)
-			{
+			if (tab.getOriginalX() != targetX) {
 				tab.setOriginalX(targetX);
 				mutations++;
 			}
@@ -96,42 +84,33 @@ public final class ChatboxControlsLayout
 		return mutations;
 	}
 
-	int restoreNative()
-	{
+	int restoreNative() {
 		return apply(ChatboxGeometry.NATIVE_WIDTH);
 	}
 
-	boolean matches(int width)
-	{
+	boolean matches(int width) {
 		final Widget controls = client.getWidget(InterfaceID.Chatbox.CONTROLS);
 		final Widget background = client.getWidget(InterfaceID.Chatbox.CONTROLS_BACKGROUND_GRAPHIC);
 
-		if (controls != null && controls.getWidth() != width)
-		{
+		if (controls != null && controls.getWidth() != width) {
 			return false;
 		}
 
-		if (background != null && background.getWidth() != width)
-		{
+		if (background != null && background.getWidth() != width) {
 			return false;
 		}
 
 		final Widget[] tabs = getReadyTabs();
-
-		if (tabs == null)
-		{
+		if (tabs == null) {
 			return true;
 		}
 
 		final int widthDelta = width - ChatboxGeometry.NATIVE_WIDTH;
 		final int tabCount = tabs.length;
 
-		for (int i = 0; i < tabCount; i++)
-		{
+		for (int i = 0; i < tabCount; i++) {
 			final Widget tab = tabs[i];
-
-			if (tab.getOriginalWidth() != TAB_NATIVE_WIDTH || tab.getOriginalX() != spreadX(i, widthDelta, tabCount))
-			{
+			if (tab.getOriginalWidth() != TAB_NATIVE_WIDTH || tab.getOriginalX() != spreadX(i, widthDelta, tabCount)) {
 				return false;
 			}
 		}
@@ -139,16 +118,12 @@ public final class ChatboxControlsLayout
 		return true;
 	}
 
-	private Widget[] getReadyTabs()
-	{
+	private Widget[] getReadyTabs() {
 		final Widget[] tabs = new Widget[TAB_COMPONENTS.length];
 
-		for (int i = 0; i < TAB_COMPONENTS.length; i++)
-		{
+		for (int i = 0; i < TAB_COMPONENTS.length; i++) {
 			final Widget tab = client.getWidget(TAB_COMPONENTS[i]);
-
-			if (tab == null || tab.getXPositionMode() != WidgetPositionMode.ABSOLUTE_RIGHT)
-			{
+			if (tab == null || tab.getXPositionMode() != WidgetPositionMode.ABSOLUTE_RIGHT) {
 				return null;
 			}
 
@@ -158,8 +133,7 @@ public final class ChatboxControlsLayout
 		return tabs;
 	}
 
-	private static int spreadX(int index, int widthDelta, int tabCount)
-	{
+	private static int spreadX(int index, int widthDelta, int tabCount) {
 		return TAB_NATIVE_X[index] + widthDelta * (tabCount - index) / tabCount;
 	}
 }

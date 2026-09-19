@@ -13,115 +13,113 @@ import net.runelite.client.events.ConfigChanged;
 /**
  * Owns optional Chat XL diagnostics and routes debug-only events and commands.
  */
-public final class DebugManager
-{
-    private final Client client;
-    private final Configurations config;
-    private final ChatMessageTests chatMessageTests;
+public final class DebugManager {
+	private final Client client;
+	private final Configurations config;
+	private final ChatMessageTests chatMessageTests;
+	private final PerformanceMetrics performanceMetrics;
+	private final UpdateMessages updateMessages;
 
-    private ChatboxDiagnostics chatboxDiagnostics;
-    private FontDiagnostics fontDiagnostics;
-    private PerformanceMetrics performanceMetrics;
+	private ChatboxDiagnostics chatboxDiagnostics;
+	private FontDiagnostics fontDiagnostics;
 
-    @Inject
-    public DebugManager(Client client, Configurations config, ChatMessageTests chatMessageTests)
-    {
-        this.client = client;
-        this.config = config;
-        this.chatMessageTests = chatMessageTests;
-    }
+	@Inject
+	public DebugManager(
+			Client client,
+			Configurations config,
+			ChatMessageTests chatMessageTests,
+			UpdateMessages updateMessages) {
+		this.client = client;
+		this.config = config;
+		this.chatMessageTests = chatMessageTests;
+		this.updateMessages = updateMessages;
+		this.performanceMetrics = new PerformanceMetrics();
+	}
 
-    public void activate(PerformanceMetrics performanceMetrics)
-    {
-        deactivate();
+	public PerformanceMetrics activate() {
+		deactivate();
+		performanceMetrics.reset();
+		chatboxDiagnostics = new ChatboxDiagnostics(client);
+		fontDiagnostics = new FontDiagnostics(client, config);
+		return performanceMetrics;
+	}
 
-        this.performanceMetrics = performanceMetrics;
-        chatboxDiagnostics = new ChatboxDiagnostics(client);
-        fontDiagnostics = new FontDiagnostics(client, config);
-    }
+	public void deactivate() {
+		if (fontDiagnostics != null) {
+			fontDiagnostics.reset();
+		}
 
-    public void deactivate()
-    {
-        if (fontDiagnostics != null)
-        {
-            fontDiagnostics.reset();
-        }
+		if (chatboxDiagnostics != null) {
+			chatboxDiagnostics.reset();
+		}
 
-        if (chatboxDiagnostics != null)
-        {
-            chatboxDiagnostics.reset();
-        }
+		fontDiagnostics = null;
+		chatboxDiagnostics = null;
+	}
 
-        fontDiagnostics = null;
-        chatboxDiagnostics = null;
-        performanceMetrics = null;
-    }
+	public boolean onCommandExecuted(CommandExecuted event) {
+		if (chatboxDiagnostics != null && chatboxDiagnostics.onCommandExecuted(event)) {
+			return true;
+		}
 
-    public boolean onCommandExecuted(CommandExecuted event)
-    {
-        if (chatboxDiagnostics != null && chatboxDiagnostics.onCommandExecuted(event))
-        {
-            return true;
-        }
+		if (fontDiagnostics != null && fontDiagnostics.onCommandExecuted(event)) {
+			return true;
+		}
 
-        if (fontDiagnostics != null && fontDiagnostics.onCommandExecuted(event))
-        {
-            return true;
-        }
+		if (performanceMetrics.onCommandExecuted(event)) {
+			return true;
+		}
 
-        if (performanceMetrics != null && performanceMetrics.onCommandExecuted(event))
-        {
-            return true;
-        }
+		if (chatMessageTests != null && chatMessageTests.onCommandExecuted(event)) {
+			return true;
+		}
 
-        return chatMessageTests != null && chatMessageTests.onCommandExecuted(event);
-    }
+		return updateMessages.onCommandExecuted(event);
+	}
 
-    public void onConfigChanged(ConfigChanged event)
-    {
-        if (fontDiagnostics != null)
-        {
-            fontDiagnostics.onConfigChanged(event);
-        }
-    }
+	public void onConfigChanged(ConfigChanged event) {
+		if (fontDiagnostics != null) {
+			fontDiagnostics.onConfigChanged(event);
+		}
+	}
 
-    public void onChatboxScriptPreFired(ScriptPreFired event)
-    {
-        if (chatboxDiagnostics != null)
-        {
-            chatboxDiagnostics.onScriptPreFired(event);
-        }
-    }
+	public void onLoggedIn() {
+		updateMessages.onLoggedIn();
+	}
 
-    public void onFontScriptPreFired(ScriptPreFired event)
-    {
-        if (fontDiagnostics != null)
-        {
-            fontDiagnostics.onScriptPreFired(event);
-        }
-    }
+	public boolean prepareShutdown() {
+		return updateMessages.prepareShutdown();
+	}
 
-    public void onChatboxScriptPostFired(ScriptPostFired event)
-    {
-        if (chatboxDiagnostics != null)
-        {
-            chatboxDiagnostics.onScriptPostFired(event);
-        }
-    }
+	public void finishShutdown(boolean uninstalling) {
+		updateMessages.finishShutdown(uninstalling);
+	}
 
-    public void onFontScriptPostFired(ScriptPostFired event)
-    {
-        if (fontDiagnostics != null)
-        {
-            fontDiagnostics.onScriptPostFired(event);
-        }
-    }
+	public void onChatboxScriptPreFired(ScriptPreFired event) {
+		if (chatboxDiagnostics != null) {
+			chatboxDiagnostics.onScriptPreFired(event);
+		}
+	}
 
-    public void reportPerformanceIfDue()
-    {
-        if (performanceMetrics != null)
-        {
-            performanceMetrics.reportIfDue();
-        }
-    }
+	public void onFontScriptPreFired(ScriptPreFired event) {
+		if (fontDiagnostics != null) {
+			fontDiagnostics.onScriptPreFired(event);
+		}
+	}
+
+	public void onChatboxScriptPostFired(ScriptPostFired event) {
+		if (chatboxDiagnostics != null) {
+			chatboxDiagnostics.onScriptPostFired(event);
+		}
+	}
+
+	public void onFontScriptPostFired(ScriptPostFired event) {
+		if (fontDiagnostics != null) {
+			fontDiagnostics.onScriptPostFired(event);
+		}
+	}
+
+	public void reportPerformanceIfDue() {
+		performanceMetrics.reportIfDue();
+	}
 }

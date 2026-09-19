@@ -17,8 +17,7 @@ import net.runelite.api.widgets.WidgetSizeMode;
  * measured against the committed width. Height changes only
  * update widget geometry and do not require a chat rebuild.
  */
-public final class ChatboxResizeService
-{
+public final class ChatboxResizeService {
 	/*
 	 * Native top-level relayout helper. Script 113 resets chat geometry
 	 * immediately before invoking this helper, making PRE the earliest
@@ -34,8 +33,7 @@ public final class ChatboxResizeService
 
 	private boolean resizedLayoutApplied;
 
-	public ChatboxResizeService(Client client, PerformanceMetrics performanceMetrics)
-	{
+	public ChatboxResizeService(Client client, PerformanceMetrics performanceMetrics) {
 		this.client = client;
 		this.performanceMetrics = performanceMetrics;
 		this.controlsLayout = new ChatboxControlsLayout(client);
@@ -47,32 +45,25 @@ public final class ChatboxResizeService
 	 * LAYOUT
 	 * ================================================================
 	 */
-	ChatboxLayout getLayout()
-	{
+	ChatboxLayout getLayout() {
 		final int topLevel = client.getTopLevelInterfaceId();
-
-		if (topLevel == InterfaceID.TOPLEVEL)
-		{
+		if (topLevel == InterfaceID.TOPLEVEL) {
 			return ChatboxLayout.FIXED;
 		}
 
-		if (topLevel == InterfaceID.TOPLEVEL_OSRS_STRETCH)
-		{
+		if (topLevel == InterfaceID.TOPLEVEL_OSRS_STRETCH) {
 			return ChatboxLayout.RESIZABLE_CLASSIC;
 		}
 
-		if (topLevel == InterfaceID.TOPLEVEL_PRE_EOC)
-		{
+		if (topLevel == InterfaceID.TOPLEVEL_PRE_EOC) {
 			return ChatboxLayout.RESIZABLE_MODERN;
 		}
 
 		return ChatboxLayout.UNKNOWN;
 	}
 
-	private Widget getSlot(ChatboxLayout layout)
-	{
-		switch (layout)
-		{
+	private Widget getSlot(ChatboxLayout layout) {
+		switch (layout) {
 			case RESIZABLE_CLASSIC:
 				return client.getWidget(InterfaceID.ToplevelOsrsStretch.CHAT_CONTAINER);
 			case RESIZABLE_MODERN:
@@ -89,32 +80,26 @@ public final class ChatboxResizeService
 	 * SCRIPT LIFECYCLE
 	 * ================================================================
 	 */
-	public void onScriptPreFired(ScriptPreFired event, int width, int height)
-	{
-		if (event == null)
-		{
+	public void onScriptPreFired(ScriptPreFired event, int width, int height) {
+		if (event == null) {
 			return;
 		}
 
 		final int scriptId = event.getScriptId();
-
-		if (scriptId == ScriptID.BUILD_CHATBOX || scriptId == ScriptID.SPLITPM_CHANGED || scriptId == TOPLEVEL_RELAYOUT)
-		{
+		if (scriptId == ScriptID.BUILD_CHATBOX || scriptId == ScriptID.SPLITPM_CHANGED || scriptId == TOPLEVEL_RELAYOUT) {
 			applySize(width, height);
 		}
 	}
 
-	public void onScriptPostFired(ScriptPostFired event, int width, int height)
-	{
-		if (event == null)
-		{
+	public void onScriptPostFired(ScriptPostFired event, int width, int height) {
+		if (event == null) {
 			return;
 		}
 
 		final int scriptId = event.getScriptId();
-
-		if (scriptId == ScriptID.TOPLEVEL_REDRAW || scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE || scriptId == ScriptID.MESSAGE_LAYER_OPEN)
-		{
+		if (scriptId == ScriptID.TOPLEVEL_REDRAW
+				|| scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE
+				|| scriptId == ScriptID.MESSAGE_LAYER_OPEN) {
 			applySize(width, height);
 		}
 	}
@@ -124,15 +109,12 @@ public final class ChatboxResizeService
 	 * CHATBOX GEOMETRY
 	 * ================================================================
 	 */
-	public ResizeResult applySize(int width, int height)
-	{
+	public ResizeResult applySize(int width, int height) {
 		final long started = performanceMetrics != null && performanceMetrics.isEnabled()
 				? System.nanoTime()
 				: 0L;
 		final ChatboxLayout layout = getLayout();
-
-		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN)
-		{
+		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN) {
 			resizedLayoutApplied = false;
 			return ResizeResult.NOT_APPLIED;
 		}
@@ -140,9 +122,7 @@ public final class ChatboxResizeService
 		final Widget slot = getSlot(layout);
 		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
-
-		if (slot == null || universe == null || chatArea == null)
-		{
+		if (slot == null || universe == null || chatArea == null) {
 			recordMissingWidgets();
 			return ResizeResult.NOT_APPLIED;
 		}
@@ -152,23 +132,21 @@ public final class ChatboxResizeService
 		 * been mounted under the active resizable chat container.
 		 */
 		final Widget parent = universe.getParent();
-
-		if (parent == null || parent.getId() != slot.getId())
-		{
+		if (parent == null || parent.getId() != slot.getId()) {
 			return ResizeResult.NOT_APPLIED;
 		}
 
 		final boolean widthChanged = slot.getWidth() != width || universe.getWidth() != width || chatArea.getWidth() != width;
 		final boolean heightChanged = slot.getHeight() != height || universe.getHeight() != height;
 		final boolean controlsChanged = !controlsLayout.matches(width);
-
-		if (widthChanged || heightChanged || controlsChanged)
-		{
+		if (widthChanged || heightChanged || controlsChanged) {
 			applyGeometry(slot, universe, chatArea, width, height, controlsChanged);
 		}
 
-		final ChatboxBackgroundService.Result backgroundResult =
-				backgroundService.apply(chatArea, width, ChatboxGeometry.bodyHeight(height));
+		final ChatboxBackgroundService.Result backgroundResult = backgroundService.apply(
+				chatArea,
+				width,
+				ChatboxGeometry.bodyHeight(height));
 
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
@@ -186,14 +164,12 @@ public final class ChatboxResizeService
 			Widget chatArea,
 			int width,
 			int height,
-			boolean controlsChanged)
-	{
+			boolean controlsChanged) {
 		/*
 		 * Resize the top-level chat slot first so dependent chatbox children
 		 * resolve against the requested outer geometry.
 		 */
-		if (slot.getWidth() != width || slot.getHeight() != height)
-		{
+		if (slot.getWidth() != width || slot.getHeight() != height) {
 			slot.setSize(width, height);
 			recordMutation();
 
@@ -205,8 +181,7 @@ public final class ChatboxResizeService
 		 * UNIVERSE normally fills using MINUS sizing. Pin it to the explicit
 		 * committed dimensions while ChatXL owns the resizable layout.
 		 */
-		if (universe.getWidth() != width || universe.getHeight() != height)
-		{
+		if (universe.getWidth() != width || universe.getHeight() != height) {
 			universe.setSize(width, height, WidgetSizeMode.ABSOLUTE, WidgetSizeMode.ABSOLUTE);
 			universe.setForcedPosition(0, 0);
 			recordMutation();
@@ -218,8 +193,7 @@ public final class ChatboxResizeService
 		/*
 		 * CHATAREA's width is absolute and does not auto follow the UNIVERSE width.
 		 */
-		if (chatArea.getWidth() != width)
-		{
+		if (chatArea.getWidth() != width) {
 			chatArea.setOriginalWidth(width);
 			recordMutation();
 		}
@@ -228,8 +202,7 @@ public final class ChatboxResizeService
 		 * The tab/control bar must be updated before the child revalidation
 		 * cascade so its descendants resolve against the final width.
 		 */
-		if (controlsChanged)
-		{
+		if (controlsChanged) {
 			recordMutations(controlsLayout.apply(width));
 		}
 
@@ -245,22 +218,17 @@ public final class ChatboxResizeService
 	 * RESTORATION
 	 * ================================================================
 	 */
-	public void restoreNativeSize()
-	{
+	public void restoreNativeSize() {
 		final boolean wasApplied = resizedLayoutApplied;
 		final ChatboxLayout layout = getLayout();
-
-		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN)
-		{
+		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN) {
 			resizedLayoutApplied = false;
 			return;
 		}
 
 		final Widget slot = getSlot(layout);
 		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
-
-		if (slot == null || universe == null)
-		{
+		if (slot == null || universe == null) {
 			resizedLayoutApplied = false;
 			return;
 		}
@@ -278,9 +246,7 @@ public final class ChatboxResizeService
 		recordRevalidate();
 
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
-
-		if (chatArea != null)
-		{
+		if (chatArea != null) {
 			chatArea.setOriginalWidth(ChatboxGeometry.NATIVE_WIDTH);
 			recordMutation();
 		}
@@ -295,8 +261,7 @@ public final class ChatboxResizeService
 
 		resizedLayoutApplied = false;
 
-		if (wasApplied && performanceMetrics != null)
-		{
+		if (wasApplied && performanceMetrics != null) {
 			performanceMetrics.recordResizeRestore();
 		}
 	}
@@ -306,10 +271,8 @@ public final class ChatboxResizeService
 	 * PERFORMANCE HELPERS
 	 * ================================================================
 	 */
-	private void recordApply(long started, boolean widthChanged, boolean heightChanged)
-	{
-		if (performanceMetrics == null || !performanceMetrics.isEnabled())
-		{
+	private void recordApply(long started, boolean widthChanged, boolean heightChanged) {
+		if (performanceMetrics == null || !performanceMetrics.isEnabled()) {
 			return;
 		}
 
@@ -318,84 +281,66 @@ public final class ChatboxResizeService
 				widthChanged, heightChanged);
 	}
 
-	private void recordMissingWidgets()
-	{
-		if (performanceMetrics != null)
-		{
+	private void recordMissingWidgets() {
+		if (performanceMetrics != null) {
 			performanceMetrics.recordResizeMissingWidgets();
 		}
 	}
 
-	private void recordMutation()
-	{
-		if (performanceMetrics != null)
-		{
+	private void recordMutation() {
+		if (performanceMetrics != null) {
 			performanceMetrics.recordWidgetMutation();
 		}
 	}
 
-	private void recordMutations(int count)
-	{
-		if (performanceMetrics == null || count <= 0)
-		{
+	private void recordMutations(int count) {
+		if (performanceMetrics == null || count <= 0) {
 			return;
 		}
 
-		for (int i = 0; i < count; i++)
-		{
+		for (int i = 0; i < count; i++) {
 			performanceMetrics.recordWidgetMutation();
 		}
 	}
 
-	private void recordRevalidate()
-	{
-		if (performanceMetrics != null)
-		{
+	private void recordRevalidate() {
+		if (performanceMetrics != null) {
 			performanceMetrics.recordRevalidate();
 		}
 	}
 
-	private void recordRevalidates(int count)
-	{
-		if (performanceMetrics == null || count <= 0)
-		{
+	private void recordRevalidates(int count) {
+		if (performanceMetrics == null || count <= 0) {
 			return;
 		}
 
-		for (int i = 0; i < count; i++)
-		{
+		for (int i = 0; i < count; i++) {
 			performanceMetrics.recordRevalidate();
 		}
 	}
 
-	public static final class ResizeResult
-	{
-		private static final ResizeResult NOT_APPLIED =
-				new ResizeResult(false, false, false);
+	public static final class ResizeResult {
+		private static final ResizeResult NOT_APPLIED = new ResizeResult(false, false, false);
 
 		private final boolean applied;
 		private final boolean widthChanged;
 		private final boolean heightChanged;
 
-		private ResizeResult(boolean applied, boolean widthChanged, boolean heightChanged)
-		{
+		private ResizeResult(boolean applied, boolean widthChanged, boolean heightChanged) {
 			this.applied = applied;
 			this.widthChanged = widthChanged;
 			this.heightChanged = heightChanged;
 		}
 
-		public boolean isApplied()
-		{
+		public boolean isApplied() {
 			return applied;
 		}
 
-		public boolean isWidthChanged()
-		{
+		public boolean isWidthChanged() {
 			return widthChanged;
 		}
 
-		public boolean isHeightChanged()
-		{
+		public boolean isHeightChanged() {
 			return heightChanged;
 		}
 	}

@@ -27,8 +27,6 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
-import net.runelite.client.externalplugins.ExternalPluginManager;
-import net.runelite.client.externalplugins.PluginHubManifest;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 
@@ -37,17 +35,39 @@ import net.runelite.client.plugins.PluginDescriptor;
 		name = "Chat XL",
 		description = "Resize the chatbox and its text for improved readability.<br>"
 				+ "[A.K.A. BBC - Big Bold Chat]",
-		tags = {"1877", "accessibility", "bbc", "big", "bigger", "bold", "chat", "chatbox", "classic", "fixed", "font", "fonts", "large", "magnifier", "magnify", "messages", "modern", "pm", "private", "readability", "resizable", "resize", "resizer", "resizing", "scale", "size", "small", "text", "zoom"},
+		tags = {
+				"1877",
+				"accessibility",
+				"bbc",
+				"big",
+				"bigger",
+				"bold",
+				"chat",
+				"chatbox",
+				"classic",
+				"fixed",
+				"font",
+				"fonts",
+				"large",
+				"magnifier",
+				"magnify",
+				"messages",
+				"modern",
+				"pm",
+				"private",
+				"readability",
+				"resizable",
+				"resize",
+				"resizer",
+				"resizing",
+				"scale",
+				"size",
+				"small",
+				"text",
+				"zoom"},
 		enabledByDefault = true
 )
-public class ChatXL extends Plugin
-{
-	private static final String CONFIG_GROUP = "bigboldchat";
-	private static final String VERSION_CONFIG_KEY = "lastNotifiedVersion";
-
-	private static final String INSTALL_MESSAGE = "Thank you for installing ChatXL! Report any issues you find to Github.";
-	private static final String UNINSTALL_MESSAGE = "Please submit a review/issue report on Github of your experience. Thanks!";
-	private static final String UPDATE_MESSAGE = "Resizable Chatbox, and a Broadcast Message + Logged Message fix.";
+public class ChatXL extends Plugin {
 
 	@Inject
 	private Client client;
@@ -56,11 +76,7 @@ public class ChatXL extends Plugin
 	@Inject
 	private Configurations config;
 	@Inject
-	private ConfigManager configManager;
-	@Inject
 	private DebugManager debugManager;
-	@Inject
-	private ExternalPluginManager externalPluginManager;
 
 	/*
 	 * Diagnostics & performance.
@@ -81,10 +97,8 @@ public class ChatXL extends Plugin
 	private FontConfigHandler fontConfigHandler;
 
 	@Override
-	protected void startUp()
-	{
-		debugManager.activate(performanceMetrics);
-		performanceMetrics = new PerformanceMetrics();
+	protected void startUp() {
+		performanceMetrics = debugManager.activate();
 		chatboxResizeService = new ChatboxResizeService(client, performanceMetrics);
 		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
 		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);
@@ -96,40 +110,33 @@ public class ChatXL extends Plugin
 		 * Refresh retained rows through the active layout pipeline.
 		 */
 		clientThread.invokeLater(() -> {
-			if (chatboxConfigHandler != null)
-			{
+			if (chatboxConfigHandler != null) {
 				chatboxConfigHandler.applyConfiguredSize();
 			}
 
 			client.refreshChat();
 
-			if (client.getGameState() == GameState.LOGGED_IN)
-			{
-				showUpdateMessage();
-			}
+			debugManager.onLoggedIn();
 		});
 
 		log.debug("[Chat XL] Plugin Initiated.");
 	}
 
 	@Override
-	protected void shutDown()
-	{
+	protected void shutDown() {
 		final FontLayoutService shutdownLayoutService = fontLayoutService;
 		final ChatboxResizeService shutdownResizeService = chatboxResizeService;
 		final PerformanceMetrics shutdownPerformanceMetrics = performanceMetrics;
-		final boolean uninstalling = isBeingUninstalled();
+		final boolean uninstalling = debugManager.prepareShutdown();
 
 		/*
 		 * Disable PRE / POST and config handling before restoration.
 		 */
-		if (chatboxConfigHandler != null)
-		{
+		if (chatboxConfigHandler != null) {
 			chatboxConfigHandler.deactivate();
 		}
 
-		if (fontConfigHandler != null)
-		{
+		if (fontConfigHandler != null) {
 			fontConfigHandler.deactivate();
 		}
 
@@ -141,38 +148,26 @@ public class ChatXL extends Plugin
 
 		debugManager.deactivate();
 
-		if (shutdownPerformanceMetrics != null)
-		{
+		if (shutdownPerformanceMetrics != null) {
 			shutdownPerformanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.SHUTDOWN);
-		}
-
-		if (uninstalling)
-		{
-			configManager.unsetConfiguration(CONFIG_GROUP, VERSION_CONFIG_KEY);
 		}
 
 		// Restore native presentation on the client thread.
 		clientThread.invokeLater(() -> {
-			if (shutdownResizeService != null)
-			{
+			if (shutdownResizeService != null) {
 				shutdownResizeService.restoreNativeSize();
 			}
 
-			if (shutdownLayoutService != null)
-			{
+			if (shutdownLayoutService != null) {
 				shutdownLayoutService.restoreNativePresentation();
 				shutdownLayoutService.reset();
 			}
 
 			client.refreshChat();
 
-			if (uninstalling && client.getGameState() == GameState.LOGGED_IN)
-			{
-				showUninstallMessage();
-			}
+			debugManager.finishShutdown(uninstalling);
 
-			if (shutdownPerformanceMetrics != null)
-			{
+			if (shutdownPerformanceMetrics != null) {
 				shutdownPerformanceMetrics.reportNow();
 			}
 		});
@@ -188,19 +183,16 @@ public class ChatXL extends Plugin
 	 * ================================================================
 	 */
 	@Subscribe
-	public void onGameStateChanged(GameStateChanged event)
-	{
-		if (event == null || event.getGameState() != GameState.LOGGED_IN)
-		{
+	public void onGameStateChanged(GameStateChanged event) {
+		if (event == null || event.getGameState() != GameState.LOGGED_IN) {
 			return;
 		}
 
-		if (chatboxConfigHandler != null)
-		{
+		if (chatboxConfigHandler != null) {
 			chatboxConfigHandler.applyConfiguredSize();
 		}
 
-		showUpdateMessage();
+		debugManager.onLoggedIn();
 	}
 
 	/*
@@ -209,49 +201,33 @@ public class ChatXL extends Plugin
 	 * ================================================================
 	 */
 	@Subscribe
-	public void onCommandExecuted(CommandExecuted event)
-	{
-		if (event == null)
-		{
+	public void onCommandExecuted(CommandExecuted event) {
+		if (event == null) {
 			return;
 		}
 
 		final String command = event.getCommand();
-
-		if ("clear".equalsIgnoreCase(command) || "cls".equalsIgnoreCase(command))
-		{
+		if ("clear".equalsIgnoreCase(command) || "cls".equalsIgnoreCase(command)) {
 			clientThread.invokeLater(this::clearChatHistory);
-			return;
-		}
-
-		if ("chatxl-updates".equalsIgnoreCase(command))
-		{
-			clientThread.invokeLater(this::showUpdateTests);
 			return;
 		}
 
 		debugManager.onCommandExecuted(event);
 	}
 
-	private void clearChatHistory()
-	{
+	private void clearChatHistory() {
 		boolean removed = false;
 
-		for (ChatMessageType messageType : ChatMessageType.values())
-		{
+		for (ChatMessageType messageType : ChatMessageType.values()) {
 			final ChatLineBuffer lineBuffer = client.getChatLineMap().get(messageType.getType());
-
-			if (lineBuffer == null)
-			{
+			if (lineBuffer == null) {
 				continue;
 			}
 
 			final MessageNode[] lines = lineBuffer.getLines().clone();
 
-			for (MessageNode line : lines)
-			{
-				if (line == null)
-				{
+			for (MessageNode line : lines) {
+				if (line == null) {
 					continue;
 				}
 
@@ -260,89 +236,9 @@ public class ChatXL extends Plugin
 			}
 		}
 
-		if (removed)
-		{
+		if (removed) {
 			client.refreshChat();
 		}
-	}
-
-	private void showUpdateTests()
-	{
-		showInstallMessage();
-
-		final String currentVersion = getCurrentVersion();
-
-		showVersionMessage(
-				currentVersion != null
-						? currentVersion
-						: "3.2.1");
-
-		showUninstallMessage();
-	}
-
-	/*
-	 * ================================================================
-	 * VERSION NOTIFICATION
-	 * ================================================================
-	 */
-	private String getCurrentVersion()
-	{
-		final PluginHubManifest.DisplayData displayData = ExternalPluginManager.getDisplayData(getClass());
-
-		return displayData != null
-				? displayData.getVersion()
-				: null;
-	}
-
-	private boolean isBeingUninstalled()
-	{
-		final String internalName = ExternalPluginManager.getInternalName(getClass());
-		return internalName != null && !externalPluginManager.getInstalledExternalPlugins().contains(internalName);
-	}
-
-	private void showUpdateMessage()
-	{
-		final String previousVersion = configManager.getConfiguration(CONFIG_GROUP, VERSION_CONFIG_KEY);
-		final String currentVersion = getCurrentVersion();
-
-		if (currentVersion == null || currentVersion.equals(previousVersion))
-		{
-			return;
-		}
-
-		if (previousVersion == null || previousVersion.isEmpty())
-		{
-			showInstallMessage();
-		} else {
-			showVersionMessage(currentVersion);
-		}
-
-		configManager.setConfiguration(CONFIG_GROUP, VERSION_CONFIG_KEY, currentVersion);
-	}
-
-	private void showInstallMessage()
-	{
-		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> " + INSTALL_MESSAGE,
-				null);
-	}
-
-	private void showVersionMessage(String currentVersion)
-	{
-		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> Updated to v" + currentVersion + "!",
-				null);
-
-		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> " + UPDATE_MESSAGE,
-				null);
-	}
-
-	private void showUninstallMessage()
-	{
-		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> " + UNINSTALL_MESSAGE,
-				null);
 	}
 
 	/*
@@ -351,17 +247,14 @@ public class ChatXL extends Plugin
 	 * ================================================================
 	 */
 	@Subscribe
-	public void onConfigChanged(ConfigChanged event)
-	{
+	public void onConfigChanged(ConfigChanged event) {
 		debugManager.onConfigChanged(event);
 
-		if (chatboxConfigHandler != null && chatboxConfigHandler.onConfigChanged(event))
-		{
+		if (chatboxConfigHandler != null && chatboxConfigHandler.onConfigChanged(event)) {
 			return;
 		}
 
-		if (fontConfigHandler != null)
-		{
+		if (fontConfigHandler != null) {
 			fontConfigHandler.onConfigChanged(event);
 		}
 	}
@@ -372,8 +265,7 @@ public class ChatXL extends Plugin
 	 * ================================================================
 	 */
 	@Provides
-	Configurations provideConfig(ConfigManager configManager)
-	{
+	Configurations provideConfig(ConfigManager configManager) {
 		return configManager.getConfig(Configurations.class);
 	}
 
@@ -383,19 +275,16 @@ public class ChatXL extends Plugin
 	 * ================================================================
 	 */
 	@Subscribe
-	public void onScriptPreFired(ScriptPreFired event)
-	{
+	public void onScriptPreFired(ScriptPreFired event) {
 		debugManager.onChatboxScriptPreFired(event);
 
-		if (chatboxResizeService != null)
-		{
+		if (chatboxResizeService != null) {
 			chatboxResizeService.onScriptPreFired(event, config.chatboxWidth(), config.chatboxHeight());
 		}
 
 		debugManager.onFontScriptPreFired(event);
 
-		if (fontLayoutService == null)
-		{
+		if (fontLayoutService == null) {
 			return;
 		}
 
@@ -407,8 +296,7 @@ public class ChatXL extends Plugin
 
 		fontLayoutService.onScriptPreFired(event);
 
-		if (metricsEnabled && event != null)
-		{
+		if (metricsEnabled && event != null) {
 			performanceMetrics.recordPre(
 					event.getScriptId(),
 					System.nanoTime() - started);
@@ -416,12 +304,10 @@ public class ChatXL extends Plugin
 	}
 
 	@Subscribe
-	public void onScriptPostFired(ScriptPostFired event)
-	{
+	public void onScriptPostFired(ScriptPostFired event) {
 		debugManager.onChatboxScriptPostFired(event);
 
-		if (fontLayoutService != null)
-		{
+		if (fontLayoutService != null) {
 			final boolean metricsEnabled = performanceMetrics != null && performanceMetrics.isEnabled();
 
 			final long started = metricsEnabled
@@ -430,16 +316,14 @@ public class ChatXL extends Plugin
 
 			fontLayoutService.onScriptPostFired(event);
 
-			if (metricsEnabled && event != null)
-			{
+			if (metricsEnabled && event != null) {
 				performanceMetrics.recordPost(
 						event.getScriptId(),
 						System.nanoTime() - started);
 			}
 		}
 
-		if (chatboxResizeService != null)
-		{
+		if (chatboxResizeService != null) {
 			chatboxResizeService.onScriptPostFired(event, config.chatboxWidth(), config.chatboxHeight());
 		}
 

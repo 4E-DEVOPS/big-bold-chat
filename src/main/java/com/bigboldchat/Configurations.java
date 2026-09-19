@@ -10,8 +10,7 @@ import net.runelite.client.config.Range;
 import net.runelite.client.config.Units;
 
 @ConfigGroup("bigboldchat")
-public interface Configurations extends Config
-{
+public interface Configurations extends Config {
 	/**
 	 *  CHAT BOX
 	 */
@@ -29,8 +28,7 @@ public interface Configurations extends Config
 		position = 0,
 		section = chatBoxSection
 	)
-	default ChatFont chatFont()
-	{
+	default ChatFont chatFont() {
 		return ChatFont.PLAIN_12;
 	}
 
@@ -43,8 +41,7 @@ public interface Configurations extends Config
 			position = 1,
 			section = chatBoxSection
 	)
-	default int chatboxWidth()
-	{
+	default int chatboxWidth() {
 		return 519;
 	}
 
@@ -57,8 +54,7 @@ public interface Configurations extends Config
 			position = 2,
 			section = chatBoxSection
 	)
-	default int chatboxHeight()
-	{
+	default int chatboxHeight() {
 		return 165;
 	}
 }
