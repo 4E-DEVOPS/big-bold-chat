@@ -1,7 +1,9 @@
-package com.bigboldchat.chatbox;
+package com.bigboldchat.layout;
 
 import java.awt.Rectangle;
 
+import com.bigboldchat.chatbox.ChatboxGeometry;
+import com.bigboldchat.chatbox.ChatboxLayout;
 import net.runelite.api.Client;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
