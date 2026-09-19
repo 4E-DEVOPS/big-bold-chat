@@ -1,6 +1,7 @@
 package com.bigboldchat.chatbox;
 
 import com.bigboldchat.debug.PerformanceMetrics;
+import com.bigboldchat.layout.ChatboxBounds;
 
 import net.runelite.api.Client;
 import net.runelite.api.ScriptID;
@@ -139,10 +140,11 @@ public final class ChatboxResizeService {
 
 		/*
 		 * Configuration remains the desired size. Constrain only the live
-		 * geometry so the desired dimensions survive temporary canvas limits.
+		 * geometry so the desired dimensions survive temporary layout limits.
 		 */
-		final int effectiveWidth = ChatboxBounds.effectiveWidth(client, layout, slot, width);
-		final int effectiveHeight = ChatboxBounds.effectiveHeight(client, height);
+		final ChatboxBounds.Result effective = ChatboxBounds.resolve(client, slot, width, height);
+		final int effectiveWidth = effective.getWidth();
+		final int effectiveHeight = effective.getHeight();
 		final boolean widthChanged = slot.getWidth() != effectiveWidth
 				|| universe.getWidth() != effectiveWidth
 				|| chatArea.getWidth() != effectiveWidth;
