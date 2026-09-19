@@ -243,11 +243,11 @@ public final class FontLayoutService {
 		 */
 		final FallbackCorrelationContext fallbackContext = new FallbackCorrelationContext(surface);
 		final Widget bodyWidget = findTargetWidgetForLine(
-						state.semanticBody,
-						lineWidget,
-						surface,
-						rowWidgets,
-						fallbackContext);
+				state.semanticBody,
+				lineWidget,
+				surface,
+				rowWidgets,
+				fallbackContext);
 
 		if (bodyWidget == null) {
 			return;
@@ -258,12 +258,12 @@ public final class FontLayoutService {
 		 * returns an empty list for that constructor.
 		 */
 		final List<Widget> prefixWidgets = findPrefixWidgetsForLine(
-						state.rawPrefixComponents,
-						lineWidget,
-						surface,
-						bodyWidget,
-						rowWidgets,
-						fallbackContext);
+				state.rawPrefixComponents,
+				lineWidget,
+				surface,
+				bodyWidget,
+				rowWidgets,
+				fallbackContext);
 
 		final Widget rowAnchor = !prefixWidgets.isEmpty()
 				? prefixWidgets.get(0)
@@ -381,8 +381,8 @@ public final class FontLayoutService {
 					changed |= setOriginalWidthIfChanged(widget, channel.titleWidth);
 
 					if (channel.renderedTitleText != null
-						&& !channel.renderedTitleText.isEmpty()
-						&& !channel.renderedTitleText.equals(widget.getText())) {
+							&& !channel.renderedTitleText.isEmpty()
+							&& !channel.renderedTitleText.equals(widget.getText())) {
 						changed |= setTextIfChanged(widget, channel.renderedTitleText);
 					}
 
@@ -402,8 +402,8 @@ public final class FontLayoutService {
 					 * icon spacing and the Verdana 13 Bold colon correction.
 					 */
 					if (channel.renderedSenderText != null
-						&& !channel.renderedSenderText.isEmpty()
-						&& !channel.renderedSenderText.equals(widget.getText())) {
+							&& !channel.renderedSenderText.isEmpty()
+							&& !channel.renderedSenderText.equals(widget.getText())) {
 						changed |= setTextIfChanged(widget, channel.renderedSenderText);
 					}
 
@@ -877,7 +877,8 @@ public final class FontLayoutService {
 			return Collections.emptyList();
 		}
 
-		final RowCorrelationIndex rowIndex = rowIndexes.computeIfAbsent(surface, key ->
+		final RowCorrelationIndex rowIndex = rowIndexes.computeIfAbsent(
+				surface, key ->
 						new RowCorrelationIndex(client, key, performanceMetrics));
 
 		final List<Widget> result = rowIndex.findRow(lineWidget);
@@ -1001,7 +1002,8 @@ public final class FontLayoutService {
 		 * same OriginalY + same RelativeY.
 		 */
 		for (Widget widget : matches) {
-			if (widget.getOriginalY() == lineWidget.getOriginalY() && widget.getRelativeY() == lineWidget.getRelativeY()) {
+			if (widget.getOriginalY() == lineWidget.getOriginalY()
+					&& widget.getRelativeY() == lineWidget.getRelativeY()) {
 				return widget;
 			}
 		}
@@ -1103,7 +1105,8 @@ public final class FontLayoutService {
 					continue;
 				}
 
-				if (candidate.getOriginalY() == bodyWidget.getOriginalY() && candidate.getRelativeY() == bodyWidget.getRelativeY()) {
+				if (candidate.getOriginalY() == bodyWidget.getOriginalY()
+						&& candidate.getRelativeY() == bodyWidget.getRelativeY()) {
 					if (selected != null) {
 						selected = null;
 						break;
@@ -1235,11 +1238,11 @@ public final class FontLayoutService {
 		 * root plus immediate dynamic/static/nested children.
 		 */
 		final Widget shallowMatch = findRankIconWidgetShallow(
-						root,
-						nativeLayout.rankIconSpriteId,
-						nativeLayout.rankIconX,
-						rowAnchor.getOriginalY(),
-						rowAnchor.getRelativeY());
+				root,
+				nativeLayout.rankIconSpriteId,
+				nativeLayout.rankIconX,
+				rowAnchor.getOriginalY(),
+				rowAnchor.getRelativeY());
 
 		if (shallowMatch != null) {
 			if (performanceMetrics != null) {
@@ -1261,11 +1264,11 @@ public final class FontLayoutService {
 		}
 
 		final Widget fallbackMatch = findRankIconWidgetRecursive(
-						root,
-						nativeLayout.rankIconSpriteId,
-						nativeLayout.rankIconX,
-						rowAnchor.getOriginalY(),
-						rowAnchor.getRelativeY());
+				root,
+				nativeLayout.rankIconSpriteId,
+				nativeLayout.rankIconX,
+				rowAnchor.getOriginalY(),
+				rowAnchor.getRelativeY());
 
 		if (performanceMetrics != null) {
 			if (fallbackMatch != null) {
@@ -1321,7 +1324,8 @@ public final class FontLayoutService {
 
 			xMatched = true;
 
-			if (widget.getOriginalY() != rowAnchor.getOriginalY() && widget.getRelativeY() != rowAnchor.getRelativeY()) {
+			if (widget.getOriginalY() != rowAnchor.getOriginalY()
+					&& widget.getRelativeY() != rowAnchor.getRelativeY()) {
 				continue;
 			}
 
