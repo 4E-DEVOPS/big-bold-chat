@@ -191,17 +191,14 @@ public final class FontLayoutService
 
         final ChatFontProfile fontProfile = fontState.fontProfile;
 
-        final long measurementStarted = performanceMetrics != null
+        final long measurementStarted = performanceMetrics != null && performanceMetrics.isEnabled()
                 ? System.nanoTime()
                 : 0L;
 
         final FontMeasurementService.ConstructionMeasurement measurement =
-                measurementService.measure(
-                        scriptId,
-                        selectedChatFont,
-                        fontProfile);
+                measurementService.measure(scriptId, selectedChatFont, fontProfile);
 
-        if (performanceMetrics != null)
+        if (performanceMetrics != null && performanceMetrics.isEnabled())
         {
             performanceMetrics.recordMeasurement(System.nanoTime() - measurementStarted);
         }
@@ -316,9 +313,7 @@ public final class FontLayoutService
                 && state.nativeChannelLayout.rankIconSpriteId >= 0)
         {
             rankIconWidget = findRankIconWidget(state.nativeChannelLayout, rowAnchor, rowWidgets);
-        }
-        else
-        {
+        } else {
             rankIconWidget = null;
         }
 
@@ -369,13 +364,9 @@ public final class FontLayoutService
         if (fontProfile != null && state.scriptId == FontMeasurementService.CHANNEL_BODY_SCRIPT)
         {
             queueTextYOffset(bodyWidget, fontProfile.getChannelTextYOffset());
-        }
-        else if (fontProfile != null && isFriendsChatConstruction(state))
-        {
+        } else if (fontProfile != null && isFriendsChatConstruction(state)) {
             queueTextYOffset(bodyWidget, fontProfile.getFriendsChatTextYOffset());
-        }
-        else
-        {
+        } else {
             pendingYOffsets.remove(bodyWidget);
         }
 
@@ -485,8 +476,7 @@ public final class FontLayoutService
                 {
                     pendingYOffsets.remove(widget);
                 }
-            }
-            else if (state.scriptId
+            } else if (state.scriptId
                     == FontMeasurementService.CHAT_BODY_SCRIPT
                     && prefixWidgets.size()
                     == 1
@@ -499,9 +489,7 @@ public final class FontLayoutService
                  * vertical correction.
                  */
                 queueTextYOffset(widget, fontProfile.getFriendsChatPrefixYOffset());
-            }
-            else
-            {
+            } else {
                 pendingYOffsets.remove(widget);
             }
 
@@ -572,9 +560,7 @@ public final class FontLayoutService
                     rankIconWidget,
                     state.nativeChannelLayout.rankIconSpriteId,
                     fontProfile.getChannelRankIconYOffset());
-        }
-        else
-        {
+        } else {
             pendingYOffsets.remove(rankIconWidget);
         }
 
@@ -613,10 +599,7 @@ public final class FontLayoutService
     /*
      * Queue a delayed Y correction for a separate sprite widget.
      */
-    private void queueSpriteYOffset(
-            Widget widget,
-            int expectedSpriteId,
-            int yOffset)
+    private void queueSpriteYOffset(Widget widget, int expectedSpriteId, int yOffset)
     {
         if (widget == null)
         {
@@ -1078,10 +1061,7 @@ public final class FontLayoutService
         return result;
     }
 
-    private void observeWidgetFromSurfaceScan(
-            Surface surface,
-            Widget root,
-            Widget widget)
+    private void observeWidgetFromSurfaceScan(Surface surface, Widget root, Widget widget)
     {
         if (surface == null || root == null || widget == null)
         {
@@ -1096,10 +1076,7 @@ public final class FontLayoutService
         }
     }
 
-    private void notifyIndexedWidgetGeometryChanged(
-            Widget widget,
-            int previousOriginalY,
-            int previousRelativeY)
+    private void notifyIndexedWidgetGeometryChanged(Widget widget, int previousOriginalY, int previousRelativeY)
     {
         if (widget == null || rowIndexes.isEmpty())
         {
@@ -1110,10 +1087,7 @@ public final class FontLayoutService
         {
             if (rowIndex != null)
             {
-                rowIndex.onWidgetGeometryChangedByChatXl(
-                        widget,
-                        previousOriginalY,
-                        previousRelativeY);
+                rowIndex.onWidgetGeometryChangedByChatXl(widget, previousOriginalY, previousRelativeY);
             }
         }
     }
@@ -1152,10 +1126,7 @@ public final class FontLayoutService
         }
     }
 
-    private Widget matchRow(
-            List<Widget> rowWidgets,
-            String targetText,
-            Widget excludedWidget)
+    private Widget matchRow(List<Widget> rowWidgets, String targetText, Widget excludedWidget)
     {
         if (rowWidgets == null || rowWidgets.isEmpty() || targetText == null)
         {
@@ -1213,11 +1184,7 @@ public final class FontLayoutService
             return null;
         }
 
-        final Widget rowMatch =
-                matchRow(
-                        rowWidgets,
-                        targetText,
-                        null);
+        final Widget rowMatch = matchRow(rowWidgets, targetText, null);
 
         if (rowMatch != null)
         {
@@ -1499,11 +1466,7 @@ public final class FontLayoutService
          * why this strict row-first lookup failed without changing its matching
          * criteria.
          */
-        final Widget rowMatch =
-                findRankIconWidgetInRow(
-                        nativeLayout,
-                        rowAnchor,
-                        rowWidgets);
+        final Widget rowMatch = findRankIconWidgetInRow(nativeLayout, rowAnchor, rowWidgets);
 
         if (rowMatch != null)
         {
@@ -1666,51 +1629,28 @@ public final class FontLayoutService
             return null;
         }
 
-        Widget match =
-                findRankIconWidgetCandidate(
-                        root,
-                        spriteId,
-                        originalX,
-                        originalY,
-                        relativeY);
+        Widget match = findRankIconWidgetCandidate(root, spriteId, originalX, originalY, relativeY);
 
         if (match != null)
         {
             return match;
         }
 
-        match =
-                findRankIconWidgetInShallowArray(
-                        root.getDynamicChildren(),
-                        spriteId,
-                        originalX,
-                        originalY,
-                        relativeY);
+        match = findRankIconWidgetInShallowArray(root.getDynamicChildren(), spriteId, originalX, originalY, relativeY);
 
         if (match != null)
         {
             return match;
         }
 
-        match =
-                findRankIconWidgetInShallowArray(
-                        root.getStaticChildren(),
-                        spriteId,
-                        originalX,
-                        originalY,
-                        relativeY);
+        match = findRankIconWidgetInShallowArray(root.getStaticChildren(), spriteId, originalX, originalY, relativeY);
 
         if (match != null)
         {
             return match;
         }
 
-        return findRankIconWidgetInShallowArray(
-                root.getNestedChildren(),
-                spriteId,
-                originalX,
-                originalY,
-                relativeY);
+        return findRankIconWidgetInShallowArray(root.getNestedChildren(), spriteId, originalX, originalY, relativeY);
     }
 
     private Widget findRankIconWidgetInShallowArray(
@@ -1727,13 +1667,7 @@ public final class FontLayoutService
 
         for (Widget widget : widgets)
         {
-            final Widget match =
-                    findRankIconWidgetCandidate(
-                            widget,
-                            spriteId,
-                            originalX,
-                            originalY,
-                            relativeY);
+            final Widget match = findRankIconWidgetCandidate(widget, spriteId, originalX, originalY, relativeY);
 
             if (match != null)
             {
@@ -1798,13 +1732,7 @@ public final class FontLayoutService
         {
             for (Widget child : dynamicChildren)
             {
-                final Widget result =
-                        findRankIconWidgetRecursive(
-                                child,
-                                spriteId,
-                                originalX,
-                                originalY,
-                                relativeY);
+                final Widget result = findRankIconWidgetRecursive(child, spriteId, originalX, originalY, relativeY);
 
                 if (result != null)
                 {
@@ -1819,13 +1747,7 @@ public final class FontLayoutService
         {
             for (Widget child : staticChildren)
             {
-                final Widget result =
-                        findRankIconWidgetRecursive(
-                                child,
-                                spriteId,
-                                originalX,
-                                originalY,
-                                relativeY);
+                final Widget result = findRankIconWidgetRecursive(child, spriteId, originalX, originalY, relativeY);
 
                 if (result != null)
                 {
@@ -1840,13 +1762,7 @@ public final class FontLayoutService
         {
             for (Widget child : nestedChildren)
             {
-                final Widget result =
-                        findRankIconWidgetRecursive(
-                                child,
-                                spriteId,
-                                originalX,
-                                originalY,
-                                relativeY);
+                final Widget result = findRankIconWidgetRecursive(child, spriteId, originalX, originalY, relativeY);
 
                 if (result != null)
                 {
@@ -1895,9 +1811,7 @@ public final class FontLayoutService
                 {
                     performanceMetrics.recordFallbackBuild();
                 }
-            }
-            else if (performanceMetrics != null)
-            {
+            } else if (performanceMetrics != null) {
                 performanceMetrics.recordFallbackReuse();
             }
 
@@ -1927,11 +1841,8 @@ public final class FontLayoutService
             }
 
             indexWidget(root, root);
-
             indexWidgets(root, root.getDynamicChildren());
-
             indexWidgets(root, root.getStaticChildren());
-
             indexWidgets(root, root.getNestedChildren());
         }
 
@@ -1974,9 +1885,7 @@ public final class FontLayoutService
                 return;
             }
 
-            widgetsBySemantic
-                    .computeIfAbsent(semanticKey(semantic), ignored -> new ArrayList<>())
-                    .add(widget);
+            widgetsBySemantic.computeIfAbsent(semanticKey(semantic), ignored -> new ArrayList<>()).add(widget);
         }
 
         private String semanticKey(String text)
@@ -2104,11 +2013,8 @@ public final class FontLayoutService
     public void reset()
     {
         pending = null;
-
         pendingFontProfile = null;
-
         pendingYOffsets.clear();
-
         rowIndexes.clear();
     }
 
@@ -2157,13 +2063,11 @@ public final class FontLayoutService
     private static final class ActiveFontState
     {
         private final ChatFont chatFont;
-
         private final ChatFontProfile fontProfile;
 
         private ActiveFontState(ChatFont chatFont, ChatFontProfile fontProfile)
         {
             this.chatFont = chatFont;
-
             this.fontProfile = fontProfile;
         }
     }
@@ -2179,20 +2083,13 @@ public final class FontLayoutService
     private static final class PendingYOffset
     {
         private final String expectedSemanticText;
-
         private final int expectedSpriteId;
-
         private final int yOffset;
 
-        private PendingYOffset(
-                String expectedSemanticText,
-                int expectedSpriteId,
-                int yOffset)
+        private PendingYOffset(String expectedSemanticText, int expectedSpriteId, int yOffset)
         {
             this.expectedSemanticText = expectedSemanticText;
-
             this.expectedSpriteId = expectedSpriteId;
-
             this.yOffset = yOffset;
         }
 

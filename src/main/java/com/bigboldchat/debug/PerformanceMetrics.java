@@ -2,6 +2,8 @@ package com.bigboldchat.debug;
 
 import java.util.Locale;
 
+import net.runelite.api.events.CommandExecuted;
+
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -10,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class PerformanceMetrics
 {
+    private static final String COMMAND = "chatxl-perf";
     private static final long REPORT_INTERVAL_NANOS = 10_000_000_000L;
 
     private static final int GAME_BODY_SCRIPT = 199;
@@ -140,7 +143,37 @@ public final class PerformanceMetrics
 
     private long resizeRestores;
 
-    private long reportStartedAt = System.nanoTime();
+    private long reportStartedAt;
+    private boolean enabled;
+
+    public boolean isEnabled()
+    {
+        return enabled;
+    }
+
+    public boolean onCommandExecuted(CommandExecuted event)
+    {
+        if (event == null || !COMMAND.equalsIgnoreCase(event.getCommand()))
+        {
+            return false;
+        }
+
+        if (enabled)
+        {
+            reportNow();
+            enabled = false;
+        } else {
+            enabled = true;
+            resetWindow(System.nanoTime());
+        }
+
+        log.debug(
+                "[Chat XL][Performance] {}", enabled
+                        ? "ARMED"
+                        : "DISARMED");
+
+        return true;
+    }
 
     /*
      * RECORDING
@@ -148,6 +181,11 @@ public final class PerformanceMetrics
 
     public void recordPre(int scriptId, long elapsedNanos)
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         final TimingMetric metric = preMetric(scriptId);
 
         if (metric != null)
@@ -158,6 +196,11 @@ public final class PerformanceMetrics
 
     public void recordPost(int scriptId, long elapsedNanos)
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         final TimingMetric metric = postMetric(scriptId);
 
         if (metric != null)
@@ -168,21 +211,41 @@ public final class PerformanceMetrics
 
     public void recordMeasurement(long elapsedNanos)
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         measurement.record(elapsedNanos);
     }
 
     public void recordNormalization(long elapsedNanos)
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         normalization.record(elapsedNanos);
     }
 
     public void recordFontCacheHit()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         fontCacheHits++;
     }
 
     public void recordFontCacheMiss(long elapsedNanos)
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         fontCacheMisses++;
 
         fontResolution.record(elapsedNanos);
@@ -190,6 +253,11 @@ public final class PerformanceMetrics
 
     public void recordWidgetsExamined(int count)
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         if (count > 0)
         {
             widgetsExamined += count;
@@ -198,11 +266,21 @@ public final class PerformanceMetrics
 
     public void recordSurfaceSearch()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         surfaceSearches++;
     }
 
     public void recordRowSearches(int candidates)
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         rowSearches++;
 
         if (candidates > 0)
@@ -213,76 +291,151 @@ public final class PerformanceMetrics
 
     public void recordRowIndexBuild()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         rowIndexBuilds++;
     }
 
     public void recordRowIndexRepair()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         rowIndexRepairs++;
     }
 
     public void recordRowIndexReuse()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         rowIndexReuses++;
     }
 
     public void recordFallbackSearch()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         fallbackSearches++;
     }
 
     public void recordFallbackBuild()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         fallbackBuilds++;
     }
 
     public void recordFallbackReuse()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         fallbackReuses++;
     }
 
     public void recordRankSearch()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         rankSearches++;
     }
 
     public void recordRankFallback()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         rankFallbacks++;
     }
 
     public void recordRankRowNoSprite()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         rankRowNoSprite++;
     }
 
     public void recordRankRowXMismatch()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         rankRowXMismatch++;
     }
 
     public void recordRankRowYMismatch()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         rankRowYMismatch++;
     }
 
     public void recordRankShallowRecovery()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         rankShallowRecoveries++;
     }
 
     public void recordRankFallbackHit()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         rankFallbackHits++;
     }
 
     public void recordRankFallbackMiss()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         rankFallbackMisses++;
     }
 
     public void recordRankNodesExamined(int count)
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         if (count > 0)
         {
             rankNodesExamined += count;
@@ -291,19 +444,31 @@ public final class PerformanceMetrics
 
     public void recordWidgetMutation()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         widgetMutations++;
     }
 
     public void recordRevalidate()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         revalidates++;
     }
 
-    public void recordResizeApply(
-            long elapsedNanos,
-            boolean widthChanged,
-            boolean heightChanged)
+    public void recordResizeApply(long elapsedNanos, boolean widthChanged, boolean heightChanged)
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         resizeApply.record(elapsedNanos);
 
         resizeApplies++;
@@ -326,16 +491,31 @@ public final class PerformanceMetrics
 
     public void recordResizeMissingWidgets()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         resizeMissingWidgets++;
     }
 
     public void recordResizeRestore()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         resizeRestores++;
     }
 
     public void recordRefreshChat(RefreshReason reason)
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         refreshChatCalls++;
 
         if (reason == null)
@@ -374,6 +554,11 @@ public final class PerformanceMetrics
 
     public void reportIfDue()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         final long now = System.nanoTime();
 
         if (now - reportStartedAt < REPORT_INTERVAL_NANOS)
@@ -386,6 +571,11 @@ public final class PerformanceMetrics
 
     public void reportNow()
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         report(System.nanoTime());
     }
 
@@ -590,75 +780,40 @@ public final class PerformanceMetrics
         resizeApply.reset();
 
         fontCacheHits = 0L;
-
         fontCacheMisses = 0L;
-
         widgetsExamined = 0L;
-
         rowSearches = 0L;
-
         rowCandidates = 0L;
-
         rowIndexBuilds = 0L;
-
         rowIndexRepairs = 0L;
-
         rowIndexReuses = 0L;
-
         surfaceSearches = 0L;
-
         fallbackSearches = 0L;
-
         fallbackBuilds = 0L;
-
         fallbackReuses = 0L;
-
         rankSearches = 0L;
-
         rankFallbacks = 0L;
-
         rankRowNoSprite = 0L;
-
         rankRowXMismatch = 0L;
-
         rankRowYMismatch = 0L;
-
         rankShallowRecoveries = 0L;
-
         rankFallbackHits = 0L;
-
         rankFallbackMisses = 0L;
-
         rankNodesExamined = 0L;
-
         widgetMutations = 0L;
-
         revalidates = 0L;
-
         refreshChatCalls = 0L;
-
         refreshStartup = 0L;
-
         refreshFontChanged = 0L;
-
         refreshShutdown = 0L;
-
         refreshWidthChanged = 0L;
-
         refreshOther = 0L;
-
         resizeApplies = 0L;
-
         resizeNoops = 0L;
-
         resizeWidthChanges = 0L;
-
         resizeHeightChanges = 0L;
-
         resizeMissingWidgets = 0L;
-
         resizeRestores = 0L;
-
         reportStartedAt = now;
     }
 
@@ -685,7 +840,6 @@ public final class PerformanceMetrics
             }
 
             count++;
-
             totalNanos += elapsedNanos;
 
             if (elapsedNanos > maxNanos)
@@ -712,9 +866,7 @@ public final class PerformanceMetrics
         private void reset()
         {
             count = 0L;
-
             totalNanos = 0L;
-
             maxNanos = 0L;
         }
     }

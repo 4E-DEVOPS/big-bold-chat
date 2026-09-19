@@ -75,11 +75,9 @@ public final class FontMeasurementService
             PerformanceMetrics performanceMetrics)
     {
         this.client = client;
-
         this.textNormalizer = textNormalizer != null
                 ? textNormalizer
                 : new ChatTextNormalizer(performanceMetrics);
-
         this.performanceMetrics = performanceMetrics;
     }
 
@@ -88,10 +86,7 @@ public final class FontMeasurementService
         return scriptId == GAME_BODY_SCRIPT || scriptId == CHAT_BODY_SCRIPT || scriptId == CHANNEL_BODY_SCRIPT;
     }
 
-    ConstructionMeasurement measure(
-            int scriptId,
-            ChatFont selectedChatFont,
-            ChatFontProfile fontProfile)
+    ConstructionMeasurement measure(int scriptId, ChatFont selectedChatFont, ChatFontProfile fontProfile)
     {
         if (!supportsScript(scriptId) || selectedChatFont == null || fontProfile == null)
         {
@@ -99,7 +94,6 @@ public final class FontMeasurementService
         }
 
         final Object[] objectStack = client.getObjectStack();
-
         final int objectStackSize = client.getObjectStackSize();
 
         final String rawBody = findBody(objectStack, objectStackSize);
@@ -132,7 +126,6 @@ public final class FontMeasurementService
 
         // Preserve inline images while measuring wrapping.
         final String measurementBody = textNormalizer.measureSemantic(rawBody);
-
         final String selectedMeasurementBody = textNormalizer.measureSemantic(selectedRawBodyText);
 
         if (measurementBody == null || selectedMeasurementBody == null)
@@ -141,7 +134,6 @@ public final class FontMeasurementService
         }
 
         final int[] intStack = client.getIntStack();
-
         final int intStackSize = client.getIntStackSize();
 
         if (intStack == null || intStackSize < 11 || intStackSize > intStack.length)
@@ -165,41 +157,23 @@ public final class FontMeasurementService
          * [10] shadow
          */
         final int rowValueIndex = intStackSize - 11;
-
         final int lineWidgetIndex = intStackSize - 10;
-
         final int parentWidgetIndex = intStackSize - 9;
-
         final int rightBoundaryIndex = intStackSize - 8;
-
         final int leftBoundaryIndex = intStackSize - 7;
-
         final int verticalValueIndex = intStackSize - 6;
-
         final int rowYIndex = intStackSize - 5;
-
         final int argument7Index = intStackSize - 4;
-
         final int senderWidthIndex = intStackSize - 3;
-
         final int colorIndex = intStackSize - 2;
-
         final int shadowIndex = intStackSize - 1;
-
         final int lineWidgetId = intStack[lineWidgetIndex];
-
         final int parentWidgetId = intStack[parentWidgetIndex];
-
         final int rightBoundary = intStack[rightBoundaryIndex];
-
         final int leftBoundary = intStack[leftBoundaryIndex];
-
         final int nativeLineHeight = intStack[verticalValueIndex];
-
         final int nativeRowY = intStack[rowYIndex];
-
         final int nativeArgument7 = intStack[argument7Index];
-
         final int nativeSenderWidth = intStack[senderWidthIndex];
 
         if (nativeLineHeight <= 0)
@@ -215,9 +189,7 @@ public final class FontMeasurementService
         }
 
         final FontTypeFace nativeFont = resolveFont(FontID.PLAIN_12);
-
         final FontTypeFace selectedFont = resolveFont(selectedChatFont.getFontId());
-
         final ChatFontProfile nativeFontProfile = ChatFontRegistry.get(ChatFont.PLAIN_12);
 
         if (nativeFont == null || selectedFont == null || nativeFontProfile == null)
@@ -228,10 +200,7 @@ public final class FontMeasurementService
         final List<String> rawPrefixComponents =
                 scriptId == GAME_BODY_SCRIPT
                         ? new ArrayList<>()
-                        : findPrefixComponents(
-                        objectStack,
-                        objectStackSize,
-                        semanticBody);
+                        : findPrefixComponents(objectStack, objectStackSize, semanticBody);
 
         /*
          * Script 199 is the ordinary prefix-less GAME / system-message
@@ -250,11 +219,9 @@ public final class FontMeasurementService
         final int lineX = lineWidget.getOriginalX();
 
         int nativePrefixWidth = 0;
-
         int selectedPrefixLayoutWidth = 0;
 
         ChannelPrefixLayout nativeChannelLayout = null;
-
         ChannelPrefixLayout selectedChannelLayout = null;
 
         int nativeBodyX;
@@ -276,11 +243,8 @@ public final class FontMeasurementService
              * Preserve its native horizontal geometry.
              */
             nativeBodyX = leftBoundary;
-
             selectedBodyX = leftBoundary;
-        }
-        else if (scriptId == CHAT_BODY_SCRIPT)
-        {
+        } else if (scriptId == CHAT_BODY_SCRIPT) {
             final String rawPrefix = rawPrefixComponents.get(rawPrefixComponents.size() - 1);
 
             // Measure native geometry from the unmodified prefix.
@@ -309,11 +273,8 @@ public final class FontMeasurementService
             selectedPrefixLayoutWidth = selectedFont.getTextWidth(normalizeRawForMeasurement(selectedRawPrefixText));
 
             nativeBodyX = lineX + nativePrefixWidth + BODY_GAP;
-
             selectedBodyX = lineX + selectedPrefixLayoutWidth + BODY_GAP;
-        }
-        else
-        {
+        } else {
             nativeChannelLayout =
                     measureChannelPrefixLayout(
                             nativeFont,
@@ -346,7 +307,6 @@ public final class FontMeasurementService
             }
 
             nativeBodyX = nativeChannelLayout.bodyX;
-
             selectedBodyX = selectedChannelLayout.bodyX;
         }
 
@@ -355,7 +315,6 @@ public final class FontMeasurementService
                 : SCROLLBAR_PADDING;
 
         final int nativeBodyWidth = rightBoundary - nativeBodyX;
-
         final int selectedBodyWidth = rightBoundary - selectedBodyX - rightPadding;
 
         if (nativeBodyWidth <= 0 || selectedBodyWidth <= 0)
@@ -363,17 +322,8 @@ public final class FontMeasurementService
             return null;
         }
 
-        final int nativeLines =
-                calculateWrappedLineCount(
-                        nativeFont,
-                        measurementBody,
-                        nativeBodyWidth);
-
-        final int selectedLines =
-                calculateWrappedLineCount(
-                        selectedFont,
-                        selectedMeasurementBody,
-                        selectedBodyWidth);
+        final int nativeLines = calculateWrappedLineCount(nativeFont, measurementBody, nativeBodyWidth);
+        final int selectedLines = calculateWrappedLineCount( selectedFont, selectedMeasurementBody, selectedBodyWidth);
 
         if (nativeLines <= 0 || selectedLines <= 0)
         {
@@ -387,19 +337,14 @@ public final class FontMeasurementService
 
         final int rowYOffset = fontProfile.getRowYOffset();
 
-        /*
-         * Apply PRIVATE_CHAT_GAP to Split Private's bottom-relative row Y.
-         * Positive increases the gap; negative reduces it.
-         */
+        // Apply PRIVATE_CHAT_GAP to Split Private's bottom-relative row Y.
         final int privateChatGap = isSplitPrivate(parentWidgetId)
                 ? fontProfile.getPrivateChatGap()
                 : 0;
 
         final int selectedRowY = nativeRowY + rowYOffset + privateChatGap;
 
-        /*
-         * Compensate construction height for native and selected wrapped-line counts.
-         */
+        // Compensate construction height for native and selected wrapped-line counts.
         final int desiredHeight = selectedLines * selectedLineHeight;
 
         final int injectedValue = ceilDiv(desiredHeight, nativeLines);
@@ -410,101 +355,53 @@ public final class FontMeasurementService
         }
 
         final int allocatedHeight = nativeLines * injectedValue;
-
         final ConstructionMeasurement measurement = new ConstructionMeasurement();
 
         measurement.scriptId = scriptId;
-
         measurement.semanticBody = semanticBody;
-
         measurement.selectedRawBodyText = selectedRawBodyText;
-
         measurement.selectedChatFont = selectedChatFont;
-
         measurement.selectedFontId = selectedChatFont.getFontId();
-
         measurement.rawPrefixComponents = new ArrayList<>(rawPrefixComponents);
-
-        /*
-         * Script 203 keeps the selected/rendered raw prefix separately from the
-         * native raw components used for correlation.
-         */
+        // Script 203 keeps rendered raw prefix separately from native raw components used for correlation.
         measurement.selectedRawPrefixText = selectedRawPrefixText;
-
         measurement.rowValueIndex = rowValueIndex;
-
         measurement.verticalValueIndex = verticalValueIndex;
-
         measurement.rowYIndex = rowYIndex;
-
         measurement.argument7Index = argument7Index;
-
         measurement.senderWidthIndex = senderWidthIndex;
-
         measurement.lineWidgetId = lineWidgetId;
-
         measurement.parentWidgetId = parentWidgetId;
-
         measurement.leftBoundary = leftBoundary;
-
         measurement.rightBoundary = rightBoundary;
-
         measurement.lineX = lineX;
-
         measurement.nativeLineHeight = nativeLineHeight;
-
         measurement.lineHeightAdjustment = lineHeightAdjustment;
-
         measurement.selectedLineHeight = selectedLineHeight;
-
         measurement.nativeRowY = nativeRowY;
-
         measurement.rowYOffset = rowYOffset;
-
         measurement.selectedRowY = selectedRowY;
-
         measurement.channelTextYOffset = fontProfile.getChannelTextYOffset();
-
         measurement.rankIconRightAdjustment = fontProfile.getRankIconRightAdjustment();
-
         measurement.rankIconSizeAdjustment = fontProfile.getRankIconSizeAdjustment();
-
         measurement.rankIconYOffset = fontProfile.getChannelRankIconYOffset();
-
         measurement.accountBuildIconPadding = fontProfile.getAccountBuildIconPadding();
-
         measurement.nativeArgument7 = nativeArgument7;
-
         measurement.nativeSenderWidth = nativeSenderWidth;
-
         measurement.nativeColor = intStack[colorIndex];
-
         measurement.nativeShadow = intStack[shadowIndex];
-
         measurement.nativePrefixWidth = nativePrefixWidth;
-
         measurement.selectedPrefixLayoutWidth = selectedPrefixLayoutWidth;
-
         measurement.nativeChannelLayout = nativeChannelLayout;
-
         measurement.selectedChannelLayout = selectedChannelLayout;
-
         measurement.nativeBodyX = nativeBodyX;
-
         measurement.nativeBodyWidth = nativeBodyWidth;
-
         measurement.selectedBodyX = selectedBodyX;
-
         measurement.selectedBodyWidth = selectedBodyWidth;
-
         measurement.nativeLines = nativeLines;
-
         measurement.selectedLines = selectedLines;
-
         measurement.desiredHeight = desiredHeight;
-
         measurement.injectedValue = injectedValue;
-
         measurement.allocatedHeight = allocatedHeight;
 
         return measurement;
@@ -575,10 +472,7 @@ public final class FontMeasurementService
          *     selected: <img=2> Username:
          */
         layout.renderedSenderText =
-                applyInlineIconUsernameSpacing(
-                        rawSenderText,
-                        inlineIconUsernameSpacing,
-                        ' ');
+                applyInlineIconUsernameSpacing(rawSenderText, inlineIconUsernameSpacing, ' ');
 
         if (replaceMalformedColons)
         {
@@ -596,7 +490,6 @@ public final class FontMeasurementService
         }
 
         layout.hasTitle = !layout.titleText.isEmpty();
-
         layout.hasSender = !layout.senderText.isEmpty();
 
         if (layout.hasTitle)
@@ -618,9 +511,7 @@ public final class FontMeasurementService
         if (layout.hasSender && commonPayloadStart >= 3)
         {
             final int spriteIdCandidate = intStack[commonPayloadStart - 3];
-
             final int widthCandidate = intStack[commonPayloadStart - 2];
-
             final int heightCandidate = intStack[commonPayloadStart - 1];
 
             if (spriteIdCandidate >= 0
@@ -630,9 +521,7 @@ public final class FontMeasurementService
                     && heightCandidate <= 32)
             {
                 layout.rankIconSpriteId = spriteIdCandidate;
-
                 layout.rankIconWidth = Math.max(1, widthCandidate + rankIconSizeAdjustment);
-
                 layout.rankIconHeight = Math.max(1, heightCandidate + rankIconSizeAdjustment);
             }
         }
@@ -670,9 +559,7 @@ public final class FontMeasurementService
                 }
 
                 layout.rankIconX = cursor;
-
                 cursor += layout.rankIconWidth;
-
                 cursor += RANK_ICON_GAP;
 
                 /*
@@ -682,27 +569,20 @@ public final class FontMeasurementService
                  * toward the minimum, and consecutive inline images are not separated.
                  */
                 cursor += rankIconRightAdjustment;
-            }
-            else if (layout.hasTitle)
-            {
+
+            } else if (layout.hasTitle) {
                 cursor += BODY_GAP;
             }
 
             layout.senderX = cursor;
-
             cursor += layout.senderWidth;
+            cursor += BODY_GAP;
 
-            cursor += BODY_GAP;
-        }
-        else if (layout.hasTitle)
-        {
-            // Title-only Clan / Guest Clan system message.
-            cursor += BODY_GAP;
+        } else if (layout.hasTitle) {
+            cursor += BODY_GAP; // Title-only Clan / Guest Clan system message.
         }
 
-        // If both title and sender are empty, the body naturally begins at lineX.
-        layout.bodyX = cursor;
-
+        layout.bodyX = cursor; // If both title and sender are empty, the body naturally begins at lineX.
         return layout;
     }
 
@@ -748,12 +628,11 @@ public final class FontMeasurementService
             return cachedFont;
         }
 
-        final long started = performanceMetrics != null
+        final long started = performanceMetrics != null && performanceMetrics.isEnabled()
                 ? System.nanoTime()
                 : 0L;
 
-        try
-        {
+        try {
             final Widget probe = client.getWidget(InterfaceID.Chatbox.INPUT);
 
             if (probe == null)
@@ -762,17 +641,13 @@ public final class FontMeasurementService
             }
 
             final int originalFontId = probe.getFontId();
-
             final FontTypeFace resolvedFont;
 
-            try
-            {
+            try {
                 probe.setFontId(fontId);
 
                 resolvedFont = probe.getFont();
-            }
-            finally
-            {
+            } finally {
                 probe.setFontId(originalFontId);
             }
 
@@ -782,10 +657,8 @@ public final class FontMeasurementService
             }
 
             return resolvedFont;
-        }
-        finally
-        {
-            if (performanceMetrics != null)
+        } finally {
+            if (performanceMetrics != null && performanceMetrics.isEnabled())
             {
                 performanceMetrics.recordFontCacheMiss(System.nanoTime() - started);
             }
@@ -816,7 +689,6 @@ public final class FontMeasurementService
             }
 
             final String raw = (String) value;
-
             final String semantic = textNormalizer.normalizeSemantic(raw);
 
             if (semantic == null || semantic.isEmpty())
@@ -830,10 +702,7 @@ public final class FontMeasurementService
         return null;
     }
 
-    private List<String> findPrefixComponents(
-            Object[] stack,
-            int size,
-            String semanticBody)
+    private List<String> findPrefixComponents(Object[] stack, int size, String semanticBody)
     {
         final List<String> result = new ArrayList<>();
 
@@ -854,7 +723,6 @@ public final class FontMeasurementService
             }
 
             final String raw = (String) value;
-
             final String semantic = textNormalizer.normalizeSemantic(raw);
 
             if (semantic == null)
@@ -916,10 +784,7 @@ public final class FontMeasurementService
      * Existing whitespace immediately after the final image counts toward
      * the configured minimum, which keeps repeated processing idempotent.
      */
-    private String applyInlineIconUsernameSpacing(
-            String rawText,
-            int spacing,
-            char spacingCharacter)
+    private String applyInlineIconUsernameSpacing(String rawText, int spacing, char spacingCharacter)
     {
         if (rawText == null || rawText.isEmpty() || spacing <= 0)
         {
@@ -927,7 +792,6 @@ public final class FontMeasurementService
         }
 
         final String lower = rawText.toLowerCase(Locale.ROOT);
-
         final int imageStart = lower.lastIndexOf("<img=");
 
         if (imageStart < 0)
@@ -992,7 +856,6 @@ public final class FontMeasurementService
         }
 
         final int closingBracket = semanticPrefix.indexOf(']');
-
         return closingBracket > 0 && closingBracket < semanticPrefix.length() - 1;
     }
 
@@ -1017,15 +880,9 @@ public final class FontMeasurementService
      * WRAPPING / HEIGHT
      * ================================================================
      */
-    private int calculateWrappedLineCount(
-            FontTypeFace font,
-            String text,
-            int maxWidth)
+    private int calculateWrappedLineCount(FontTypeFace font, String text, int maxWidth)
     {
-        if (font == null
-                || maxWidth <= 0
-                || text == null
-                || text.isEmpty())
+        if (font == null || maxWidth <= 0 || text == null || text.isEmpty())
         {
             return 1;
         }
@@ -1033,9 +890,7 @@ public final class FontMeasurementService
         final String normalized = text
                 .replace("\r\n", "\n")
                 .replace('\r', '\n');
-
         final String[] explicitLines = normalized.split("\n", -1);
-
         int totalLines = 0;
 
         for (String explicitLine : explicitLines)
@@ -1046,10 +901,7 @@ public final class FontMeasurementService
         return Math.max(1, totalLines);
     }
 
-    int calculateSingleParagraphLines(
-            FontTypeFace font,
-            String text,
-            int maxWidth)
+    int calculateSingleParagraphLines(FontTypeFace font, String text, int maxWidth)
     {
         if (text == null || text.isEmpty())
         {
@@ -1069,9 +921,7 @@ public final class FontMeasurementService
         }
 
         final String[] words = trimmed.split("\\s+");
-
         int lines = 1;
-
         String currentLine = "";
 
         for (String word : words)
@@ -1093,14 +943,12 @@ public final class FontMeasurementService
                 }
 
                 currentLine = word;
-
                 continue;
             }
 
             if (currentLine.isEmpty())
             {
                 currentLine = word;
-
                 continue;
             }
 
@@ -1109,11 +957,8 @@ public final class FontMeasurementService
             if (font.getTextWidth(candidate) <= maxWidth)
             {
                 currentLine = candidate;
-            }
-            else
-            {
+            } else {
                 lines++;
-
                 currentLine = word;
             }
         }
@@ -1138,150 +983,69 @@ public final class FontMeasurementService
      */
     static final class ChannelPrefixLayout
     {
-        /*
-         * Native semantic title used for correlation.
-         */
-        String titleText = "";
-
-        /*
-         * Exact title text rendered after correlation.
-         */
-        String renderedTitleText = "";
-
-        /*
-         * Native semantic sender used for correlation.
-         */
-        String senderText = "";
-
-        /*
-         * Exact selected raw sender markup rendered after correlation.
-         */
-        String renderedSenderText = "";
-
+        String titleText = ""; // Native semantic title used for correlation.
+        String renderedTitleText = ""; // Exact title text rendered after correlation.
+        String senderText = ""; // Native semantic sender used for correlation.
+        String renderedSenderText = ""; // Exact selected raw sender markup rendered after correlation.
         boolean hasTitle;
-
         boolean hasSender;
-
         int titleX;
-
         int titleWidth;
-
         int rankIconSpriteId = -1;
-
         int rankIconX = -1;
-
         int rankIconWidth;
-
         int rankIconHeight;
-
         int senderX;
-
         int senderWidth;
-
         int bodyX;
     }
 
     static final class ConstructionMeasurement
     {
         int scriptId;
-
-        /*
-         * Native semantic body used for correlation.
-         */
-        String semanticBody;
-
-        /*
-         * Exact selected raw body rendered after correlation.
-         */
-        String selectedRawBodyText;
-
+        String semanticBody; // Native semantic body used for correlation.
+        String selectedRawBodyText; // Exact selected raw body rendered after correlation.
         ChatFont selectedChatFont;
-
         int selectedFontId;
-
         List<String> rawPrefixComponents;
-
-        /*
-         * Exact selected raw Script-203 prefix rendered in POST.
-         *
-         * The original rawPrefixComponents remain untouched for correlation.
-         */
-        String selectedRawPrefixText;
-
+        String selectedRawPrefixText; // Exact selected raw Script-203 prefix rendered in POST.
         int rowValueIndex;
-
         int verticalValueIndex;
-
         int rowYIndex;
-
         int argument7Index;
-
         int senderWidthIndex;
-
         int lineWidgetId;
-
         int parentWidgetId;
-
         int leftBoundary;
-
         int rightBoundary;
-
         int lineX;
-
         int nativeLineHeight;
-
         int lineHeightAdjustment;
-
         int selectedLineHeight;
-
         int nativeRowY;
-
         int rowYOffset;
-
         int selectedRowY;
-
         int channelTextYOffset;
-
         int rankIconRightAdjustment;
-
         int rankIconSizeAdjustment;
-
         int rankIconYOffset;
-
         int accountBuildIconPadding;
-
         int nativeArgument7;
-
         int nativeSenderWidth;
-
         int nativeColor;
-
         int nativeShadow;
-
         int nativePrefixWidth;
-
         int selectedPrefixLayoutWidth;
-
         ChannelPrefixLayout nativeChannelLayout;
-
         ChannelPrefixLayout selectedChannelLayout;
-
         int nativeBodyX;
-
         int nativeBodyWidth;
-
         int selectedBodyX;
-
         int selectedBodyWidth;
-
         int nativeLines;
-
         int selectedLines;
-
         int desiredHeight;
-
         int injectedValue;
-
         int allocatedHeight;
     }
 }

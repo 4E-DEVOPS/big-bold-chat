@@ -12,22 +12,11 @@ import net.runelite.client.util.Text;
  */
 public final class ChatTextNormalizer
 {
-    private static final Pattern LINE_BREAK_PATTERN =
-            Pattern.compile(
-                    "<br\\s*/?>",
-                    Pattern.CASE_INSENSITIVE);
+    private static final Pattern LINE_BREAK_PATTERN = Pattern.compile("<br\\s*/?>", Pattern.CASE_INSENSITIVE);
+    private static final Pattern IMAGE_PATTERN = Pattern.compile("<img=(\\d+)>", Pattern.CASE_INSENSITIVE);
+    private static final Pattern AT_PATTERN = Pattern.compile("<at>", Pattern.CASE_INSENSITIVE);
 
-    private static final Pattern IMAGE_PATTERN =
-            Pattern.compile(
-                    "<img=(\\d+)>",
-                    Pattern.CASE_INSENSITIVE);
-
-    private static final Pattern AT_PATTERN =
-            Pattern.compile(
-                    "<at>",
-                    Pattern.CASE_INSENSITIVE);
-
-    // Optional performance instrumentation; null when disabled.
+    // Optional performance instrumentation; null when unavailable.
     private final PerformanceMetrics performanceMetrics;
 
     public ChatTextNormalizer()
@@ -43,12 +32,11 @@ public final class ChatTextNormalizer
     String normalizeSemantic(String text)
     {
         final long started =
-                performanceMetrics != null
+                performanceMetrics != null && performanceMetrics.isEnabled()
                         ? System.nanoTime()
                         : 0L;
 
-        try
-        {
+        try {
             if (text == null)
             {
                 return null;
@@ -61,35 +49,17 @@ public final class ChatTextNormalizer
             {
                 final String normalized =
                         text.indexOf('\u00A0') >= 0
-                                ? text.replace(
-                                '\u00A0',
-                                ' ')
+                                ? text.replace('\u00A0', ' ')
                                 : text;
 
                 return normalized.trim();
             }
 
-            final String withLineBreaks =
-                    LINE_BREAK_PATTERN
-                            .matcher(
-                                    text)
-                            .replaceAll(
-                                    "\n");
+            final String withLineBreaks = LINE_BREAK_PATTERN.matcher(text) .replaceAll("\n");
 
-            final String withVisibleAtCharacters =
-                    AT_PATTERN
-                            .matcher(
-                                    withLineBreaks)
-                            .replaceAll(
-                                    "@");
+            final String withVisibleAtCharacters = AT_PATTERN.matcher(withLineBreaks).replaceAll("@");
 
-            final String semantic =
-                    Text.removeTags(
-                                    withVisibleAtCharacters)
-                            .replace(
-                                    '\u00A0',
-                                    ' ')
-                            .trim();
+            final String semantic = Text.removeTags(withVisibleAtCharacters).replace('\u00A0', ' ').trim();
 
             if (!semantic.isEmpty())
             {
@@ -98,10 +68,8 @@ public final class ChatTextNormalizer
 
             // Keep image-only messages identifiable after markup is removed.
             return extractImages(withVisibleAtCharacters);
-        }
-        finally
-        {
-            if (performanceMetrics != null)
+        } finally {
+            if (performanceMetrics != null && performanceMetrics.isEnabled())
             {
                 performanceMetrics.recordNormalization(
                         System.nanoTime()
@@ -113,12 +81,11 @@ public final class ChatTextNormalizer
     String measureSemantic(String text)
     {
         final long started =
-                performanceMetrics != null
+                performanceMetrics != null && performanceMetrics.isEnabled()
                         ? System.nanoTime()
                         : 0L;
 
-        try
-        {
+        try {
             if (text == null)
             {
                 return null;
@@ -131,37 +98,19 @@ public final class ChatTextNormalizer
             {
                 final String normalized =
                         text.indexOf('\u00A0') >= 0
-                                ? text.replace(
-                                '\u00A0',
-                                ' ')
+                                ? text.replace('\u00A0', ' ')
                                 : text;
 
                 return normalized.trim();
             }
 
-            final String withLineBreaks =
-                    LINE_BREAK_PATTERN
-                            .matcher(
-                                    text)
-                            .replaceAll(
-                                    "\n");
+            final String withLineBreaks = LINE_BREAK_PATTERN.matcher(text).replaceAll("\n");
 
-            final String withVisibleAtCharacters =
-                    AT_PATTERN
-                            .matcher(
-                                    withLineBreaks)
-                            .replaceAll(
-                                    "@");
+            final String withVisibleAtCharacters = AT_PATTERN.matcher(withLineBreaks).replaceAll("@");
 
-            return withVisibleAtCharacters
-                    .replace(
-                            '\u00A0',
-                            ' ')
-                    .trim();
-        }
-        finally
-        {
-            if (performanceMetrics != null)
+            return withVisibleAtCharacters.replace('\u00A0', ' ').trim();
+        } finally {
+            if (performanceMetrics != null && performanceMetrics.isEnabled())
             {
                 performanceMetrics.recordNormalization(
                         System.nanoTime()
@@ -177,9 +126,7 @@ public final class ChatTextNormalizer
             return text;
         }
 
-        return AT_PATTERN
-                .matcher(text)
-                .replaceAll("@");
+        return AT_PATTERN.matcher(text).replaceAll("@");
     }
 
     /*
@@ -198,13 +145,7 @@ public final class ChatTextNormalizer
 
         while (matcher.find())
         {
-            images.append(
-                            "<img=")
-                    .append(
-                            matcher.group(
-                                    1))
-                    .append(
-                            '>');
+            images.append("<img=").append(matcher.group(1)).append('>');
         }
 
         return images.toString();

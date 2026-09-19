@@ -1,11 +1,13 @@
 package com.bigboldchat;
 
-import com.bigboldchat.chat.ChatTextNormalizer;
 import com.bigboldchat.chat.FontLayoutService;
 import com.bigboldchat.chat.FontMeasurementService;
 import com.bigboldchat.chatbox.ChatboxResizeService;
-import com.bigboldchat.debug.ChatDiagnostics;
+import com.bigboldchat.config.ChatboxConfigHandler;
+import com.bigboldchat.config.FontConfigHandler;
+import com.bigboldchat.debug.ChatboxDiagnostics;
 import com.bigboldchat.debug.ChatMessageTests;
+import com.bigboldchat.debug.FontDiagnostics;
 import com.bigboldchat.debug.PerformanceMetrics;
 
 import com.google.inject.Provides;
@@ -23,7 +25,6 @@ import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
-import net.runelite.api.ScriptID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -43,9 +44,6 @@ import net.runelite.client.plugins.PluginDescriptor;
 )
 public class ChatXL extends Plugin
 {
-	private static final boolean DIAGNOSTICS_ENABLED = false;
-	private static final boolean PERFORMANCE_METRICS = true;
-
 	private static final String CONFIG_GROUP = "bigboldchat";
 	private static final String VERSION_CONFIG_KEY = "lastNotifiedVersion";
 
@@ -72,46 +70,65 @@ public class ChatXL extends Plugin
 	private ChatMessageTests chatMessageTests;
 
 	/*
-	 * DIAGNOSTICS & PERFORMANCE
+	 * Diagnostics & performance.
 	 */
-	private ChatDiagnostics chatDiagnostics;
+	private ChatboxDiagnostics chatboxDiagnostics;
+	private FontDiagnostics fontDiagnostics;
 	private PerformanceMetrics performanceMetrics;
 
 	/*
-	 * Production chat-font pipeline.
+	 * Production services.
 	 */
-	private ChatTextNormalizer textNormalizer;
 	private FontMeasurementService fontMeasurementService;
 	private FontLayoutService fontLayoutService;
 	private ChatboxResizeService chatboxResizeService;
 
+	/*
+	 * Configuration handlers.
+	 */
+	private ChatboxConfigHandler chatboxConfigHandler;
+	private FontConfigHandler fontConfigHandler;
+
 	@Override
 	protected void startUp()
 	{
-		if (PERFORMANCE_METRICS)
-		{
-			performanceMetrics = new PerformanceMetrics();
-		}
+		performanceMetrics = new PerformanceMetrics();
 
 		chatboxResizeService = new ChatboxResizeService(client, performanceMetrics);
-		textNormalizer = new ChatTextNormalizer(performanceMetrics);
 		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
-		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);
+		fontLayoutService = new FontLayoutService(
+				client,
+				config,
+				fontMeasurementService,
+				performanceMetrics);
 
-		if (DIAGNOSTICS_ENABLED)
-		{
-			chatDiagnostics = new ChatDiagnostics(client, config);
-		}
-		if (performanceMetrics != null)
-		{
-			performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.STARTUP);
-		}
+		chatboxConfigHandler = new ChatboxConfigHandler(
+				client,
+				clientThread,
+				config,
+				chatboxResizeService,
+				performanceMetrics);
+
+		fontConfigHandler = new FontConfigHandler(
+				client,
+				clientThread,
+				fontLayoutService,
+				performanceMetrics);
+
+		chatboxDiagnostics = new ChatboxDiagnostics(client);
+		fontDiagnostics = new FontDiagnostics(client, config);
+
+		performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.STARTUP);
 
 		/*
 		 * Refresh retained rows through the active layout pipeline.
 		 */
 		clientThread.invokeLater(() -> {
-			applyChatboxSize();
+			if (chatboxConfigHandler != null)
+			{
+				chatboxConfigHandler.applyConfiguredSize();
+			}
+
 			client.refreshChat();
 
 			if (client.getGameState() == GameState.LOGGED_IN)
@@ -132,18 +149,35 @@ public class ChatXL extends Plugin
 		final boolean uninstalling = isBeingUninstalled();
 
 		/*
-		 * Disable PRE / POST handling before restoration.
+		 * Disable PRE / POST and config handling before restoration.
 		 */
+		if (chatboxConfigHandler != null)
+		{
+			chatboxConfigHandler.deactivate();
+		}
+
+		if (fontConfigHandler != null)
+		{
+			fontConfigHandler.deactivate();
+		}
+
 		fontLayoutService = null;
 		chatboxResizeService = null;
 		fontMeasurementService = null;
-		textNormalizer = null;
+		chatboxConfigHandler = null;
+		fontConfigHandler = null;
 
-		if (chatDiagnostics != null)
+		if (fontDiagnostics != null)
 		{
-			chatDiagnostics.reset();
+			fontDiagnostics.reset();
 		}
-		chatDiagnostics = null;
+		fontDiagnostics = null;
+
+		if (chatboxDiagnostics != null)
+		{
+			chatboxDiagnostics.reset();
+		}
+		chatboxDiagnostics = null;
 
 		if (shutdownPerformanceMetrics != null)
 		{
@@ -167,6 +201,7 @@ public class ChatXL extends Plugin
 				shutdownLayoutService.restoreNativePresentation();
 				shutdownLayoutService.reset();
 			}
+
 			client.refreshChat();
 
 			if (uninstalling && client.getGameState() == GameState.LOGGED_IN)
@@ -187,31 +222,6 @@ public class ChatXL extends Plugin
 
 	/*
 	 * ================================================================
-	 * DIAGNOSTICS
-	 * ================================================================
-	 */
-	private void runDiagnosticPre(ScriptPreFired event)
-	{
-		if (!DIAGNOSTICS_ENABLED || chatDiagnostics == null)
-		{
-			return;
-		}
-
-		chatDiagnostics.onScriptPreFired(event);
-	}
-
-	private void runDiagnosticPost(ScriptPostFired event)
-	{
-		if (!DIAGNOSTICS_ENABLED || chatDiagnostics == null)
-		{
-			return;
-		}
-
-		chatDiagnostics.onScriptPostFired(event);
-	}
-
-	/*
-	 * ================================================================
 	 * GAME STATE
 	 * ================================================================
 	 */
@@ -223,7 +233,11 @@ public class ChatXL extends Plugin
 			return;
 		}
 
-		applyChatboxSize();
+		if (chatboxConfigHandler != null)
+		{
+			chatboxConfigHandler.applyConfiguredSize();
+		}
+
 		showUpdateMessage();
 	}
 
@@ -254,9 +268,24 @@ public class ChatXL extends Plugin
 			return;
 		}
 
-		if ("chatxl-text".equalsIgnoreCase(command))
+		if (chatboxDiagnostics != null && chatboxDiagnostics.onCommandExecuted(event))
 		{
-			clientThread.invokeLater(chatMessageTests::show);
+			return;
+		}
+
+		if (fontDiagnostics != null && fontDiagnostics.onCommandExecuted(event))
+		{
+			return;
+		}
+
+		if (performanceMetrics != null && performanceMetrics.onCommandExecuted(event))
+		{
+			return;
+		}
+
+		if (chatMessageTests != null)
+		{
+			chatMessageTests.onCommandExecuted(event);
 		}
 	}
 
@@ -348,47 +377,31 @@ public class ChatXL extends Plugin
 			showVersionMessage(currentVersion);
 		}
 
-		configManager.setConfiguration(
-				CONFIG_GROUP,
-				VERSION_CONFIG_KEY,
-				currentVersion);
+		configManager.setConfiguration(CONFIG_GROUP, VERSION_CONFIG_KEY, currentVersion);
 	}
 
 	private void showInstallMessage()
 	{
-		client.addChatMessage(
-				ChatMessageType.GAMEMESSAGE,
-				"",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> "
-						+ INSTALL_MESSAGE,
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> " + INSTALL_MESSAGE,
 				null);
 	}
 
 	private void showVersionMessage(String currentVersion)
 	{
-		client.addChatMessage(
-				ChatMessageType.GAMEMESSAGE,
-				"",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> Updated to v"
-						+ currentVersion
-						+ "!",
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> Updated to v" + currentVersion + "!",
 				null);
 
-		client.addChatMessage(
-				ChatMessageType.GAMEMESSAGE,
-				"",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> "
-						+ UPDATE_MESSAGE,
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> " + UPDATE_MESSAGE,
 				null);
 	}
 
 	private void showUninstallMessage()
 	{
-		client.addChatMessage(
-				ChatMessageType.GAMEMESSAGE,
-				"",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> "
-						+ UNINSTALL_MESSAGE,
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> " + UNINSTALL_MESSAGE,
 				null);
 	}
 
@@ -400,75 +413,19 @@ public class ChatXL extends Plugin
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
-		if (event == null || !CONFIG_GROUP.equals(event.getGroup()))
+		if (fontDiagnostics != null)
+		{
+			fontDiagnostics.onConfigChanged(event);
+		}
+
+		if (chatboxConfigHandler != null && chatboxConfigHandler.onConfigChanged(event))
 		{
 			return;
 		}
 
-		if ("chatboxWidth".equals(event.getKey()))
+		if (fontConfigHandler != null)
 		{
-			clientThread.invokeLater(() -> {
-				if (chatboxResizeService == null)
-				{
-					return;
-				}
-
-				final ChatboxResizeService.ResizeResult result = applyChatboxSize();
-
-				if (result == null
-						|| !result.isApplied()
-						|| !result.isWidthChanged())
-				{
-					return;
-				}
-
-				if (performanceMetrics != null)
-				{
-					performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.WIDTH_CHANGED);
-				}
-
-				client.refreshChat();
-			});
-
-			return;
-		}
-
-		if ("chatboxHeight".equals(event.getKey()))
-		{
-			clientThread.invokeLater(this::applyChatboxSize);
-			return;
-		}
-
-		if ("chatFont".equals(
-				event.getKey()))
-		{
-			/*
-			 * Refresh the active font/profile before rebuilding retained rows.
-			 */
-			if (fontLayoutService != null)
-			{
-				fontLayoutService.refreshActiveFontState();
-			}
-
-			/*
-			 * Clear incomplete construction state before rebuilding retained rows.
-			 */
-			if (fontLayoutService != null)
-			{
-				fontLayoutService.reset();
-			}
-
-			if (chatDiagnostics != null)
-			{
-				chatDiagnostics.reset();
-			}
-
-			if (performanceMetrics != null)
-			{
-				performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.FONT_CHANGED);
-			}
-
-			clientThread.invokeLater(client::refreshChat);
+			fontConfigHandler.onConfigChanged(event);
 		}
 	}
 
@@ -491,89 +448,81 @@ public class ChatXL extends Plugin
 	@Subscribe
 	public void onScriptPreFired(ScriptPreFired event)
 	{
-		if (event != null && event.getScriptId() == ScriptID.BUILD_CHATBOX)
+		if (chatboxDiagnostics != null)
 		{
-			applyChatboxSize();
+			chatboxDiagnostics.onScriptPreFired(event);
 		}
 
-		// Observe native PRE state before layout changes.
-		runDiagnosticPre(event);
+		if (chatboxResizeService != null)
+		{
+			chatboxResizeService.onScriptPreFired(event, config.chatboxWidth(), config.chatboxHeight());
+		}
+
+		if (fontDiagnostics != null)
+		{
+			fontDiagnostics.onScriptPreFired(event);
+		}
 
 		if (fontLayoutService == null)
 		{
 			return;
 		}
 
-		// Measure production PRE processing.
-		final long started =
-				performanceMetrics != null
-						? System.nanoTime()
-						: 0L;
+		final boolean metricsEnabled = performanceMetrics != null && performanceMetrics.isEnabled();
+
+		final long started = metricsEnabled
+				? System.nanoTime()
+				: 0L;
 
 		fontLayoutService.onScriptPreFired(event);
 
-		if (performanceMetrics != null && event != null)
+		if (metricsEnabled && event != null)
 		{
 			performanceMetrics.recordPre(
 					event.getScriptId(),
-					System.nanoTime()
-							- started);
+					System.nanoTime() - started);
 		}
 	}
 
 	@Subscribe
 	public void onScriptPostFired(ScriptPostFired event)
 	{
+		if (chatboxDiagnostics != null)
+		{
+			chatboxDiagnostics.onScriptPostFired(event);
+		}
+
 		if (fontLayoutService != null)
 		{
-			final long started =
-					performanceMetrics != null
-							? System.nanoTime()
-							: 0L;
+			final boolean metricsEnabled = performanceMetrics != null && performanceMetrics.isEnabled();
+
+			final long started = metricsEnabled
+					? System.nanoTime()
+					: 0L;
 
 			fontLayoutService.onScriptPostFired(event);
 
-			if (performanceMetrics != null && event != null)
+			if (metricsEnabled && event != null)
 			{
 				performanceMetrics.recordPost(
 						event.getScriptId(),
-						System.nanoTime()
-								- started);
+						System.nanoTime() - started);
 			}
 		}
 
-		if (event != null
-				&& (event.getScriptId() == ScriptID.TOPLEVEL_REDRAW
-				|| event.getScriptId() == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE
-				|| event.getScriptId() == ScriptID.MESSAGE_LAYER_OPEN))
+		if (chatboxResizeService != null)
 		{
-			applyChatboxSize();
+			chatboxResizeService.onScriptPostFired(event, config.chatboxWidth(), config.chatboxHeight());
 		}
 
-		// Observe final POST presentation when enabled.
-		runDiagnosticPost(event);
+		if (fontDiagnostics != null)
+		{
+			fontDiagnostics.onScriptPostFired(event);
+		}
 
-		// Report performance measurements when enabled.
 		if (performanceMetrics != null)
 		{
 			performanceMetrics.reportIfDue();
 		}
-	}
-
-	/*
-	 * ================================================================
-	 * CHATBOX
-	 * ================================================================
-	 */
-	private ChatboxResizeService.ResizeResult applyChatboxSize()
-	{
-		if (chatboxResizeService == null)
-		{
-			return null;
-		}
-
-		return chatboxResizeService.applySize(
-				config.chatboxWidth(),
-				config.chatboxHeight());
 	}
 }

@@ -16,45 +16,29 @@ import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 
 import net.runelite.api.Client;
+import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.util.Text;
 
 /**
- * Observer-only diagnostics for Chat XL.
- *
- * This class never mutates script stacks, fonts, widgets, or layout.
- * It provides compact supported-script tracing and reusable targeted
- * discovery for future investigations.
+ * Observer-only diagnostics for chat-font construction and presentation.
  */
 @Slf4j
-public final class ChatDiagnostics
+public final class FontDiagnostics
 {
-    /*
-     * Known chat-row constructors.
-     */
+    private static final String COMMAND = "chatxl-font-trace";
+
     private static final int GAME_BODY_SCRIPT = 199;
     private static final int CHAT_BODY_SCRIPT = 203;
     private static final int CHANNEL_BODY_SCRIPT = 4483;
 
-    /*
-     * Normal diagnostic behavior.
-     *
-     * TRACE_SUPPORTED_DETAILS=false produces one compact summary per
-     * supported constructor. Set it true when detailed PRE/POST mutation
-     * tracing is needed.
-     */
-    private static final boolean TRACE_SUPPORTED_LIFECYCLES = true;
+    private static final boolean TRACE_SUPPORTED_LIFECYCLES = false;
     private static final boolean TRACE_SUPPORTED_DETAILS = false;
 
-    /*
-     * Future discovery roots.
-     *
-     * Add a script ID here to trace that root and every nested script
-     * until its matching POST completes.
-     */
     private static final int[] TARGET_ROOT_SCRIPTS =
             {
                     // 72,      // Chat reconstruction, relative to Y-placement.
@@ -68,43 +52,60 @@ public final class ChatDiagnostics
                     // 4483,    // Channel (Clan/Guest) body messages.
             };
 
-    /*
-     * Generic trace controls.
-     */
     private static final boolean TRACE_WIDGET_CHANGES = true;
     private static final boolean IGNORE_Y_ONLY_CHANGES = false;
     private static final int INT_STACK_TAIL_SIZE = 16;
     private static final int MAX_LOGGED_STRING_LENGTH = 200;
 
-    private static final String REVISION = "Diagnostics_REV-01";
+    private static final String REVISION = "FontDiagnostics_REV-01";
 
     private final Client client;
     private final Configurations config;
-
     private final Deque<TraceFrame> traceFrames = new ArrayDeque<>();
 
     private TraceMode traceMode = TraceMode.NONE;
-
+    private boolean armed;
     private int rootScriptId = -1;
-
     private int traceSequence;
 
-    public ChatDiagnostics(Client client, Configurations config)
+    public FontDiagnostics(Client client, Configurations config)
     {
         this.client = client;
-
         this.config = config;
     }
 
-    /*
-     * ================================================================
-     * SCRIPT LIFECYCLE
-     * ================================================================
-     */
+    public boolean onCommandExecuted(CommandExecuted event)
+    {
+        if (event == null || !COMMAND.equalsIgnoreCase(event.getCommand()))
+        {
+            return false;
+        }
+
+        armed = !armed;
+        finishTrace();
+
+        log.debug(
+                "[Chat XL][Font Diagnostic] {}", armed
+                        ? "ARMED"
+                        : "DISARMED");
+
+        return true;
+    }
+
+
+    public void onConfigChanged(ConfigChanged event)
+    {
+        if (event == null || !"bigboldchat".equals(event.getGroup()) || !"chatFont".equals(event.getKey()))
+        {
+            return;
+        }
+
+        reset();
+    }
 
     public void onScriptPreFired(ScriptPreFired event)
     {
-        if (event == null)
+        if (!armed || event == null)
         {
             return;
         }
@@ -145,7 +146,7 @@ public final class ChatDiagnostics
         if (isVerboseTrace())
         {
             log.debug(
-                    "[Chat XL][Diagnostic]"
+                    "[Chat XL][Font Diagnostic]"
                             + " PRE"
                             + " | sequence={}"
                             + " | depth={}"
@@ -162,7 +163,7 @@ public final class ChatDiagnostics
 
     public void onScriptPostFired(ScriptPostFired event)
     {
-        if (event == null || traceMode == TraceMode.NONE || traceFrames.isEmpty())
+        if (!armed || event == null || traceMode == TraceMode.NONE || traceFrames.isEmpty())
         {
             return;
         }
@@ -180,7 +181,7 @@ public final class ChatDiagnostics
         if (frame.scriptId != scriptId)
         {
             log.debug(
-                    "[Chat XL][Diagnostic]"
+                    "[Chat XL][Font Diagnostic]"
                             + " STACK MISMATCH"
                             + " | expectedScriptId={}"
                             + " | actualScriptId={}"
@@ -204,7 +205,7 @@ public final class ChatDiagnostics
         if (isVerboseTrace())
         {
             log.debug(
-                    "[Chat XL][Diagnostic]"
+                    "[Chat XL][Font Diagnostic]"
                             + " POST"
                             + " | sequence={}"
                             + " | depth={}"
@@ -226,11 +227,9 @@ public final class ChatDiagnostics
         if (traceMode == TraceMode.SUPPORTED && !TRACE_SUPPORTED_DETAILS)
         {
             logSupportedSummary(frame, mutations);
-        }
-        else
-        {
+        } else {
             log.debug(
-                    "[Chat XL][Diagnostic]"
+                    "[Chat XL][Font Diagnostic]"
                             + " END"
                             + " | mode={}"
                             + " | rootScriptId={}"
@@ -239,7 +238,7 @@ public final class ChatDiagnostics
                     rootScriptId,
                     traceSequence);
 
-            log.debug("[Chat XL][Diagnostic]" + " ========================================");
+            log.debug("[Chat XL][Font Diagnostic]" + " ========================================");
         }
 
         finishTrace();
@@ -257,10 +256,10 @@ public final class ChatDiagnostics
 
         if (isVerboseTrace())
         {
-            log.debug("[Chat XL][Diagnostic]" + " ========================================");
+            log.debug("[Chat XL][Font Diagnostic]" + " ========================================");
 
             log.debug(
-                    "[Chat XL][Diagnostic]"
+                    "[Chat XL][Font Diagnostic]"
                             + " START"
                             + " | mode={}"
                             + " | revision={}"
@@ -309,7 +308,7 @@ public final class ChatDiagnostics
         if (profile == null)
         {
             log.debug(
-                    "[Chat XL][Diagnostic]"
+                    "[Chat XL][Font Diagnostic]"
                             + " SUPPORTED"
                             + " | scriptId={}"
                             + " | font={}"
@@ -327,7 +326,7 @@ public final class ChatDiagnostics
         }
 
         log.debug(
-                "[Chat XL][Diagnostic]"
+                "[Chat XL][Font Diagnostic]"
                         + " SUPPORTED"
                         + " | scriptId={}"
                         + " | font={}"
@@ -355,13 +354,13 @@ public final class ChatDiagnostics
 
         if (profile == null)
         {
-            log.debug("[Chat XL][Diagnostic]" + " PROFILE" + " | font={}" + " | profile=NOT FOUND", selected);
+            log.debug("[Chat XL][Font Diagnostic]" + " PROFILE" + " | font={}" + " | profile=NOT FOUND", selected);
 
             return;
         }
 
         log.debug(
-                "[Chat XL][Diagnostic]"
+                "[Chat XL][Font Diagnostic]"
                         + " PROFILE"
                         + " | font={}"
                         + " | fontId={}"
@@ -417,7 +416,7 @@ public final class ChatDiagnostics
                 if (logChanges)
                 {
                     log.debug(
-                            "[Chat XL][Diagnostic]"
+                            "[Chat XL][Font Diagnostic]"
                                     + " CHANGE"
                                     + " | sequence={}"
                                     + " | scriptId={}"
@@ -443,7 +442,7 @@ public final class ChatDiagnostics
             if (logChanges)
             {
                 log.debug(
-                        "[Chat XL][Diagnostic]"
+                        "[Chat XL][Font Diagnostic]"
                                 + " CHANGE"
                                 + " | sequence={}"
                                 + " | scriptId={}"
@@ -471,7 +470,7 @@ public final class ChatDiagnostics
             if (logChanges)
             {
                 log.debug(
-                        "[Chat XL][Diagnostic]"
+                        "[Chat XL][Font Diagnostic]"
                                 + " CHANGE"
                                 + " | sequence={}"
                                 + " | scriptId={}"
@@ -521,11 +520,7 @@ public final class ChatDiagnostics
             IdentityHashMap<Widget, WidgetState> result,
             IdentityHashMap<Widget, Boolean> visited)
     {
-        if (widget == null
-                || surface == null
-                || result == null
-                || visited == null
-                || visited.containsKey(widget))
+        if (widget == null || surface == null || result == null || visited == null || visited.containsKey(widget))
         {
             return;
         }
@@ -563,11 +558,7 @@ public final class ChatDiagnostics
 
         for (Widget widget : widgets)
         {
-            collectWidgetTree(
-                    widget,
-                    surface,
-                    result,
-                    visited);
+            collectWidgetTree(widget, surface, result, visited);
         }
     }
 
@@ -579,7 +570,7 @@ public final class ChatDiagnostics
         final IdentityHashMap<Widget, WidgetState> snapshot = snapshotChatWidgets();
 
         log.debug(
-                "[Chat XL][Diagnostic]"
+                "[Chat XL][Font Diagnostic]"
                         + " VISIBLE CHAT DUMP"
                         + " | reason='{}'"
                         + " | widgets={}",
@@ -591,7 +582,7 @@ public final class ChatDiagnostics
         for (Map.Entry<Widget, WidgetState> entry : snapshot.entrySet())
         {
             log.debug(
-                    "[Chat XL][Diagnostic]"
+                    "[Chat XL][Font Diagnostic]"
                             + " WIDGET"
                             + " | identity={}"
                             + " | {}",
@@ -761,10 +752,7 @@ public final class ChatDiagnostics
 
         private final boolean hidden;
 
-        private WidgetState(
-                Surface surface,
-                Widget widget,
-                String text)
+        private WidgetState(Surface surface, Widget widget, String text)
         {
             this.surface = surface;
 

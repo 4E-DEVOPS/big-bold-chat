@@ -3,6 +3,9 @@ package com.bigboldchat.chatbox;
 import com.bigboldchat.debug.PerformanceMetrics;
 
 import net.runelite.api.Client;
+import net.runelite.api.ScriptID;
+import net.runelite.api.events.ScriptPostFired;
+import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetSizeMode;
@@ -16,9 +19,18 @@ import net.runelite.api.widgets.WidgetSizeMode;
  */
 public final class ChatboxResizeService
 {
+	/*
+	 * Native top-level relayout helper. Script 113 resets chat geometry
+	 * immediately before invoking this helper, making PRE the earliest
+	 * observable point where ChatXL can restore its committed geometry
+	 * before the remainder of the native relayout uses it.
+	 */
+	private static final int TOPLEVEL_RELAYOUT = 1972;
+
 	private final Client client;
 	private final PerformanceMetrics performanceMetrics;
 	private final ChatboxControlsLayout controlsLayout;
+	private final ChatboxBackgroundService backgroundService;
 
 	private boolean resizedLayoutApplied;
 
@@ -27,6 +39,7 @@ public final class ChatboxResizeService
 		this.client = client;
 		this.performanceMetrics = performanceMetrics;
 		this.controlsLayout = new ChatboxControlsLayout(client);
+		this.backgroundService = new ChatboxBackgroundService(client);
 	}
 
 	/*
@@ -76,12 +89,49 @@ public final class ChatboxResizeService
 
 	/*
 	 * ================================================================
+	 * SCRIPT LIFECYCLE
+	 * ================================================================
+	 */
+	public void onScriptPreFired(ScriptPreFired event, int width, int height)
+	{
+		if (event == null)
+		{
+			return;
+		}
+
+		final int scriptId = event.getScriptId();
+
+		if (scriptId == ScriptID.BUILD_CHATBOX || scriptId == ScriptID.SPLITPM_CHANGED || scriptId == TOPLEVEL_RELAYOUT)
+		{
+			applySize(width, height);
+		}
+	}
+
+	public void onScriptPostFired(ScriptPostFired event, int width, int height)
+	{
+		if (event == null)
+		{
+			return;
+		}
+
+		final int scriptId = event.getScriptId();
+
+		if (scriptId == ScriptID.TOPLEVEL_REDRAW
+				|| scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE
+				|| scriptId == ScriptID.MESSAGE_LAYER_OPEN)
+		{
+			applySize(width, height);
+		}
+	}
+
+	/*
+	 * ================================================================
 	 * CHATBOX GEOMETRY
 	 * ================================================================
 	 */
 	public ResizeResult applySize(int width, int height)
 	{
-		final long started = performanceMetrics != null
+		final long started = performanceMetrics != null && performanceMetrics.isEnabled()
 				? System.nanoTime()
 				: 0L;
 
@@ -119,9 +169,7 @@ public final class ChatboxResizeService
 						|| universe.getWidth() != width
 						|| chatArea.getWidth() != width;
 
-		final boolean heightChanged =
-				slot.getHeight() != height
-						|| universe.getHeight() != height;
+		final boolean heightChanged = slot.getHeight() != height || universe.getHeight() != height;
 
 		final boolean controlsChanged = !controlsLayout.matches(width);
 
@@ -135,6 +183,12 @@ public final class ChatboxResizeService
 					height,
 					controlsChanged);
 		}
+
+		final ChatboxBackgroundService.Result backgroundResult =
+				backgroundService.apply(chatArea, width, ChatboxGeometry.bodyHeight(height));
+
+		recordMutations(backgroundResult.getMutations());
+		recordRevalidates(backgroundResult.getRevalidates());
 
 		resizedLayoutApplied = true;
 
@@ -251,6 +305,11 @@ public final class ChatboxResizeService
 		recordMutations(controlsLayout.restoreNative());
 		recordRevalidates(ChatboxWidgets.revalidateChildren(universe));
 
+		final ChatboxBackgroundService.Result backgroundResult = backgroundService.restore(chatArea);
+
+		recordMutations(backgroundResult.getMutations());
+		recordRevalidates(backgroundResult.getRevalidates());
+
 		resizedLayoutApplied = false;
 
 		if (wasApplied && performanceMetrics != null)
@@ -264,12 +323,9 @@ public final class ChatboxResizeService
 	 * PERFORMANCE HELPERS
 	 * ================================================================
 	 */
-	private void recordApply(
-			long started,
-			boolean widthChanged,
-			boolean heightChanged)
+	private void recordApply(long started, boolean widthChanged, boolean heightChanged)
 	{
-		if (performanceMetrics == null)
+		if (performanceMetrics == null || !performanceMetrics.isEnabled())
 		{
 			return;
 		}
@@ -339,10 +395,7 @@ public final class ChatboxResizeService
 		private final boolean widthChanged;
 		private final boolean heightChanged;
 
-		private ResizeResult(
-				boolean applied,
-				boolean widthChanged,
-				boolean heightChanged)
+		private ResizeResult(boolean applied, boolean widthChanged, boolean heightChanged)
 		{
 			this.applied = applied;
 			this.widthChanged = widthChanged;

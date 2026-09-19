@@ -4,10 +4,12 @@ import javax.inject.Inject;
 
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.EnumComposition;
 import net.runelite.api.EnumID;
 import net.runelite.api.IconID;
 import net.runelite.api.clan.ClanTitle;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.ChatIconManager;
 
 /**
@@ -15,6 +17,7 @@ import net.runelite.client.game.ChatIconManager;
  */
 public final class ChatMessageTests
 {
+    private static final String COMMAND = "chatxl-text";
     private static final String CHANNEL_NAME = "CHANNEL";
 
     private static final int FRIENDS_CHAT_ICON = 67;
@@ -24,13 +27,26 @@ public final class ChatMessageTests
     private static final int CLAN_RANK_SPRITE = 3256;
 
     private final Client client;
+    private final ClientThread clientThread;
     private final ChatIconManager chatIconManager;
 
     @Inject
-    public ChatMessageTests(Client client, ChatIconManager chatIconManager)
+    public ChatMessageTests(Client client, ClientThread clientThread, ChatIconManager chatIconManager)
     {
         this.client = client;
+        this.clientThread = clientThread;
         this.chatIconManager = chatIconManager;
+    }
+
+    public boolean onCommandExecuted(CommandExecuted event)
+    {
+        if (event == null || !COMMAND.equalsIgnoreCase(event.getCommand()))
+        {
+            return false;
+        }
+
+        clientThread.invokeLater(this::show);
+        return true;
     }
 
     public void show()
@@ -55,12 +71,7 @@ public final class ChatMessageTests
         addChatTest(ChatMessageType.GAMEMESSAGE, "");
         addChatTest(ChatMessageType.ENGINE, "");
         addChatTest(ChatMessageType.CONSOLE, "");
-
-        addChatTest(
-                ChatMessageType.BROADCAST,
-                "",
-                IconID.CHAIN_LINK.toString() + "ChatXL BROADCAST test.");
-
+        addChatTest(ChatMessageType.BROADCAST, "", IconID.CHAIN_LINK.toString() + "ChatXL BROADCAST test.");
         addChatTest(ChatMessageType.WELCOME, "");
         addChatTest(ChatMessageType.DIDYOUKNOW, "");
         addChatTest(ChatMessageType.LEVELUPMESSAGE, "");
@@ -278,8 +289,7 @@ public final class ChatMessageTests
                 continue;
             }
 
-            final int iconId = chatIconManager.getIconNumber(
-                    new ClanTitle(key, "ChatXL"));
+            final int iconId = chatIconManager.getIconNumber(new ClanTitle(key, "ChatXL"));
 
             return iconTag(iconId);
         }
