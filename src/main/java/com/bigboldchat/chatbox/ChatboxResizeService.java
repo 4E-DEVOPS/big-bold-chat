@@ -137,19 +137,30 @@ public final class ChatboxResizeService {
 			return ResizeResult.NOT_APPLIED;
 		}
 
-		final boolean widthChanged = slot.getWidth() != width
-				|| universe.getWidth() != width
-				|| chatArea.getWidth() != width;
-		final boolean heightChanged = slot.getHeight() != height || universe.getHeight() != height;
-		final boolean controlsChanged = !controlsLayout.matches(width);
+		/*
+		 * Configuration remains the desired size. Constrain only the live
+		 * geometry so the desired dimensions survive temporary canvas limits.
+		 */
+		final int effectiveWidth = ChatboxBounds.effectiveWidth(width, client.getCanvasWidth());
+		final int effectiveHeight = ChatboxBounds.effectiveHeight(height, client.getCanvasHeight());
+		final boolean widthChanged = slot.getWidth() != effectiveWidth
+				|| universe.getWidth() != effectiveWidth
+				|| chatArea.getWidth() != effectiveWidth;
+		final boolean heightChanged = slot.getHeight() != effectiveHeight
+				|| universe.getHeight() != effectiveHeight;
+		final boolean controlsChanged = !controlsLayout.matches(effectiveWidth);
 		if (widthChanged || heightChanged || controlsChanged) {
-			applyGeometry(slot, universe, chatArea, width, height, controlsChanged);
+			applyGeometry(
+					slot,
+					universe,
+					chatArea,
+					effectiveWidth,
+					effectiveHeight,
+					controlsChanged);
 		}
 
-		final ChatboxBackgroundService.Result backgroundResult = backgroundService.apply(
-				chatArea,
-				width,
-				ChatboxGeometry.bodyHeight(height));
+		final ChatboxBackgroundService.Result backgroundResult =
+				backgroundService.apply(chatArea, effectiveWidth, ChatboxGeometry.bodyHeight(effectiveHeight));
 
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
@@ -170,7 +181,7 @@ public final class ChatboxResizeService {
 			boolean controlsChanged) {
 		/*
 		 * Resize the top-level chat slot first so dependent chatbox children
-		 * resolve against the requested outer geometry.
+		 * resolve against the effective outer geometry.
 		 */
 		if (slot.getWidth() != width || slot.getHeight() != height) {
 			slot.setSize(width, height);
@@ -281,6 +292,11 @@ public final class ChatboxResizeService {
 		universe.revalidate();
 		recordRevalidate();
 
+		/*
+		 * Doesn't revalidate UNIVERSE after these resolved-size setters.
+		 * MINUS/MINUS would resolve against the client root again instead
+		 * of retaining the native chat-slot dimensions.
+		 */
 		universe.setWidth(ChatboxGeometry.NATIVE_WIDTH);
 		universe.setHeight(ChatboxGeometry.NATIVE_SLOT_HEIGHT);
 		recordMutation();

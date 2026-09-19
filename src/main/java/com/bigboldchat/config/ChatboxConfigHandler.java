@@ -107,11 +107,14 @@ public final class ChatboxConfigHandler {
 		committedWidth = width;
 		committedHeight = height;
 
+		if (!result.isWidthChanged() && !result.isHeightChanged()) {
+			return;
+		}
+
 		if (performanceMetrics != null) {
-			performanceMetrics.recordRefreshChat(
-					widthChanged
-							? PerformanceMetrics.RefreshReason.WIDTH_CHANGED
-							: PerformanceMetrics.RefreshReason.HEIGHT_CHANGED);
+			performanceMetrics.recordRefreshChat(result.isWidthChanged()
+					? PerformanceMetrics.RefreshReason.WIDTH_CHANGED
+					: PerformanceMetrics.RefreshReason.HEIGHT_CHANGED);
 		}
 
 		/*
