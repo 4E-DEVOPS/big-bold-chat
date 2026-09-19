@@ -243,11 +243,7 @@ public final class ChatboxResizeService {
 		slot.revalidate();
 		recordRevalidate();
 
-		universe.setSize(0, 0, WidgetSizeMode.MINUS, WidgetSizeMode.MINUS);
-		universe.setForcedPosition(-1, -1);
-		recordMutation();
-		universe.revalidate();
-		recordRevalidate();
+		restoreNativeUniverse(universe);
 
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
 		if (chatArea != null) {
@@ -268,6 +264,27 @@ public final class ChatboxResizeService {
 		if (wasApplied && performanceMetrics != null) {
 			performanceMetrics.recordResizeRestore();
 		}
+	}
+
+	@SuppressWarnings("deprecation")
+	private void restoreNativeUniverse(Widget universe) {
+		/*
+		 * Native resizable layout keeps UNIVERSE as MINUS/MINUS, but the
+		 * top-level layout resolves it to the stock chat slot rather than the
+		 * client root. A plain revalidate resolves against the client root, so
+		 * restore the native layout fields first and then pin only the resolved
+		 * dimensions that script 113 normally establishes.
+		 */
+		universe.setSize(0, 0, WidgetSizeMode.MINUS, WidgetSizeMode.MINUS);
+		universe.setForcedPosition(-1, -1);
+		recordMutation();
+
+		universe.revalidate();
+		recordRevalidate();
+
+		universe.setWidth(ChatboxGeometry.NATIVE_WIDTH);
+		universe.setHeight(ChatboxGeometry.NATIVE_SLOT_HEIGHT);
+		recordMutation();
 	}
 
 	/*
