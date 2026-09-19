@@ -1,6 +1,6 @@
 package com.bigboldchat.chat;
 
-import com.bigboldchat.debug.PerformanceMetrics;
+import com.bigboldchat.metrics.PerformanceMetrics;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

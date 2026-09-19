@@ -2,9 +2,9 @@ package com.bigboldchat.chat;
 
 import com.bigboldchat.Configurations;
 import com.bigboldchat.config.ChatFont;
-import com.bigboldchat.debug.PerformanceMetrics;
 import com.bigboldchat.fonts.ChatFontProfile;
 import com.bigboldchat.fonts.ChatFontRegistry;
+import com.bigboldchat.metrics.PerformanceMetrics;
 
 import java.util.ArrayList;
 import java.util.Collections;

@@ -1,6 +1,6 @@
 package com.bigboldchat.chatbox;
 
-import com.bigboldchat.debug.PerformanceMetrics;
+import com.bigboldchat.metrics.PerformanceMetrics;
 
 import net.runelite.api.Client;
 import net.runelite.api.ScriptID;

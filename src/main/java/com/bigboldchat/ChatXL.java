@@ -8,7 +8,7 @@ import com.bigboldchat.config.FontConfigHandler;
 import com.bigboldchat.debug.ChatboxDiagnostics;
 import com.bigboldchat.debug.ChatMessageTests;
 import com.bigboldchat.debug.FontDiagnostics;
-import com.bigboldchat.debug.PerformanceMetrics;
+import com.bigboldchat.metrics.PerformanceMetrics;
 
 import com.google.inject.Provides;
 

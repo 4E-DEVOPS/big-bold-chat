@@ -2,7 +2,7 @@ package com.bigboldchat.config;
 
 import com.bigboldchat.Configurations;
 import com.bigboldchat.chatbox.ChatboxResizeService;
-import com.bigboldchat.debug.PerformanceMetrics;
+import com.bigboldchat.metrics.PerformanceMetrics;
 
 import net.runelite.api.Client;
 import net.runelite.client.callback.ClientThread;

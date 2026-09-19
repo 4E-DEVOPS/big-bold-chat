@@ -50,7 +50,7 @@ public final class ChatboxDiagnostics
         armed = !armed;
         resizeTraceFrames.clear();
 
-        log.debug("[Chat XL][Resize Diagnostic] {}", armed
+        log.debug("[Chat XL][Chatbox Diagnostic] {}", armed
                         ? "ARMED"
                         : "DISARMED");
 
@@ -101,7 +101,7 @@ public final class ChatboxDiagnostics
 
         if (frame.scriptId != event.getScriptId())
         {
-            log.debug("[Chat XL][Resize Diagnostic]"
+            log.debug("[Chat XL][Chatbox Diagnostic]"
                             + " STACK MISMATCH"
                             + " | expectedScriptId={}"
                             + " | actualScriptId={}"
@@ -140,7 +140,7 @@ public final class ChatboxDiagnostics
             return;
         }
 
-        log.debug("[Chat XL][Resize Diagnostic]"
+        log.debug("[Chat XL][Chatbox Diagnostic]"
                         + " SCRIPT"
                         + " | phase={}"
                         + " | depth={}"
@@ -164,7 +164,7 @@ public final class ChatboxDiagnostics
 
         for (String change : changes)
         {
-            log.debug("[Chat XL][Resize Diagnostic]"
+            log.debug("[Chat XL][Chatbox Diagnostic]"
                             + " CHANGE"
                             + " | scriptId={}"
                             + " | {}",
