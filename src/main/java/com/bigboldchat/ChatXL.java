@@ -5,9 +5,7 @@ import com.bigboldchat.chat.FontMeasurementService;
 import com.bigboldchat.chatbox.ChatboxResizeService;
 import com.bigboldchat.config.ChatboxConfigHandler;
 import com.bigboldchat.config.FontConfigHandler;
-import com.bigboldchat.debug.ChatboxDiagnostics;
-import com.bigboldchat.debug.ChatMessageTests;
-import com.bigboldchat.debug.FontDiagnostics;
+import com.bigboldchat.debug.DebugManager;
 import com.bigboldchat.debug.PerformanceMetrics;
 
 import com.google.inject.Provides;
@@ -60,15 +58,13 @@ public class ChatXL extends Plugin
 	@Inject
 	private ConfigManager configManager;
 	@Inject
-	private ExternalPluginManager externalPluginManager;
+	private DebugManager debugManager;
 	@Inject
-	private ChatMessageTests chatMessageTests;
+	private ExternalPluginManager externalPluginManager;
 
 	/*
 	 * Diagnostics & performance.
 	 */
-	private ChatboxDiagnostics chatboxDiagnostics;
-	private FontDiagnostics fontDiagnostics;
 	private PerformanceMetrics performanceMetrics;
 
 	/*
@@ -87,15 +83,13 @@ public class ChatXL extends Plugin
 	@Override
 	protected void startUp()
 	{
+		debugManager.activate(performanceMetrics);
 		performanceMetrics = new PerformanceMetrics();
 		chatboxResizeService = new ChatboxResizeService(client, performanceMetrics);
 		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
 		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);
 		chatboxConfigHandler = new ChatboxConfigHandler(client, clientThread, config, chatboxResizeService, performanceMetrics);
 		fontConfigHandler = new FontConfigHandler(client, clientThread, fontLayoutService, performanceMetrics);
-		chatboxDiagnostics = new ChatboxDiagnostics(client);
-		fontDiagnostics = new FontDiagnostics(client, config);
-
 		performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.STARTUP);
 
 		/*
@@ -145,17 +139,7 @@ public class ChatXL extends Plugin
 		chatboxConfigHandler = null;
 		fontConfigHandler = null;
 
-		if (fontDiagnostics != null)
-		{
-			fontDiagnostics.reset();
-		}
-		fontDiagnostics = null;
-
-		if (chatboxDiagnostics != null)
-		{
-			chatboxDiagnostics.reset();
-		}
-		chatboxDiagnostics = null;
+		debugManager.deactivate();
 
 		if (shutdownPerformanceMetrics != null)
 		{
@@ -246,25 +230,7 @@ public class ChatXL extends Plugin
 			return;
 		}
 
-		if (chatboxDiagnostics != null && chatboxDiagnostics.onCommandExecuted(event))
-		{
-			return;
-		}
-
-		if (fontDiagnostics != null && fontDiagnostics.onCommandExecuted(event))
-		{
-			return;
-		}
-
-		if (performanceMetrics != null && performanceMetrics.onCommandExecuted(event))
-		{
-			return;
-		}
-
-		if (chatMessageTests != null)
-		{
-			chatMessageTests.onCommandExecuted(event);
-		}
+		debugManager.onCommandExecuted(event);
 	}
 
 	private void clearChatHistory()
@@ -387,10 +353,7 @@ public class ChatXL extends Plugin
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
-		if (fontDiagnostics != null)
-		{
-			fontDiagnostics.onConfigChanged(event);
-		}
+		debugManager.onConfigChanged(event);
 
 		if (chatboxConfigHandler != null && chatboxConfigHandler.onConfigChanged(event))
 		{
@@ -422,20 +385,14 @@ public class ChatXL extends Plugin
 	@Subscribe
 	public void onScriptPreFired(ScriptPreFired event)
 	{
-		if (chatboxDiagnostics != null)
-		{
-			chatboxDiagnostics.onScriptPreFired(event);
-		}
+		debugManager.onChatboxScriptPreFired(event);
 
 		if (chatboxResizeService != null)
 		{
 			chatboxResizeService.onScriptPreFired(event, config.chatboxWidth(), config.chatboxHeight());
 		}
 
-		if (fontDiagnostics != null)
-		{
-			fontDiagnostics.onScriptPreFired(event);
-		}
+		debugManager.onFontScriptPreFired(event);
 
 		if (fontLayoutService == null)
 		{
@@ -461,10 +418,7 @@ public class ChatXL extends Plugin
 	@Subscribe
 	public void onScriptPostFired(ScriptPostFired event)
 	{
-		if (chatboxDiagnostics != null)
-		{
-			chatboxDiagnostics.onScriptPostFired(event);
-		}
+		debugManager.onChatboxScriptPostFired(event);
 
 		if (fontLayoutService != null)
 		{
@@ -489,14 +443,7 @@ public class ChatXL extends Plugin
 			chatboxResizeService.onScriptPostFired(event, config.chatboxWidth(), config.chatboxHeight());
 		}
 
-		if (fontDiagnostics != null)
-		{
-			fontDiagnostics.onScriptPostFired(event);
-		}
-
-		if (performanceMetrics != null)
-		{
-			performanceMetrics.reportIfDue();
-		}
+		debugManager.onFontScriptPostFired(event);
+		debugManager.reportPerformanceIfDue();
 	}
 }
