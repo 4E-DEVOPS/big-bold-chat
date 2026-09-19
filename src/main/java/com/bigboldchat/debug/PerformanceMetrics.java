@@ -144,7 +144,8 @@ public final class PerformanceMetrics {
 			resetWindow(System.nanoTime());
 		}
 
-		log.debug("[Chat XL][Performance] {}", enabled
+		log.debug(
+				"[Chat XL][Performance] {}", enabled
 						? "ARMED"
 						: "DISARMED");
 
@@ -479,10 +480,12 @@ public final class PerformanceMetrics {
 
 		final double elapsedSeconds = elapsedNanos / 1_000_000_000.0;
 
-		log.debug("[Chat XL][Performance] Window={}",
+		log.debug(
+				"[Chat XL][Performance] Window={}",
 				String.format(Locale.ROOT, "%.3fs", elapsedSeconds));
 
-		log.debug("[Chat XL][Performance] PRE"
+		log.debug(
+				"[Chat XL][Performance] PRE"
 						+ " | 199={}"
 						+ " | 203={}"
 						+ " | 4483={}",
@@ -490,7 +493,8 @@ public final class PerformanceMetrics {
 				formatTiming(pre203),
 				formatTiming(pre4483));
 
-		log.debug("[Chat XL][Performance] POST"
+		log.debug(
+				"[Chat XL][Performance] POST"
 						+ " | 199={}"
 						+ " | 203={}"
 						+ " | 4483={}",
@@ -498,7 +502,8 @@ public final class PerformanceMetrics {
 				formatTiming(post203),
 				formatTiming(post4483));
 
-		log.debug("[Chat XL][Performance] SERVICES"
+		log.debug(
+				"[Chat XL][Performance] SERVICES"
 						+ " | Measurement={}"
 						+ " | Normalize={}"
 						+ " | FontResolve={}"
@@ -510,7 +515,8 @@ public final class PerformanceMetrics {
 				fontCacheHits,
 				fontCacheMisses);
 
-		log.debug("[Chat XL][Performance] CORRELATION"
+		log.debug(
+				"[Chat XL][Performance] CORRELATION"
 						+ " | Widgets={}"
 						+ " | RowSearches={}"
 						+ " | RowCandidates={}"
@@ -550,13 +556,15 @@ public final class PerformanceMetrics {
 				rankFallbackMisses,
 				rankNodesExamined);
 
-		log.debug("[Chat XL][Performance] PRESENTATION"
+		log.debug(
+				"[Chat XL][Performance] PRESENTATION"
 						+ " | Mutations={}"
 						+ " | Revalidates={}",
 				widgetMutations,
 				revalidates);
 
-		log.debug("[Chat XL][Performance] RESIZE"
+		log.debug(
+				"[Chat XL][Performance] RESIZE"
 						+ " | Apply={}"
 						+ " | Applies={}"
 						+ " | Noops={}"
@@ -572,7 +580,8 @@ public final class PerformanceMetrics {
 				resizeMissingWidgets,
 				resizeRestores);
 
-		log.debug("[Chat XL][Performance] REFRESH"
+		log.debug(
+				"[Chat XL][Performance] REFRESH"
 						+ " | Total={}"
 						+ " | Startup={}"
 						+ " | FontChanged={}"

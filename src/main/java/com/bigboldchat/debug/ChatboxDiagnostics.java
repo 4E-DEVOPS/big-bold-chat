@@ -46,7 +46,8 @@ public final class ChatboxDiagnostics {
 		armed = !armed;
 		resizeTraceFrames.clear();
 
-		log.debug("[Chat XL][Chatbox Diagnostic] {}", armed
+		log.debug(
+				"[Chat XL][Chatbox Diagnostic] {}", armed
 						? "ARMED"
 						: "DISARMED");
 
@@ -88,7 +89,8 @@ public final class ChatboxDiagnostics {
 		}
 
 		if (frame.scriptId != event.getScriptId()) {
-			log.debug("[Chat XL][Chatbox Diagnostic]"
+			log.debug(
+					"[Chat XL][Chatbox Diagnostic]"
 							+ " STACK MISMATCH"
 							+ " | expectedScriptId={}"
 							+ " | actualScriptId={}"
@@ -111,6 +113,7 @@ public final class ChatboxDiagnostics {
 			parent.checkpoint = current;
 		}
 	}
+
 	private void logResizeChanges(ResizeTraceFrame frame, ResizeSnapshot current, String phase, int nextScriptId) {
 		if (frame == null || frame.checkpoint == null || current == null) {
 			return;
@@ -121,7 +124,8 @@ public final class ChatboxDiagnostics {
 			return;
 		}
 
-		log.debug("[Chat XL][Chatbox Diagnostic]"
+		log.debug(
+				"[Chat XL][Chatbox Diagnostic]"
 						+ " SCRIPT"
 						+ " | phase={}"
 						+ " | depth={}"
@@ -144,7 +148,8 @@ public final class ChatboxDiagnostics {
 				frame.stringsBefore);
 
 		for (String change : changes) {
-			log.debug("[Chat XL][Chatbox Diagnostic]"
+			log.debug(
+					"[Chat XL][Chatbox Diagnostic]"
 							+ " CHANGE"
 							+ " | scriptId={}"
 							+ " | {}",
@@ -162,10 +167,10 @@ public final class ChatboxDiagnostics {
 
 		if (before.topLevel != after.topLevel) {
 			changes.add("component=TOPLEVEL"
-							+ " | id="
-							+ before.topLevel
-							+ "->"
-							+ after.topLevel);
+					+ " | id="
+					+ before.topLevel
+					+ "->"
+					+ after.topLevel);
 		}
 
 		final Set<String> labels = new LinkedHashSet<>();
@@ -261,6 +266,7 @@ public final class ChatboxDiagnostics {
 
 		return values.toString();
 	}
+
 	private String traceIntStackTail() {
 		final int[] stack = client.getIntStack();
 		final int size = client.getIntStackSize();

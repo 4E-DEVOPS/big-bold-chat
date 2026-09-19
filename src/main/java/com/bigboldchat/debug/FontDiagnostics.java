@@ -39,16 +39,16 @@ public final class FontDiagnostics {
 	private static final boolean TRACE_SUPPORTED_DETAILS = false;
 
 	private static final int[] TARGET_ROOT_SCRIPTS = {
-					// 72,      // Chat reconstruction, relative to Y-placement.
-					// 90,      // Carries actual message text (nested under 192).
-					// 192,     // Message-processing branch (nested under 663).
-					// 193,     // Carries game, system, and chat-notification text.
-					// 199,     // Welcome, Did You Know, Channel/Chat join notices, et cetera.
-					// 203,     // General chatbox body messages.
-					// 663,     // Broad chat and message refresh-dispatch lifecycle.
-					// 4742,    // Carries actual message text (nested under 192).
-					// 4483,    // Channel (Clan/Guest) body messages.
-			};
+			// 72,      // Chat reconstruction, relative to Y-placement.
+			// 90,      // Carries actual message text (nested under 192).
+			// 192,     // Message-processing branch (nested under 663).
+			// 193,     // Carries game, system, and chat-notification text.
+			// 199,     // Welcome, Did You Know, Channel/Chat join notices, et cetera.
+			// 203,     // General chatbox body messages.
+			// 663,     // Broad chat and message refresh-dispatch lifecycle.
+			// 4742,    // Carries actual message text (nested under 192).
+			// 4483,    // Channel (Clan/Guest) body messages.
+	};
 
 	private static final boolean TRACE_WIDGET_CHANGES = true;
 	private static final boolean IGNORE_Y_ONLY_CHANGES = false;
@@ -79,7 +79,8 @@ public final class FontDiagnostics {
 		armed = !armed;
 		finishTrace();
 
-		log.debug("[Chat XL][Font Diagnostic] {}", armed
+		log.debug(
+				"[Chat XL][Font Diagnostic] {}", armed
 						? "ARMED"
 						: "DISARMED");
 
@@ -124,7 +125,8 @@ public final class FontDiagnostics {
 		traceFrames.push(frame);
 
 		if (isVerboseTrace()) {
-			log.debug("[Chat XL][Font Diagnostic]"
+			log.debug(
+					"[Chat XL][Font Diagnostic]"
 							+ " PRE"
 							+ " | sequence={}"
 							+ " | depth={}"
@@ -153,7 +155,8 @@ public final class FontDiagnostics {
 		}
 
 		if (frame.scriptId != scriptId) {
-			log.debug("[Chat XL][Font Diagnostic]"
+			log.debug(
+					"[Chat XL][Font Diagnostic]"
 							+ " STACK MISMATCH"
 							+ " | expectedScriptId={}"
 							+ " | actualScriptId={}"
@@ -174,7 +177,8 @@ public final class FontDiagnostics {
 		final int mutations = logMutations(frame, after, logChanges);
 
 		if (isVerboseTrace()) {
-			log.debug("[Chat XL][Font Diagnostic]"
+			log.debug(
+					"[Chat XL][Font Diagnostic]"
 							+ " POST"
 							+ " | sequence={}"
 							+ " | depth={}"
@@ -195,7 +199,8 @@ public final class FontDiagnostics {
 		if (traceMode == TraceMode.SUPPORTED && !TRACE_SUPPORTED_DETAILS) {
 			logSupportedSummary(frame, mutations);
 		} else {
-			log.debug("[Chat XL][Font Diagnostic]"
+			log.debug(
+					"[Chat XL][Font Diagnostic]"
 							+ " END"
 							+ " | mode={}"
 							+ " | rootScriptId={}"
@@ -218,7 +223,8 @@ public final class FontDiagnostics {
 
 		if (isVerboseTrace()) {
 			log.debug("[Chat XL][Font Diagnostic]" + " ========================================");
-			log.debug("[Chat XL][Font Diagnostic]"
+			log.debug(
+					"[Chat XL][Font Diagnostic]"
 							+ " START"
 							+ " | mode={}"
 							+ " | revision={}"
@@ -255,7 +261,8 @@ public final class FontDiagnostics {
 		final ChatFont selected = getConfiguredFont();
 		final ChatFontProfile profile = ChatFontRegistry.get(selected);
 		if (profile == null) {
-			log.debug("[Chat XL][Font Diagnostic]"
+			log.debug(
+					"[Chat XL][Font Diagnostic]"
 							+ " SUPPORTED"
 							+ " | scriptId={}"
 							+ " | font={}"
@@ -272,7 +279,8 @@ public final class FontDiagnostics {
 			return;
 		}
 
-		log.debug("[Chat XL][Font Diagnostic]"
+		log.debug(
+				"[Chat XL][Font Diagnostic]"
 						+ " SUPPORTED"
 						+ " | scriptId={}"
 						+ " | font={}"
@@ -301,7 +309,8 @@ public final class FontDiagnostics {
 			return;
 		}
 
-		log.debug("[Chat XL][Font Diagnostic]"
+		log.debug(
+				"[Chat XL][Font Diagnostic]"
 						+ " PROFILE"
 						+ " | font={}"
 						+ " | fontId={}"
@@ -347,7 +356,8 @@ public final class FontDiagnostics {
 				mutationCount++;
 
 				if (logChanges) {
-					log.debug("[Chat XL][Font Diagnostic]"
+					log.debug(
+							"[Chat XL][Font Diagnostic]"
 									+ " CHANGE"
 									+ " | sequence={}"
 									+ " | scriptId={}"
@@ -370,7 +380,8 @@ public final class FontDiagnostics {
 			mutationCount++;
 
 			if (logChanges) {
-				log.debug("[Chat XL][Font Diagnostic]"
+				log.debug(
+						"[Chat XL][Font Diagnostic]"
 								+ " CHANGE"
 								+ " | sequence={}"
 								+ " | scriptId={}"
@@ -394,7 +405,8 @@ public final class FontDiagnostics {
 			mutationCount++;
 
 			if (logChanges) {
-				log.debug("[Chat XL][Font Diagnostic]"
+				log.debug(
+						"[Chat XL][Font Diagnostic]"
 								+ " CHANGE"
 								+ " | sequence={}"
 								+ " | scriptId={}"
@@ -480,7 +492,8 @@ public final class FontDiagnostics {
 	public void dumpVisibleChatWidgets(String reason) {
 		final IdentityHashMap<Widget, WidgetState> snapshot = snapshotChatWidgets();
 
-		log.debug("[Chat XL][Font Diagnostic]"
+		log.debug(
+				"[Chat XL][Font Diagnostic]"
 						+ " VISIBLE CHAT DUMP"
 						+ " | reason='{}'"
 						+ " | widgets={}",
@@ -490,7 +503,8 @@ public final class FontDiagnostics {
 				snapshot.size());
 
 		for (Map.Entry<Widget, WidgetState> entry : snapshot.entrySet()) {
-			log.debug("[Chat XL][Font Diagnostic]"
+			log.debug(
+					"[Chat XL][Font Diagnostic]"
 							+ " WIDGET"
 							+ " | identity={}"
 							+ " | {}",
@@ -705,9 +719,9 @@ public final class FontDiagnostics {
 					+ ", h="
 					+ originalHeight
 					+ "]"
-				+ ", relative=[x=" + relativeX + ", y=" + relativeY + "]"
-				+ ", calculated=[w=" + width + ", h=" + height + "]"
-				+ ", hidden=" + hidden;
+					+ ", relative=[x=" + relativeX + ", y=" + relativeY + "]"
+					+ ", calculated=[w=" + width + ", h=" + height + "]"
+					+ ", hidden=" + hidden;
 		}
 	}
 }
