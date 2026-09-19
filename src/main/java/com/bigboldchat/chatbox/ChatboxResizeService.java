@@ -80,30 +80,34 @@ public final class ChatboxResizeService {
 	 * SCRIPT LIFECYCLE
 	 * ================================================================
 	 */
-	public void onScriptPreFired(ScriptPreFired event, int width, int height) {
+	public ResizeResult onScriptPreFired(ScriptPreFired event, int width, int height) {
 		if (event == null) {
-			return;
+			return ResizeResult.NOT_APPLIED;
 		}
 
 		final int scriptId = event.getScriptId();
 		if (scriptId == ScriptID.BUILD_CHATBOX
 				|| scriptId == ScriptID.SPLITPM_CHANGED
 				|| scriptId == TOPLEVEL_RELAYOUT) {
-			applySize(width, height);
+			return applySize(width, height);
 		}
+
+		return ResizeResult.NOT_APPLIED;
 	}
 
-	public void onScriptPostFired(ScriptPostFired event, int width, int height) {
+	public ResizeResult onScriptPostFired(ScriptPostFired event, int width, int height) {
 		if (event == null) {
-			return;
+			return ResizeResult.NOT_APPLIED;
 		}
 
 		final int scriptId = event.getScriptId();
 		if (scriptId == ScriptID.TOPLEVEL_REDRAW
 				|| scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE
 				|| scriptId == ScriptID.MESSAGE_LAYER_OPEN) {
-			applySize(width, height);
+			return applySize(width, height);
 		}
+
+		return ResizeResult.NOT_APPLIED;
 	}
 
 	/*

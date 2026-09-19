@@ -296,8 +296,11 @@ public class ChatXL extends Plugin {
 	public void onScriptPreFired(ScriptPreFired event) {
 		debugManager.onChatboxScriptPreFired(event);
 
-		if (chatboxResizeService != null) {
-			chatboxResizeService.onScriptPreFired(event, config.chatboxWidth(), config.chatboxHeight());
+		final ChatboxResizeService.ResizeResult resizeResult = chatboxResizeService != null
+				? chatboxResizeService.onScriptPreFired(event, config.chatboxWidth(), config.chatboxHeight())
+				: null;
+		if (chatboxConfigHandler != null) {
+			chatboxConfigHandler.onLayoutChanged(resizeResult);
 		}
 
 		debugManager.onFontScriptPreFired(event);
@@ -341,8 +344,11 @@ public class ChatXL extends Plugin {
 			}
 		}
 
-		if (chatboxResizeService != null) {
-			chatboxResizeService.onScriptPostFired(event, config.chatboxWidth(), config.chatboxHeight());
+		final ChatboxResizeService.ResizeResult resizeResult = chatboxResizeService != null
+				? chatboxResizeService.onScriptPostFired(event, config.chatboxWidth(), config.chatboxHeight())
+				: null;
+		if (chatboxConfigHandler != null) {
+			chatboxConfigHandler.onLayoutChanged(resizeResult);
 		}
 
 		debugManager.onFontScriptPostFired(event);
