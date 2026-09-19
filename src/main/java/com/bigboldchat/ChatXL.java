@@ -64,7 +64,8 @@ import net.runelite.client.plugins.PluginDescriptor;
 				"size",
 				"small",
 				"text",
-				"zoom"},
+				"zoom"
+		},
 		enabledByDefault = true
 )
 public class ChatXL extends Plugin {

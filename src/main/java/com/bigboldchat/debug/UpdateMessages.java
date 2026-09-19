@@ -21,8 +21,10 @@ public final class UpdateMessages {
 	private static final String CONFIG_GROUP = "bigboldchat";
 	private static final String VERSION_CONFIG_KEY = "lastNotifiedVersion";
 
-	private static final String INSTALL_MESSAGE = "Thank you for installing ChatXL! Report any issues you find to Github.";
-	private static final String UNINSTALL_MESSAGE = "Please submit a review/issue report on Github of your experience. Thanks!";
+	private static final String INSTALL_MESSAGE = "Thank you for installing ChatXL!"
+			+ "Report any issues you find to Github.";
+	private static final String UNINSTALL_MESSAGE = "Thank you for using ChatXL!"
+			+ "Please submit a review/issue report on Github of your experience.";
 	private static final String UPDATE_MESSAGE = "Resizable Chatbox, and a Broadcast Message + Logged Message fix.";
 
 	private final Client client;
