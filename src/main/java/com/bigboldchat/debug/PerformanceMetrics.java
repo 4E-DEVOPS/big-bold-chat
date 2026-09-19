@@ -109,6 +109,7 @@ public final class PerformanceMetrics {
 	private long refreshFontChanged;
 	private long refreshShutdown;
 	private long refreshWidthChanged;
+	private long refreshHeightChanged;
 	private long refreshOther;
 
 	// Count chatbox-resize geometry activity.
@@ -441,6 +442,9 @@ public final class PerformanceMetrics {
 			case WIDTH_CHANGED:
 				refreshWidthChanged++;
 				break;
+			case HEIGHT_CHANGED:
+				refreshHeightChanged++;
+				break;
 			default:
 				refreshOther++;
 				break;
@@ -587,12 +591,14 @@ public final class PerformanceMetrics {
 						+ " | FontChanged={}"
 						+ " | Shutdown={}"
 						+ " | WidthChanged={}"
+						+ " | HeightChanged={}"
 						+ " | Other={}",
 				refreshChatCalls,
 				refreshStartup,
 				refreshFontChanged,
 				refreshShutdown,
 				refreshWidthChanged,
+				refreshHeightChanged,
 				refreshOther);
 
 		resetWindow(now);
@@ -683,6 +689,7 @@ public final class PerformanceMetrics {
 		refreshFontChanged = 0L;
 		refreshShutdown = 0L;
 		refreshWidthChanged = 0L;
+		refreshHeightChanged = 0L;
 		refreshOther = 0L;
 		resizeApplies = 0L;
 		resizeNoops = 0L;
@@ -698,6 +705,7 @@ public final class PerformanceMetrics {
 		FONT_CHANGED,
 		SHUTDOWN,
 		WIDTH_CHANGED,
+		HEIGHT_CHANGED,
 		OTHER
 	}
 
