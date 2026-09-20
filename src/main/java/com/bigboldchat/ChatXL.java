@@ -22,6 +22,7 @@ import net.runelite.api.MessageNode;
 import net.runelite.api.events.CanvasSizeChanged;
 import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.events.WidgetClosed;
@@ -218,6 +219,15 @@ public class ChatXL extends Plugin {
 	 * CHAT COMMANDS
 	 * ================================================================
 	 */
+	@Subscribe
+	public void onMenuOptionClicked(MenuOptionClicked event) {
+		if (event == null || chatboxResizeService == null) {
+			return;
+		}
+
+		chatboxResizeService.onChatControlClicked(event.getWidget());
+	}
+
 	@Subscribe
 	public void onCommandExecuted(CommandExecuted event) {
 		if (event == null) {

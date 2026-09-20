@@ -40,10 +40,10 @@ public final class ChatboxBounds {
 
 		final Result fitted = fit(
 				anchorX, anchorBottom, desiredWidth, desiredHeight, canvas, interfaces.getObstacles());
-		final Rectangle effectiveBounds = new Rectangle(
-				anchorX, anchorBottom - fitted.height, fitted.width, fitted.height);
+		final Rectangle presentationBounds = new Rectangle(
+				anchorX, anchorBottom - fitted.height, fitted.width, ChatboxGeometry.bodyHeight(fitted.height));
 
-		return new Result(fitted.width, fitted.height, interfaces.intersectsForeground(effectiveBounds));
+		return new Result(fitted.width, fitted.height, interfaces.intersectsForeground(presentationBounds));
 	}
 
 	private static Result fit(

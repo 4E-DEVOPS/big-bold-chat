@@ -34,8 +34,10 @@ public final class ChatboxResizeService {
 	private final SideContainerLayout sideContainerLayout;
 
 	private boolean resizedLayoutApplied;
-	private Widget suppressedSlot;
-	private boolean suppressedSlotHidden;
+	private Widget suppressedChatArea;
+	private boolean suppressedChatAreaHidden;
+	private boolean foregroundSuppressionActive;
+	private boolean foregroundSuppressionOverridden;
 
 	public ChatboxResizeService(Client client, PerformanceMetrics performanceMetrics) {
 		this.client = client;
@@ -141,11 +143,11 @@ public final class ChatboxResizeService {
 		}
 
 		final Widget slot = getSlot(layout);
-		if (suppressedSlot != null && suppressedSlot != slot) {
-			restoreChatPresentation();
-		}
 		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+		if (suppressedChatArea != null && suppressedChatArea != chatArea) {
+			restoreChatPresentation();
+		}
 		if (slot == null || universe == null || chatArea == null) {
 			recordMissingWidgets();
 			return ResizeResult.NOT_APPLIED;
@@ -197,7 +199,7 @@ public final class ChatboxResizeService {
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
 
-		syncChatPresentation(slot, effective.isForegroundOverlap());
+		syncChatPresentation(chatArea, backgroundService.isOpaque() && effective.isForegroundOverlap());
 
 		resizedLayoutApplied = true;
 
@@ -266,35 +268,81 @@ public final class ChatboxResizeService {
 	 * PRESENTATION
 	 * ================================================================
 	 */
-	private void syncChatPresentation(Widget slot, boolean suppress) {
+	private void syncChatPresentation(Widget chatArea, boolean suppress) {
 		if (!suppress) {
 			restoreChatPresentation();
 			return;
 		}
 
-		if (suppressedSlot != slot) {
-			restoreChatPresentation();
-			suppressedSlot = slot;
-			suppressedSlotHidden = slot.isSelfHidden();
+		if (!foregroundSuppressionActive) {
+			foregroundSuppressionActive = true;
+			foregroundSuppressionOverridden = false;
+			suppressedChatArea = chatArea;
+			suppressedChatAreaHidden = chatArea.isSelfHidden();
 		}
 
-		if (!slot.isSelfHidden()) {
-			slot.setHidden(true);
+		if (foregroundSuppressionOverridden) {
+			return;
+		}
+
+		if (!chatArea.isSelfHidden()) {
+			chatArea.setHidden(true);
 			recordMutation();
 		}
 	}
 
-	private void restoreChatPresentation() {
-		if (suppressedSlot == null) {
+	public void onChatControlClicked(Widget widget) {
+		if (widget == null || !isChatControl(widget)) {
 			return;
 		}
 
-		if (suppressedSlot.isSelfHidden() != suppressedSlotHidden) {
-			suppressedSlot.setHidden(suppressedSlotHidden);
+		showChatPresentation();
+	}
+
+	public void showChatPresentation() {
+		if (!foregroundSuppressionActive) {
+			return;
+		}
+
+		foregroundSuppressionOverridden = true;
+		releaseChatPresentation();
+	}
+
+	private boolean isChatControl(Widget widget) {
+		for (Widget current = widget; current != null; current = current.getParent()) {
+			final int id = current.getId();
+			if (id == InterfaceID.Chatbox.CONTROLS
+					|| id == InterfaceID.Chatbox.CHAT_ALL
+					|| id == InterfaceID.Chatbox.CHAT_GAME
+					|| id == InterfaceID.Chatbox.CHAT_PUBLIC
+					|| id == InterfaceID.Chatbox.CHAT_PRIVATE
+					|| id == InterfaceID.Chatbox.CHAT_FRIENDSCHAT
+					|| id == InterfaceID.Chatbox.CHAT_CLAN
+					|| id == InterfaceID.Chatbox.CHAT_TRADE) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private void restoreChatPresentation() {
+		releaseChatPresentation();
+		foregroundSuppressionActive = false;
+		foregroundSuppressionOverridden = false;
+	}
+
+	private void releaseChatPresentation() {
+		if (suppressedChatArea == null) {
+			return;
+		}
+
+		if (suppressedChatArea.isSelfHidden() != suppressedChatAreaHidden) {
+			suppressedChatArea.setHidden(suppressedChatAreaHidden);
 			recordMutation();
 		}
 
-		suppressedSlot = null;
+		suppressedChatArea = null;
 	}
 
 	/*

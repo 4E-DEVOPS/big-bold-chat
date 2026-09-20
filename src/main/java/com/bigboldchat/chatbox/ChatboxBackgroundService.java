@@ -40,6 +40,11 @@ final class ChatboxBackgroundService {
 		this.client = client;
 	}
 
+	boolean isOpaque() {
+		final Widget background = client.getWidget(InterfaceID.Chatbox.CHAT_BACKGROUND);
+		return background != null && isParchment(getBackgroundBody(background));
+	}
+
 	/*
 	 * ================================================================
 	 * BACKGROUND
