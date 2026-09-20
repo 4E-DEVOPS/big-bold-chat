@@ -9,7 +9,6 @@ import net.runelite.api.ScriptID;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.gameval.InterfaceID;
-import net.runelite.api.gameval.SpriteID;
 import net.runelite.api.gameval.VarClientID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetSizeMode;
@@ -21,6 +20,12 @@ import net.runelite.api.widgets.WidgetSizeMode;
  * so message rows and scroll state resolve against the committed viewport.
  */
 public final class ChatboxResizeService {
+	/*
+	 * Native chat view values observed from the chat-control lifecycle.
+	 */
+	private static final int CHAT_VIEW_ALL = 0;
+	private static final int CHAT_VIEW_HIDDEN = 1337;
+
 	/*
 	 * Native chat-button visibility lifecycle.
 	 */
@@ -41,16 +46,6 @@ public final class ChatboxResizeService {
 			InterfaceID.Chatbox.CHAT_TRADE
 	};
 
-	private static final int[] CHAT_CONTROL_GRAPHIC_IDS = {
-			InterfaceID.Chatbox.CHAT_ALL_GRAPHIC,
-			InterfaceID.Chatbox.CHAT_GAME_GRAPHIC,
-			InterfaceID.Chatbox.CHAT_PUBLIC_GRAPHIC,
-			InterfaceID.Chatbox.CHAT_PRIVATE_GRAPHIC,
-			InterfaceID.Chatbox.CHAT_FRIENDSCHAT_GRAPHIC,
-			InterfaceID.Chatbox.CHAT_CLAN_GRAPHIC,
-			InterfaceID.Chatbox.CHAT_TRADE_GRAPHIC
-	};
-
 	private final Client client;
 	private final PerformanceMetrics performanceMetrics;
 	private final ChatboxControlsLayout controlsLayout;
@@ -58,23 +53,13 @@ public final class ChatboxResizeService {
 	private final SideContainerLayout sideContainerLayout;
 
 	private boolean resizedLayoutApplied;
-	private Widget suppressedChatArea;
-	private boolean suppressedChatAreaHidden;
 	private boolean foregroundSuppressionActive;
 	private boolean foregroundSuppressionOverridden;
 	private boolean manualSuppressionActive;
-	private int chatVisibilityDepth;
-
-	private int suppressedSelectedChatControl = -1;
-	private int suppressedSelectedGraphic = -1;
-
+	private boolean suppressionOwnsHiddenView;
 	private boolean chatControlClickPending;
-	private boolean chatControlRevealPending;
-	private boolean restoreSuppressedViewPending;
-	private int pendingChatControl = -1;
-	private int pendingChatView;
-	private int pendingChatHighlight;
-	private int pendingChatViewSaved;
+
+	private int lastVisibleChatView = CHAT_VIEW_ALL;
 
 	public ChatboxResizeService(Client client, PerformanceMetrics performanceMetrics) {
 		this.client = client;
@@ -130,10 +115,6 @@ public final class ChatboxResizeService {
 		}
 
 		final int scriptId = event.getScriptId();
-		if (scriptId == CHAT_VISIBILITY) {
-			chatVisibilityDepth++;
-		}
-
 		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE) {
 			sideContainerLayout.beginNativeLayout();
 		}
@@ -154,13 +135,8 @@ public final class ChatboxResizeService {
 
 		final int scriptId = event.getScriptId();
 		if (scriptId == CHAT_VISIBILITY) {
-			if (chatVisibilityDepth > 0) {
-				chatVisibilityDepth--;
-			}
-
-			if (chatVisibilityDepth == 0 && !chatControlClickPending) {
-				syncChatPresentation(client.getWidget(InterfaceID.Chatbox.CHATAREA), foregroundSuppressionActive);
-			}
+			rememberVisibleChatView();
+			syncChatAreaVisibility();
 		}
 
 		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE) {
@@ -187,8 +163,9 @@ public final class ChatboxResizeService {
 				: 0L;
 		final ChatboxLayout layout = getLayout();
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+
 		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN) {
-			syncChatPresentation(chatArea, false);
+			syncChatPresentation(false);
 			sideContainerLayout.reset();
 			resizedLayoutApplied = false;
 			return ResizeResult.NOT_APPLIED;
@@ -211,7 +188,9 @@ public final class ChatboxResizeService {
 		}
 
 		if (layout == ChatboxLayout.RESIZABLE_MODERN) {
-			final SideContainerLayout.Result sideResult = sideContainerLayout.apply(slot, width, height);
+			final SideContainerLayout.Result sideResult =
+					sideContainerLayout.apply(slot, width, height);
+
 			recordMutations(sideResult.getMutations());
 			recordRevalidates(sideResult.getRevalidates());
 		} else {
@@ -222,7 +201,8 @@ public final class ChatboxResizeService {
 		 * Configuration remains the desired size. Constrain only the live
 		 * geometry so the desired dimensions survive temporary layout limits.
 		 */
-		final ChatboxBounds.Result effective = ChatboxBounds.resolve(client, slot, width, height);
+		final ChatboxBounds.Result effective =
+				ChatboxBounds.resolve(client, slot, width, height);
 		final int effectiveWidth = effective.getWidth();
 		final int effectiveHeight = effective.getHeight();
 		final boolean widthChanged = slot.getWidth() != effectiveWidth
@@ -231,6 +211,7 @@ public final class ChatboxResizeService {
 		final boolean heightChanged = slot.getHeight() != effectiveHeight
 				|| universe.getHeight() != effectiveHeight;
 		final boolean controlsChanged = !controlsLayout.matches(effectiveWidth);
+
 		if (widthChanged || heightChanged || controlsChanged) {
 			applyGeometry(
 					slot,
@@ -242,12 +223,17 @@ public final class ChatboxResizeService {
 		}
 
 		final ChatboxBackgroundService.Result backgroundResult =
-				backgroundService.apply(chatArea, effectiveWidth, ChatboxGeometry.bodyHeight(effectiveHeight));
+				backgroundService.apply(
+						chatArea,
+						effectiveWidth,
+						ChatboxGeometry.bodyHeight(effectiveHeight));
 
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
 
-		syncChatPresentation(chatArea, backgroundService.isOpaque() && effective.isForegroundOverlap());
+		syncChatPresentation(
+				backgroundService.isOpaque()
+						&& effective.isForegroundOverlap());
 
 		resizedLayoutApplied = true;
 
@@ -280,7 +266,11 @@ public final class ChatboxResizeService {
 		 * committed dimensions while ChatXL owns the resizable layout.
 		 */
 		if (universe.getWidth() != width || universe.getHeight() != height) {
-			universe.setSize(width, height, WidgetSizeMode.ABSOLUTE, WidgetSizeMode.ABSOLUTE);
+			universe.setSize(
+					width,
+					height,
+					WidgetSizeMode.ABSOLUTE,
+					WidgetSizeMode.ABSOLUTE);
 			universe.setForcedPosition(0, 0);
 			recordMutation();
 
@@ -316,78 +306,73 @@ public final class ChatboxResizeService {
 	 * PRESENTATION
 	 * ================================================================
 	 */
-	private void syncChatPresentation(Widget chatArea, boolean foregroundSuppression) {
-		if (chatVisibilityDepth > 0) {
-			return;
-		}
+	private void syncChatPresentation(boolean foregroundSuppression) {
+		rememberVisibleChatView();
 
 		if (foregroundSuppression != foregroundSuppressionActive) {
 			foregroundSuppressionActive = foregroundSuppression;
 			foregroundSuppressionOverridden = false;
 		}
 
-		if (suppressedChatArea != null && suppressedChatArea != chatArea) {
-			restoreSuppressedChatSelection();
-			releaseChatPresentation();
-		}
-
-		if (!isSuppressionRequested() || chatArea == null) {
-			restoreSuppressedChatSelection();
-			releaseChatPresentation();
+		/*
+		 * A real chat-control click is currently being processed by RuneScape.
+		 * Do not reinterpret or overwrite its CHAT_VIEW transition while the
+		 * native scripts rebuild the chatbox.
+		 */
+		if (chatControlClickPending) {
+			syncChatAreaVisibility();
 			return;
 		}
 
-		if (suppressedChatArea == null) {
-			suppressedChatArea = chatArea;
-			suppressedChatAreaHidden = chatArea.isSelfHidden();
-			captureSuppressedChatSelection();
+		if (isSuppressionRequested()) {
+			hideNativeChatView();
+			return;
 		}
 
-		if (!chatArea.isSelfHidden()) {
-			chatArea.setHidden(true);
-			recordMutation();
-		}
+		restoreOwnedChatView();
+		syncChatAreaVisibility();
 	}
 
 	public void toggleChatPresentation() {
-		if (isSuppressionRequested()) {
+		if (isChatViewHidden()) {
 			showChatPresentation();
 			return;
 		}
 
+		rememberVisibleChatView();
 		manualSuppressionActive = true;
-		syncChatPresentation(
-				client.getWidget(InterfaceID.Chatbox.CHATAREA),
-				foregroundSuppressionActive);
+		hideNativeChatView();
 	}
 
 	public void showChatPresentation() {
 		manualSuppressionActive = false;
+
 		if (foregroundSuppressionActive) {
 			foregroundSuppressionOverridden = true;
 		}
 
-		forceChatPresentationVisible(client.getWidget(InterfaceID.Chatbox.CHATAREA));
-		restoreSuppressedChatSelection();
+		if (!isChatViewHidden()) {
+			suppressionOwnsHiddenView = false;
+			rememberVisibleChatView();
+			syncChatAreaVisibility();
+			return;
+		}
+
+		suppressionOwnsHiddenView = false;
+		setNativeChatView(lastVisibleChatView);
 	}
 
 	public boolean onChatControlClicked(Widget widget) {
-		final int controlId = findChatControl(widget);
-		if (controlId == -1) {
+		if (findChatControl(widget) == -1) {
 			return false;
 		}
 
+		/*
+		 * Do not mutate visibility here. MenuOptionClicked occurs before the
+		 * native chat-control scripts finish. Mark the interaction and allow
+		 * RuneScape to perform its own CHAT_VIEW transition first.
+		 */
 		chatControlClickPending = true;
-		chatControlRevealPending = isSuppressionRequested();
-		pendingChatControl = controlId;
-
-		restoreSuppressedViewPending = chatControlRevealPending && controlId == suppressedSelectedChatControl;
-		if (restoreSuppressedViewPending) {
-			pendingChatView = client.getVarcIntValue(VarClientID.CHAT_VIEW);
-			pendingChatHighlight = client.getVarcIntValue(VarClientID.CHAT_HIGHLIGHT);
-			pendingChatViewSaved = client.getVarcIntValue(VarClientID.CHAT_VIEW_SAVED);
-		}
-
 		return true;
 	}
 
@@ -396,44 +381,34 @@ public final class ChatboxResizeService {
 			return;
 		}
 
-		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
-		final boolean reveal = chatControlRevealPending;
-		final boolean restoreView = restoreSuppressedViewPending;
-		final int controlId = pendingChatControl;
+		chatControlClickPending = false;
 
-		clearPendingChatControl();
-
-		if (restoreView) {
-			client.setVarcIntValue(VarClientID.CHAT_VIEW, pendingChatView);
-			client.setVarcIntValue(VarClientID.CHAT_HIGHLIGHT, pendingChatHighlight);
-			client.setVarcIntValue(VarClientID.CHAT_VIEW_SAVED, pendingChatViewSaved);
-		}
-
+		/*
+		 * The user has explicitly interacted with a native chat control, so any
+		 * manual ChatXL suppression is no longer authoritative.
+		 */
 		manualSuppressionActive = false;
+		suppressionOwnsHiddenView = false;
 
-		if (reveal) {
-			foregroundSuppressionOverridden = foregroundSuppressionActive;
-			forceChatPresentationVisible(chatArea);
-
-			if (restoreView) {
-				restoreSuppressedChatSelection();
-			} else {
-				discardSuppressedChatSelection();
-				ensureChatControlSelected(controlId);
-			}
-
-			return;
+		/*
+		 * If RuneScape opened the chat while an overlapping foreground
+		 * interface remains present, preserve that explicit user choice.
+		 *
+		 * If RuneScape left the chat lowered, clear the override so future
+		 * foreground suppression continues normally.
+		 */
+		if (foregroundSuppressionActive) {
+			foregroundSuppressionOverridden = !isChatViewHidden();
 		}
 
-		discardSuppressedChatSelection();
-		if (foregroundSuppressionActive && chatArea != null) {
-			foregroundSuppressionOverridden = !chatArea.isSelfHidden();
-		}
+		rememberVisibleChatView();
+		syncChatAreaVisibility();
 	}
 
 	private int findChatControl(Widget widget) {
 		for (Widget current = widget; current != null; current = current.getParent()) {
 			final int id = current.getId();
+
 			for (int controlId : CHAT_CONTROL_IDS) {
 				if (id == controlId) {
 					return controlId;
@@ -444,118 +419,86 @@ public final class ChatboxResizeService {
 		return -1;
 	}
 
-	private void captureSuppressedChatSelection() {
-		discardSuppressedChatSelection();
-
-		for (int i = 0; i < CHAT_CONTROL_GRAPHIC_IDS.length; i++) {
-			final Widget graphic = client.getWidget(CHAT_CONTROL_GRAPHIC_IDS[i]);
-			if (graphic == null || !isSelectedChatSprite(graphic.getSpriteId())) {
-				continue;
-			}
-
-			suppressedSelectedChatControl = CHAT_CONTROL_IDS[i];
-			suppressedSelectedGraphic = CHAT_CONTROL_GRAPHIC_IDS[i];
-
-			final int normalSprite = graphic.getSpriteId() == SpriteID.ChatTabButton.SELECTED_HOVERED
-					? SpriteID.ChatTabButton.HOVERED
-					: SpriteID.ChatTabButton.BUTTON;
-			if (graphic.getSpriteId() != normalSprite) {
-				graphic.setSpriteId(normalSprite);
-				recordMutation();
-			}
-
+	private void hideNativeChatView() {
+		final int chatView = client.getVarcIntValue(VarClientID.CHAT_VIEW);
+		if (chatView == CHAT_VIEW_HIDDEN) {
+			syncChatAreaVisibility();
 			return;
 		}
+
+		lastVisibleChatView = chatView;
+		suppressionOwnsHiddenView = true;
+
+		setNativeChatView(CHAT_VIEW_HIDDEN);
 	}
 
-	private void restoreSuppressedChatSelection() {
-		if (suppressedSelectedGraphic != -1) {
-			final Widget graphic = client.getWidget(suppressedSelectedGraphic);
-			if (graphic != null && !isSelectedChatSprite(graphic.getSpriteId())) {
-				final int selectedSprite = graphic.getSpriteId() == SpriteID.ChatTabButton.HOVERED
-						? SpriteID.ChatTabButton.SELECTED_HOVERED
-						: SpriteID.ChatTabButton.SELECTED;
-				graphic.setSpriteId(selectedSprite);
-				recordMutation();
-			}
-		}
-
-		discardSuppressedChatSelection();
-	}
-
-	private void discardSuppressedChatSelection() {
-		suppressedSelectedChatControl = -1;
-		suppressedSelectedGraphic = -1;
-	}
-
-	private void ensureChatControlSelected(int controlId) {
-		for (int i = 0; i < CHAT_CONTROL_IDS.length; i++) {
-			if (CHAT_CONTROL_IDS[i] != controlId) {
-				continue;
-			}
-
-			final Widget graphic = client.getWidget(CHAT_CONTROL_GRAPHIC_IDS[i]);
-			if (graphic != null && !isSelectedChatSprite(graphic.getSpriteId())) {
-				graphic.setSpriteId(SpriteID.ChatTabButton.SELECTED);
-				recordMutation();
-			}
-
+	private void restoreOwnedChatView() {
+		if (!suppressionOwnsHiddenView) {
 			return;
 		}
+
+		suppressionOwnsHiddenView = false;
+		setNativeChatView(lastVisibleChatView);
 	}
 
-	private static boolean isSelectedChatSprite(int spriteId) {
-		return spriteId == SpriteID.ChatTabButton.SELECTED || spriteId == SpriteID.ChatTabButton.SELECTED_HOVERED;
+	private void rememberVisibleChatView() {
+		final int chatView = client.getVarcIntValue(VarClientID.CHAT_VIEW);
+		if (chatView != CHAT_VIEW_HIDDEN) {
+			lastVisibleChatView = chatView;
+		}
 	}
 
-	private void forceChatPresentationVisible(Widget chatArea) {
-		if (suppressedChatArea != null) {
-			if (suppressedChatArea != chatArea) {
-				releaseChatPresentation();
-			} else {
-				suppressedChatArea = null;
+	private boolean isChatViewHidden() {
+		return client.getVarcIntValue(VarClientID.CHAT_VIEW) == CHAT_VIEW_HIDDEN;
+	}
+
+	private void setNativeChatView(int chatView) {
+		if (client.getVarcIntValue(VarClientID.CHAT_VIEW) != chatView) {
+			client.setVarcIntValue(VarClientID.CHAT_VIEW, chatView);
+
+			if (performanceMetrics != null) {
+				performanceMetrics.recordRefreshChat(
+						PerformanceMetrics.RefreshReason.OTHER);
 			}
+
+			client.refreshChat();
 		}
 
-		if (chatArea != null && chatArea.isSelfHidden()) {
-			chatArea.setHidden(false);
-			recordMutation();
+		/*
+		 * CHAT_VIEW reproduces RuneScape's logical lowered state, while the
+		 * direct CHATAREA flag mirrors script 923's presentation state.
+		 */
+		syncChatAreaVisibility();
+	}
+
+	private void syncChatAreaVisibility() {
+		setChatAreaHidden(isChatViewHidden());
+	}
+
+	private void setChatAreaHidden(boolean hidden) {
+		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+		if (chatArea == null || chatArea.isSelfHidden() == hidden) {
+			return;
 		}
+
+		chatArea.setHidden(hidden);
+		recordMutation();
 	}
 
 	private boolean isSuppressionRequested() {
 		return manualSuppressionActive
-				|| foregroundSuppressionActive && !foregroundSuppressionOverridden;
-	}
-
-	private void clearPendingChatControl() {
-		chatControlClickPending = false;
-		chatControlRevealPending = false;
-		restoreSuppressedViewPending = false;
-		pendingChatControl = -1;
+				|| foregroundSuppressionActive
+				&& !foregroundSuppressionOverridden;
 	}
 
 	private void resetChatPresentation() {
+		chatControlClickPending = false;
 		manualSuppressionActive = false;
 		foregroundSuppressionActive = false;
 		foregroundSuppressionOverridden = false;
-		chatVisibilityDepth = 0;
-		clearPendingChatControl();
-		restoreSuppressedChatSelection();
-		releaseChatPresentation();
-	}
 
-	private void releaseChatPresentation() {
-		if (suppressedChatArea == null) {
-			return;
-		}
-
-		if (suppressedChatArea.isSelfHidden() != suppressedChatAreaHidden) {
-			suppressedChatArea.setHidden(suppressedChatAreaHidden);
-			recordMutation();
-		}
-
-		suppressedChatArea = null;
+		restoreOwnedChatView();
+		syncChatAreaVisibility();
 	}
 
 	/*
@@ -568,6 +511,7 @@ public final class ChatboxResizeService {
 
 		final boolean wasApplied = resizedLayoutApplied;
 		final ChatboxLayout layout = getLayout();
+
 		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN) {
 			sideContainerLayout.reset();
 			resizedLayoutApplied = false;
@@ -575,7 +519,9 @@ public final class ChatboxResizeService {
 		}
 
 		if (layout == ChatboxLayout.RESIZABLE_MODERN) {
-			final SideContainerLayout.Result sideResult = sideContainerLayout.restoreNative();
+			final SideContainerLayout.Result sideResult =
+					sideContainerLayout.restoreNative();
+
 			recordMutations(sideResult.getMutations());
 			recordRevalidates(sideResult.getRevalidates());
 		} else {
@@ -589,9 +535,12 @@ public final class ChatboxResizeService {
 			return;
 		}
 
-		slot.setSize(ChatboxGeometry.NATIVE_WIDTH, ChatboxGeometry.NATIVE_SLOT_HEIGHT);
+		slot.setSize(
+				ChatboxGeometry.NATIVE_WIDTH,
+				ChatboxGeometry.NATIVE_SLOT_HEIGHT);
 		slot.setForcedPosition(-1, -1);
 		recordMutation();
+
 		slot.revalidate();
 		recordRevalidate();
 
@@ -606,7 +555,8 @@ public final class ChatboxResizeService {
 		recordMutations(controlsLayout.restoreNative());
 		recordRevalidates(ChatboxWidgets.revalidateChildren(universe));
 
-		final ChatboxBackgroundService.Result backgroundResult = backgroundService.restore(chatArea);
+		final ChatboxBackgroundService.Result backgroundResult =
+				backgroundService.restore(chatArea);
 
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
@@ -627,7 +577,11 @@ public final class ChatboxResizeService {
 		 * restore the native layout fields first and then pin only the resolved
 		 * dimensions that script 113 normally establishes.
 		 */
-		universe.setSize(0, 0, WidgetSizeMode.MINUS, WidgetSizeMode.MINUS);
+		universe.setSize(
+				0,
+				0,
+				WidgetSizeMode.MINUS,
+				WidgetSizeMode.MINUS);
 		universe.setForcedPosition(-1, -1);
 		recordMutation();
 
@@ -636,8 +590,8 @@ public final class ChatboxResizeService {
 
 		/*
 		 * Doesn't revalidate UNIVERSE after these resolved-size setters.
-		 * MINUS/MINUS would resolve against the client root again
-		 * instead of retaining the native chat-slot dimensions.
+		 * MINUS/MINUS would resolve against the client root again instead of
+		 * retaining the native chat-slot dimensions.
 		 */
 		universe.setWidth(ChatboxGeometry.NATIVE_WIDTH);
 		universe.setHeight(ChatboxGeometry.NATIVE_SLOT_HEIGHT);
@@ -649,14 +603,18 @@ public final class ChatboxResizeService {
 	 * PERFORMANCE HELPERS
 	 * ================================================================
 	 */
-	private void recordApply(long started, boolean widthChanged, boolean heightChanged) {
+	private void recordApply(
+			long started,
+			boolean widthChanged,
+			boolean heightChanged) {
 		if (performanceMetrics == null || !performanceMetrics.isEnabled()) {
 			return;
 		}
 
 		performanceMetrics.recordResizeApply(
 				System.nanoTime() - started,
-				widthChanged, heightChanged);
+				widthChanged,
+				heightChanged);
 	}
 
 	private void recordMissingWidgets() {
@@ -698,13 +656,17 @@ public final class ChatboxResizeService {
 	}
 
 	public static final class ResizeResult {
-		private static final ResizeResult NOT_APPLIED = new ResizeResult(false, false, false);
+		private static final ResizeResult NOT_APPLIED =
+				new ResizeResult(false, false, false);
 
 		private final boolean applied;
 		private final boolean widthChanged;
 		private final boolean heightChanged;
 
-		private ResizeResult(boolean applied, boolean widthChanged, boolean heightChanged) {
+		private ResizeResult(
+				boolean applied,
+				boolean widthChanged,
+				boolean heightChanged) {
 			this.applied = applied;
 			this.widthChanged = widthChanged;
 			this.heightChanged = heightChanged;
