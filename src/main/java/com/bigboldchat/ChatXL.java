@@ -36,37 +36,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 		name = "Chat XL",
 		description = "Resize the chatbox and its text for improved readability.<br>"
 				+ "[A.K.A. BBC - Big Bold Chat]",
-		tags = {
-				"1877",
-				"accessibility",
-				"bbc",
-				"big",
-				"bigger",
-				"bold",
-				"chat",
-				"chatbox",
-				"classic",
-				"fixed",
-				"font",
-				"fonts",
-				"large",
-				"magnifier",
-				"magnify",
-				"messages",
-				"modern",
-				"pm",
-				"private",
-				"readability",
-				"resizable",
-				"resize",
-				"resizer",
-				"resizing",
-				"scale",
-				"size",
-				"small",
-				"text",
-				"zoom"
-		},
+		tags = {"1877", "accessibility", "bbc", "big", "bigger", "bold", "chat", "chatbox", "classic", "fixed", "font", "fonts", "large", "magnifier", "magnify", "messages", "modern", "pm", "private", "readability", "resizable", "resize", "resizer", "resizing", "scale", "size", "small", "text", "zoom"},
 		enabledByDefault = true
 )
 public class ChatXL extends Plugin {
