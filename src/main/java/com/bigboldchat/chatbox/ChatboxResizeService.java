@@ -9,6 +9,7 @@ import net.runelite.api.ScriptID;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.SpriteID;
 import net.runelite.api.gameval.VarClientID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetSizeMode;
@@ -46,6 +47,16 @@ public final class ChatboxResizeService {
 			InterfaceID.Chatbox.CHAT_TRADE
 	};
 
+	private static final int[] CHAT_CONTROL_GRAPHIC_IDS = {
+			InterfaceID.Chatbox.CHAT_ALL_GRAPHIC,
+			InterfaceID.Chatbox.CHAT_GAME_GRAPHIC,
+			InterfaceID.Chatbox.CHAT_PUBLIC_GRAPHIC,
+			InterfaceID.Chatbox.CHAT_PRIVATE_GRAPHIC,
+			InterfaceID.Chatbox.CHAT_FRIENDSCHAT_GRAPHIC,
+			InterfaceID.Chatbox.CHAT_CLAN_GRAPHIC,
+			InterfaceID.Chatbox.CHAT_TRADE_GRAPHIC
+	};
+
 	private final Client client;
 	private final PerformanceMetrics performanceMetrics;
 	private final ChatboxControlsLayout controlsLayout;
@@ -60,6 +71,7 @@ public final class ChatboxResizeService {
 	private boolean chatControlClickPending;
 
 	private int lastVisibleChatView = CHAT_VIEW_ALL;
+	private int lastVisibleChatGraphic = -1;
 
 	public ChatboxResizeService(Client client, PerformanceMetrics performanceMetrics) {
 		this.client = client;
@@ -249,10 +261,6 @@ public final class ChatboxResizeService {
 			int width,
 			int height,
 			boolean controlsChanged) {
-		/*
-		 * Resize the top-level chat slot first so dependent chatbox children
-		 * resolve against the effective outer geometry.
-		 */
 		if (slot.getWidth() != width || slot.getHeight() != height) {
 			slot.setSize(width, height);
 			recordMutation();
@@ -261,10 +269,6 @@ public final class ChatboxResizeService {
 			recordRevalidate();
 		}
 
-		/*
-		 * UNIVERSE normally fills using MINUS sizing. Pin it to the explicit
-		 * committed dimensions while ChatXL owns the resizable layout.
-		 */
 		if (universe.getWidth() != width || universe.getHeight() != height) {
 			universe.setSize(
 					width,
@@ -278,26 +282,15 @@ public final class ChatboxResizeService {
 			recordRevalidate();
 		}
 
-		/*
-		 * CHATAREA's width is absolute and does not auto follow the UNIVERSE width.
-		 */
 		if (chatArea.getWidth() != width) {
 			chatArea.setOriginalWidth(width);
 			recordMutation();
 		}
 
-		/*
-		 * The tab/control bar must be updated before the child revalidation
-		 * cascade so its descendants resolve against the final width.
-		 */
 		if (controlsChanged) {
 			recordMutations(controlsLayout.apply(width));
 		}
 
-		/*
-		 * Revalidate only static/dynamic chatbox descendants. Deliberately stop
-		 * at SCROLLAREA so RuneScape remains responsible for message-row layout.
-		 */
 		recordRevalidates(ChatboxWidgets.revalidateChildren(universe));
 	}
 
@@ -315,9 +308,9 @@ public final class ChatboxResizeService {
 		}
 
 		/*
-		 * A real chat-control click is currently being processed by RuneScape.
-		 * Do not reinterpret or overwrite its CHAT_VIEW transition while the
-		 * native scripts rebuild the chatbox.
+		 * RuneScape is currently processing a real chat-control click.
+		 * Do not overwrite the native CHAT_VIEW transition while its scripts
+		 * rebuild the chatbox.
 		 */
 		if (chatControlClickPending) {
 			syncChatAreaVisibility();
@@ -340,8 +333,17 @@ public final class ChatboxResizeService {
 		}
 
 		rememberVisibleChatView();
+		rememberVisibleChatGraphic();
+
 		manualSuppressionActive = true;
 		hideNativeChatView();
+
+		/*
+		 * Direct CHAT_VIEW changes do not execute RuneScape's chat-tab hover
+		 * renderer. Mirror the final unselected appearance once, then leave
+		 * subsequent hover ownership to the client.
+		 */
+		syncStoredChatGraphic(false);
 	}
 
 	public void showChatPresentation() {
@@ -355,11 +357,18 @@ public final class ChatboxResizeService {
 			suppressionOwnsHiddenView = false;
 			rememberVisibleChatView();
 			syncChatAreaVisibility();
+			syncStoredChatGraphic(true);
 			return;
 		}
 
 		suppressionOwnsHiddenView = false;
 		setNativeChatView(lastVisibleChatView);
+
+		/*
+		 * CHAT_VIEW restores the logical view, but a programmatic transition
+		 * does not immediately repaint the selected chat-tab sprite.
+		 */
+		syncStoredChatGraphic(true);
 	}
 
 	public boolean onChatControlClicked(Widget widget) {
@@ -382,26 +391,19 @@ public final class ChatboxResizeService {
 		}
 
 		chatControlClickPending = false;
-
-		/*
-		 * The user has explicitly interacted with a native chat control, so any
-		 * manual ChatXL suppression is no longer authoritative.
-		 */
 		manualSuppressionActive = false;
 		suppressionOwnsHiddenView = false;
 
-		/*
-		 * If RuneScape opened the chat while an overlapping foreground
-		 * interface remains present, preserve that explicit user choice.
-		 *
-		 * If RuneScape left the chat lowered, clear the override so future
-		 * foreground suppression continues normally.
-		 */
 		if (foregroundSuppressionActive) {
 			foregroundSuppressionOverridden = !isChatViewHidden();
 		}
 
 		rememberVisibleChatView();
+
+		if (!isChatViewHidden()) {
+			rememberVisibleChatGraphic();
+		}
+
 		syncChatAreaVisibility();
 	}
 
@@ -426,6 +428,8 @@ public final class ChatboxResizeService {
 			return;
 		}
 
+		rememberVisibleChatGraphic();
+
 		lastVisibleChatView = chatView;
 		suppressionOwnsHiddenView = true;
 
@@ -448,6 +452,53 @@ public final class ChatboxResizeService {
 		}
 	}
 
+	private void rememberVisibleChatGraphic() {
+		for (int graphicId : CHAT_CONTROL_GRAPHIC_IDS) {
+			final Widget graphic = client.getWidget(graphicId);
+			if (graphic == null) {
+				continue;
+			}
+
+			final int spriteId = graphic.getSpriteId();
+			if (spriteId == SpriteID.ChatTabButton.SELECTED
+					|| spriteId == SpriteID.ChatTabButton.SELECTED_HOVERED) {
+				lastVisibleChatGraphic = graphicId;
+				return;
+			}
+		}
+	}
+
+	private void syncStoredChatGraphic(boolean selected) {
+		if (lastVisibleChatGraphic == -1) {
+			return;
+		}
+
+		final Widget graphic = client.getWidget(lastVisibleChatGraphic);
+		if (graphic == null) {
+			return;
+		}
+
+		final int currentSprite = graphic.getSpriteId();
+		final int targetSprite;
+
+		if (selected) {
+			targetSprite = currentSprite == SpriteID.ChatTabButton.HOVERED
+					? SpriteID.ChatTabButton.SELECTED_HOVERED
+					: SpriteID.ChatTabButton.SELECTED;
+		} else {
+			targetSprite = currentSprite == SpriteID.ChatTabButton.SELECTED_HOVERED
+					? SpriteID.ChatTabButton.HOVERED
+					: SpriteID.ChatTabButton.BUTTON;
+		}
+
+		if (currentSprite == targetSprite) {
+			return;
+		}
+
+		graphic.setSpriteId(targetSprite);
+		recordMutation();
+	}
+
 	private boolean isChatViewHidden() {
 		return client.getVarcIntValue(VarClientID.CHAT_VIEW) == CHAT_VIEW_HIDDEN;
 	}
@@ -464,10 +515,6 @@ public final class ChatboxResizeService {
 			client.refreshChat();
 		}
 
-		/*
-		 * CHAT_VIEW reproduces RuneScape's logical lowered state, while the
-		 * direct CHATAREA flag mirrors script 923's presentation state.
-		 */
 		syncChatAreaVisibility();
 	}
 
@@ -570,13 +617,6 @@ public final class ChatboxResizeService {
 
 	@SuppressWarnings("deprecation")
 	private void restoreNativeUniverse(Widget universe) {
-		/*
-		 * Native resizable layout keeps UNIVERSE as MINUS/MINUS, but the
-		 * top-level layout resolves it to the stock chat slot rather than the
-		 * client root. A plain revalidate resolves against the client root, so
-		 * restore the native layout fields first and then pin only the resolved
-		 * dimensions that script 113 normally establishes.
-		 */
 		universe.setSize(
 				0,
 				0,
@@ -588,11 +628,6 @@ public final class ChatboxResizeService {
 		universe.revalidate();
 		recordRevalidate();
 
-		/*
-		 * Doesn't revalidate UNIVERSE after these resolved-size setters.
-		 * MINUS/MINUS would resolve against the client root again instead of
-		 * retaining the native chat-slot dimensions.
-		 */
 		universe.setWidth(ChatboxGeometry.NATIVE_WIDTH);
 		universe.setHeight(ChatboxGeometry.NATIVE_SLOT_HEIGHT);
 		recordMutation();
