@@ -9,6 +9,8 @@ import net.runelite.api.ScriptID;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.SpriteID;
+import net.runelite.api.gameval.VarClientID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetSizeMode;
 
@@ -29,6 +31,26 @@ public final class ChatboxResizeService {
 	 */
 	private static final int TOPLEVEL_RELAYOUT = 1972;
 
+	private static final int[] CHAT_CONTROL_IDS = {
+			InterfaceID.Chatbox.CHAT_ALL,
+			InterfaceID.Chatbox.CHAT_GAME,
+			InterfaceID.Chatbox.CHAT_PUBLIC,
+			InterfaceID.Chatbox.CHAT_PRIVATE,
+			InterfaceID.Chatbox.CHAT_FRIENDSCHAT,
+			InterfaceID.Chatbox.CHAT_CLAN,
+			InterfaceID.Chatbox.CHAT_TRADE
+	};
+
+	private static final int[] CHAT_CONTROL_GRAPHIC_IDS = {
+			InterfaceID.Chatbox.CHAT_ALL_GRAPHIC,
+			InterfaceID.Chatbox.CHAT_GAME_GRAPHIC,
+			InterfaceID.Chatbox.CHAT_PUBLIC_GRAPHIC,
+			InterfaceID.Chatbox.CHAT_PRIVATE_GRAPHIC,
+			InterfaceID.Chatbox.CHAT_FRIENDSCHAT_GRAPHIC,
+			InterfaceID.Chatbox.CHAT_CLAN_GRAPHIC,
+			InterfaceID.Chatbox.CHAT_TRADE_GRAPHIC
+	};
+
 	private final Client client;
 	private final PerformanceMetrics performanceMetrics;
 	private final ChatboxControlsLayout controlsLayout;
@@ -42,6 +64,18 @@ public final class ChatboxResizeService {
 	private boolean foregroundSuppressionOverridden;
 	private boolean manualSuppressionActive;
 	private int chatVisibilityDepth;
+
+	private int manualSelectedChatControl = -1;
+	private int manualSelectedGraphic = -1;
+	private int manualSelectedSprite = -1;
+
+	private boolean chatControlClickPending;
+	private boolean chatControlRevealPending;
+	private boolean restoreManualViewPending;
+	private int pendingChatControl = -1;
+	private int pendingChatView;
+	private int pendingChatHighlight;
+	private int pendingChatViewSaved;
 
 	public ChatboxResizeService(Client client, PerformanceMetrics performanceMetrics) {
 		this.client = client;
@@ -125,8 +159,8 @@ public final class ChatboxResizeService {
 				chatVisibilityDepth--;
 			}
 
-			if (chatVisibilityDepth == 0) {
-				acceptNativeChatVisibility();
+			if (chatVisibilityDepth == 0 && !chatControlClickPending) {
+				syncChatPresentation(client.getWidget(InterfaceID.Chatbox.CHATAREA), foregroundSuppressionActive);
 			}
 		}
 
@@ -311,6 +345,10 @@ public final class ChatboxResizeService {
 			chatArea.setHidden(true);
 			recordMutation();
 		}
+
+		if (manualSuppressionActive) {
+			hideManualChatSelection();
+		}
 	}
 
 	public void toggleChatPresentation() {
@@ -319,6 +357,7 @@ public final class ChatboxResizeService {
 			return;
 		}
 
+		captureManualChatSelection();
 		manualSuppressionActive = true;
 		syncChatPresentation(
 				client.getWidget(InterfaceID.Chatbox.CHATAREA),
@@ -331,21 +370,158 @@ public final class ChatboxResizeService {
 			foregroundSuppressionOverridden = true;
 		}
 
-		syncChatPresentation(client.getWidget(InterfaceID.Chatbox.CHATAREA), foregroundSuppressionActive);
+		forceChatPresentationVisible(client.getWidget(InterfaceID.Chatbox.CHATAREA));
+		restoreManualChatSelection();
 	}
 
-	private void acceptNativeChatVisibility() {
-		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
-		if (chatArea == null) {
+	public boolean onChatControlClicked(Widget widget) {
+		final int controlId = findChatControl(widget);
+		if (controlId == -1) {
+			return false;
+		}
+
+		chatControlClickPending = true;
+		chatControlRevealPending = isSuppressionRequested();
+		pendingChatControl = controlId;
+
+		restoreManualViewPending = manualSuppressionActive && controlId == manualSelectedChatControl;
+		if (restoreManualViewPending) {
+			pendingChatView = client.getVarcIntValue(VarClientID.CHAT_VIEW);
+			pendingChatHighlight = client.getVarcIntValue(VarClientID.CHAT_HIGHLIGHT);
+			pendingChatViewSaved = client.getVarcIntValue(VarClientID.CHAT_VIEW_SAVED);
+		}
+
+		return true;
+	}
+
+	public void finishChatControlClick() {
+		if (!chatControlClickPending) {
 			return;
+		}
+
+		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+		final boolean reveal = chatControlRevealPending;
+		final boolean restoreView = restoreManualViewPending;
+		final int controlId = pendingChatControl;
+
+		clearPendingChatControl();
+
+		if (restoreView) {
+			client.setVarcIntValue(VarClientID.CHAT_VIEW, pendingChatView);
+			client.setVarcIntValue(VarClientID.CHAT_HIGHLIGHT, pendingChatHighlight);
+			client.setVarcIntValue(VarClientID.CHAT_VIEW_SAVED, pendingChatViewSaved);
 		}
 
 		manualSuppressionActive = false;
 
-		/*
-		 * Native script 923 owns chat-button visibility. Accept its final state
-		 * without restoring the visibility captured before the button click.
-		 */
+		if (reveal) {
+			foregroundSuppressionOverridden = foregroundSuppressionActive;
+			forceChatPresentationVisible(chatArea);
+
+			if (restoreView) {
+				restoreManualChatSelection();
+			} else {
+				discardManualChatSelection();
+				ensureChatControlSelected(controlId);
+			}
+
+			return;
+		}
+
+		discardManualChatSelection();
+		if (foregroundSuppressionActive && chatArea != null) {
+			foregroundSuppressionOverridden = !chatArea.isSelfHidden();
+		}
+	}
+
+	private int findChatControl(Widget widget) {
+		for (Widget current = widget; current != null; current = current.getParent()) {
+			final int id = current.getId();
+			for (int controlId : CHAT_CONTROL_IDS) {
+				if (id == controlId) {
+					return controlId;
+				}
+			}
+		}
+
+		return -1;
+	}
+
+	private void captureManualChatSelection() {
+		discardManualChatSelection();
+
+		for (int i = 0; i < CHAT_CONTROL_GRAPHIC_IDS.length; i++) {
+			final Widget graphic = client.getWidget(CHAT_CONTROL_GRAPHIC_IDS[i]);
+			if (graphic == null || !isSelectedChatSprite(graphic.getSpriteId())) {
+				continue;
+			}
+
+			manualSelectedChatControl = CHAT_CONTROL_IDS[i];
+			manualSelectedGraphic = CHAT_CONTROL_GRAPHIC_IDS[i];
+			manualSelectedSprite = graphic.getSpriteId();
+			hideManualChatSelection();
+			return;
+		}
+	}
+
+	private void hideManualChatSelection() {
+		if (manualSelectedGraphic == -1) {
+			return;
+		}
+
+		final Widget graphic = client.getWidget(manualSelectedGraphic);
+		if (graphic == null) {
+			return;
+		}
+
+		final int normalSprite = manualSelectedSprite == SpriteID.ChatTabButton.SELECTED_HOVERED
+				? SpriteID.ChatTabButton.HOVERED
+				: SpriteID.ChatTabButton.BUTTON;
+		if (graphic.getSpriteId() != normalSprite) {
+			graphic.setSpriteId(normalSprite);
+			recordMutation();
+		}
+	}
+
+	private void restoreManualChatSelection() {
+		if (manualSelectedGraphic != -1 && manualSelectedSprite != -1) {
+			final Widget graphic = client.getWidget(manualSelectedGraphic);
+			if (graphic != null && graphic.getSpriteId() != manualSelectedSprite) {
+				graphic.setSpriteId(manualSelectedSprite);
+				recordMutation();
+			}
+		}
+
+		discardManualChatSelection();
+	}
+
+	private void discardManualChatSelection() {
+		manualSelectedChatControl = -1;
+		manualSelectedGraphic = -1;
+		manualSelectedSprite = -1;
+	}
+
+	private void ensureChatControlSelected(int controlId) {
+		for (int i = 0; i < CHAT_CONTROL_IDS.length; i++) {
+			if (CHAT_CONTROL_IDS[i] != controlId) {
+				continue;
+			}
+
+			final Widget graphic = client.getWidget(CHAT_CONTROL_GRAPHIC_IDS[i]);
+			if (graphic != null && !isSelectedChatSprite(graphic.getSpriteId())) {
+				graphic.setSpriteId(SpriteID.ChatTabButton.SELECTED);
+				recordMutation();
+			}
+
+			return;
+		}
+	}
+
+	private static boolean isSelectedChatSprite(int spriteId) {
+		return spriteId == SpriteID.ChatTabButton.SELECTED || spriteId == SpriteID.ChatTabButton.SELECTED_HOVERED;
+	}
+
+	private void forceChatPresentationVisible(Widget chatArea) {
 		if (suppressedChatArea != null) {
 			if (suppressedChatArea != chatArea) {
 				releaseChatPresentation();
@@ -354,8 +530,10 @@ public final class ChatboxResizeService {
 			}
 		}
 
-		foregroundSuppressionOverridden = foregroundSuppressionActive
-				&& !chatArea.isSelfHidden();
+		if (chatArea != null && chatArea.isSelfHidden()) {
+			chatArea.setHidden(false);
+			recordMutation();
+		}
 	}
 
 	private boolean isSuppressionRequested() {
@@ -363,11 +541,20 @@ public final class ChatboxResizeService {
 				|| foregroundSuppressionActive && !foregroundSuppressionOverridden;
 	}
 
+	private void clearPendingChatControl() {
+		chatControlClickPending = false;
+		chatControlRevealPending = false;
+		restoreManualViewPending = false;
+		pendingChatControl = -1;
+	}
+
 	private void resetChatPresentation() {
 		manualSuppressionActive = false;
 		foregroundSuppressionActive = false;
 		foregroundSuppressionOverridden = false;
 		chatVisibilityDepth = 0;
+		clearPendingChatControl();
+		restoreManualChatSelection();
 		releaseChatPresentation();
 	}
 
