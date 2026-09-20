@@ -336,7 +336,7 @@ final class ChatboxBackgroundService {
 			}
 		}
 
-		result.add(syncFrameVisibility(parchment.isHidden()));
+		result.add(syncFrameVisibility(parchment.isSelfHidden()));
 		return result;
 	}
 

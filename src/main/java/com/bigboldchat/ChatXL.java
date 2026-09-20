@@ -24,6 +24,8 @@ import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
+import net.runelite.api.events.WidgetClosed;
+import net.runelite.api.events.WidgetLoaded;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -181,6 +183,33 @@ public class ChatXL extends Plugin {
 
 		if (chatboxConfigHandler != null) {
 			chatboxConfigHandler.onCanvasSizeChanged();
+		}
+	}
+
+	/*
+	 * ================================================================
+	 * INTERFACE LIFECYCLE
+	 * ================================================================
+	 */
+	@Subscribe
+	public void onWidgetLoaded(WidgetLoaded event) {
+		if (event == null) {
+			return;
+		}
+
+		if (chatboxConfigHandler != null) {
+			chatboxConfigHandler.onInterfaceChanged();
+		}
+	}
+
+	@Subscribe
+	public void onWidgetClosed(WidgetClosed event) {
+		if (event == null) {
+			return;
+		}
+
+		if (chatboxConfigHandler != null) {
+			chatboxConfigHandler.onInterfaceChanged();
 		}
 	}
 

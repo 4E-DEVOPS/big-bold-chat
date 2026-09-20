@@ -21,14 +21,14 @@ public final class ChatboxBounds {
 
 	public static Result resolve(Client client, Widget slot, int configuredWidth, int configuredHeight) {
 		if (client == null || slot == null) {
-			return new Result(configuredWidth, configuredHeight);
+			return new Result(configuredWidth, configuredHeight, false);
 		}
 
 		final InterfaceBounds interfaces = InterfaceBounds.capture(client);
 		final Rectangle canvas = interfaces.getCanvas();
 		final Rectangle slotBounds = slot.getBounds();
 		if (slotBounds == null) {
-			return new Result(configuredWidth, configuredHeight);
+			return new Result(configuredWidth, configuredHeight, false);
 		}
 
 		final int anchorX = slotBounds.x;
@@ -38,7 +38,12 @@ public final class ChatboxBounds {
 		final int desiredWidth = constrain(configuredWidth, availableWidth, ChatboxGeometry.NATIVE_WIDTH);
 		final int desiredHeight = constrain(configuredHeight, availableHeight, ChatboxGeometry.NATIVE_SLOT_HEIGHT);
 
-		return fit(anchorX, anchorBottom, desiredWidth, desiredHeight, canvas, interfaces.getObstacles());
+		final Result fitted = fit(
+				anchorX, anchorBottom, desiredWidth, desiredHeight, canvas, interfaces.getObstacles());
+		final Rectangle effectiveBounds = new Rectangle(
+				anchorX, anchorBottom - fitted.height, fitted.width, fitted.height);
+
+		return new Result(fitted.width, fitted.height, interfaces.intersectsForeground(effectiveBounds));
 	}
 
 	private static Result fit(
@@ -76,7 +81,7 @@ public final class ChatboxBounds {
 				if (best == null
 						|| area > bestArea
 						|| area == bestArea && width > best.width) {
-					best = new Result(width, height);
+					best = new Result(width, height, false);
 					bestArea = area;
 				}
 			}
@@ -92,7 +97,7 @@ public final class ChatboxBounds {
 		 */
 		return new Result(
 				Math.min(desiredWidth, ChatboxGeometry.NATIVE_WIDTH),
-				Math.min(desiredHeight, ChatboxGeometry.NATIVE_SLOT_HEIGHT));
+				Math.min(desiredHeight, ChatboxGeometry.NATIVE_SLOT_HEIGHT), false);
 	}
 
 	private static boolean fits(Rectangle candidate, Rectangle canvas, List<Rectangle> obstacles) {
@@ -128,10 +133,12 @@ public final class ChatboxBounds {
 	public static final class Result {
 		private final int width;
 		private final int height;
+		private final boolean foregroundOverlap;
 
-		private Result(int width, int height) {
+		private Result(int width, int height, boolean foregroundOverlap) {
 			this.width = width;
 			this.height = height;
+			this.foregroundOverlap = foregroundOverlap;
 		}
 
 		public int getWidth() {
@@ -140,6 +147,10 @@ public final class ChatboxBounds {
 
 		public int getHeight() {
 			return height;
+		}
+
+		public boolean isForegroundOverlap() {
+			return foregroundOverlap;
 		}
 	}
 }

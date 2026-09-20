@@ -72,6 +72,14 @@ public final class ChatboxConfigHandler {
 		queueCommit(true, false, false);
 	}
 
+	public void onInterfaceChanged() {
+		if (!active) {
+			return;
+		}
+
+		queueCommit(true, false, false);
+	}
+
 	public void onLayoutChanged(ChatboxResizeService.ResizeResult result) {
 		if (!active
 				|| refreshing

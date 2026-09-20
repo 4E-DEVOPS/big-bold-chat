@@ -34,6 +34,8 @@ public final class ChatboxResizeService {
 	private final SideContainerLayout sideContainerLayout;
 
 	private boolean resizedLayoutApplied;
+	private Widget suppressedSlot;
+	private boolean suppressedSlotHidden;
 
 	public ChatboxResizeService(Client client, PerformanceMetrics performanceMetrics) {
 		this.client = client;
@@ -132,12 +134,16 @@ public final class ChatboxResizeService {
 				: 0L;
 		final ChatboxLayout layout = getLayout();
 		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN) {
+			restoreChatPresentation();
 			sideContainerLayout.reset();
 			resizedLayoutApplied = false;
 			return ResizeResult.NOT_APPLIED;
 		}
 
 		final Widget slot = getSlot(layout);
+		if (suppressedSlot != null && suppressedSlot != slot) {
+			restoreChatPresentation();
+		}
 		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
 		if (slot == null || universe == null || chatArea == null) {
@@ -190,6 +196,8 @@ public final class ChatboxResizeService {
 
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
+
+		syncChatPresentation(slot, effective.isForegroundOverlap());
 
 		resizedLayoutApplied = true;
 
@@ -255,10 +263,48 @@ public final class ChatboxResizeService {
 
 	/*
 	 * ================================================================
+	 * PRESENTATION
+	 * ================================================================
+	 */
+	private void syncChatPresentation(Widget slot, boolean suppress) {
+		if (!suppress) {
+			restoreChatPresentation();
+			return;
+		}
+
+		if (suppressedSlot != slot) {
+			restoreChatPresentation();
+			suppressedSlot = slot;
+			suppressedSlotHidden = slot.isSelfHidden();
+		}
+
+		if (!slot.isSelfHidden()) {
+			slot.setHidden(true);
+			recordMutation();
+		}
+	}
+
+	private void restoreChatPresentation() {
+		if (suppressedSlot == null) {
+			return;
+		}
+
+		if (suppressedSlot.isSelfHidden() != suppressedSlotHidden) {
+			suppressedSlot.setHidden(suppressedSlotHidden);
+			recordMutation();
+		}
+
+		suppressedSlot = null;
+	}
+
+	/*
+	 * ================================================================
 	 * RESTORATION
 	 * ================================================================
 	 */
 	public void restoreNativeSize() {
+		restoreChatPresentation();
+
 		final boolean wasApplied = resizedLayoutApplied;
 		final ChatboxLayout layout = getLayout();
 		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN) {
