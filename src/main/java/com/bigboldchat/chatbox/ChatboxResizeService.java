@@ -15,20 +15,17 @@ import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetSizeMode;
 
 /**
- * Owns resizable-layout chatbox geometry.
- *
- * Geometry changes are applied before native chat presentation is refreshed
- * so message rows and scroll state resolve against the committed viewport.
+ * Owns resizable-layout chatbox geometry and presentation.
  */
 public final class ChatboxResizeService {
 	/*
-	 * Native chat view values observed from the chat-control lifecycle.
+	 * Native chat view values.
 	 */
 	private static final int CHAT_VIEW_ALL = 0;
 	private static final int CHAT_VIEW_HIDDEN = 1337;
 
 	/*
-	 * Native chat-button visibility lifecycle.
+	 * Native chat visibility lifecycle.
 	 */
 	private static final int CHAT_VISIBILITY = 923;
 
@@ -131,9 +128,7 @@ public final class ChatboxResizeService {
 			sideContainerLayout.beginNativeLayout();
 		}
 
-		if (scriptId == ScriptID.BUILD_CHATBOX
-				|| scriptId == ScriptID.SPLITPM_CHANGED
-				|| scriptId == TOPLEVEL_RELAYOUT) {
+		if (scriptId == ScriptID.BUILD_CHATBOX || scriptId == ScriptID.SPLITPM_CHANGED || scriptId == TOPLEVEL_RELAYOUT) {
 			return applySize(width, height);
 		}
 
@@ -191,8 +186,7 @@ public final class ChatboxResizeService {
 		}
 
 		/*
-		 * Ignore transient layout swaps where Chatbox.UNIVERSE has not yet
-		 * been mounted under the active resizable chat container.
+		 * Ignore transient layout swaps before UNIVERSE mounts under the active chat container.
 		 */
 		final Widget parent = universe.getParent();
 		if (parent == null || parent.getId() != slot.getId()) {
@@ -200,8 +194,7 @@ public final class ChatboxResizeService {
 		}
 
 		if (layout == ChatboxLayout.RESIZABLE_MODERN) {
-			final SideContainerLayout.Result sideResult =
-					sideContainerLayout.apply(slot, width, height);
+			final SideContainerLayout.Result sideResult = sideContainerLayout.apply(slot, width, height);
 
 			recordMutations(sideResult.getMutations());
 			recordRevalidates(sideResult.getRevalidates());
@@ -210,42 +203,27 @@ public final class ChatboxResizeService {
 		}
 
 		/*
-		 * Configuration remains the desired size. Constrain only the live
-		 * geometry so the desired dimensions survive temporary layout limits.
+		 * Clamp live geometry without changing configured dimensions.
 		 */
-		final ChatboxBounds.Result effective =
-				ChatboxBounds.resolve(client, slot, width, height);
+		final ChatboxBounds.Result effective = ChatboxBounds.resolve(client, slot, width, height);
 		final int effectiveWidth = effective.getWidth();
 		final int effectiveHeight = effective.getHeight();
 		final boolean widthChanged = slot.getWidth() != effectiveWidth
-				|| universe.getWidth() != effectiveWidth
-				|| chatArea.getWidth() != effectiveWidth;
-		final boolean heightChanged = slot.getHeight() != effectiveHeight
-				|| universe.getHeight() != effectiveHeight;
+				|| universe.getWidth() != effectiveWidth || chatArea.getWidth() != effectiveWidth;
+		final boolean heightChanged = slot.getHeight() != effectiveHeight || universe.getHeight() != effectiveHeight;
 		final boolean controlsChanged = !controlsLayout.matches(effectiveWidth);
 
 		if (widthChanged || heightChanged || controlsChanged) {
-			applyGeometry(
-					slot,
-					universe,
-					chatArea,
-					effectiveWidth,
-					effectiveHeight,
-					controlsChanged);
+			applyGeometry(slot, universe, chatArea, effectiveWidth, effectiveHeight, controlsChanged);
 		}
 
 		final ChatboxBackgroundService.Result backgroundResult =
-				backgroundService.apply(
-						chatArea,
-						effectiveWidth,
-						ChatboxGeometry.bodyHeight(effectiveHeight));
+				backgroundService.apply(chatArea, effectiveWidth, ChatboxGeometry.bodyHeight(effectiveHeight));
 
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
 
-		syncChatPresentation(
-				backgroundService.isOpaque()
-						&& effective.isForegroundOverlap());
+		syncChatPresentation(backgroundService.isOpaque() && effective.isForegroundOverlap());
 
 		resizedLayoutApplied = true;
 
@@ -270,11 +248,7 @@ public final class ChatboxResizeService {
 		}
 
 		if (universe.getWidth() != width || universe.getHeight() != height) {
-			universe.setSize(
-					width,
-					height,
-					WidgetSizeMode.ABSOLUTE,
-					WidgetSizeMode.ABSOLUTE);
+			universe.setSize(width, height, WidgetSizeMode.ABSOLUTE, WidgetSizeMode.ABSOLUTE);
 			universe.setForcedPosition(0, 0);
 			recordMutation();
 
@@ -308,9 +282,7 @@ public final class ChatboxResizeService {
 		}
 
 		/*
-		 * RuneScape is currently processing a real chat-control click.
-		 * Do not overwrite the native CHAT_VIEW transition while its scripts
-		 * rebuild the chatbox.
+		 * Defer presentation sync during native chat-control processing.
 		 */
 		if (chatControlClickPending) {
 			syncChatAreaVisibility();
@@ -333,17 +305,9 @@ public final class ChatboxResizeService {
 		}
 
 		rememberVisibleChatView();
-		rememberVisibleChatGraphic();
 
 		manualSuppressionActive = true;
 		hideNativeChatView();
-
-		/*
-		 * Direct CHAT_VIEW changes do not execute RuneScape's chat-tab hover
-		 * renderer. Mirror the final unselected appearance once, then leave
-		 * subsequent hover ownership to the client.
-		 */
-		syncStoredChatGraphic(false);
 	}
 
 	public void showChatPresentation() {
@@ -357,18 +321,11 @@ public final class ChatboxResizeService {
 			suppressionOwnsHiddenView = false;
 			rememberVisibleChatView();
 			syncChatAreaVisibility();
-			syncStoredChatGraphic(true);
 			return;
 		}
 
 		suppressionOwnsHiddenView = false;
 		setNativeChatView(lastVisibleChatView);
-
-		/*
-		 * CHAT_VIEW restores the logical view, but a programmatic transition
-		 * does not immediately repaint the selected chat-tab sprite.
-		 */
-		syncStoredChatGraphic(true);
 	}
 
 	public boolean onChatControlClicked(Widget widget) {
@@ -376,11 +333,6 @@ public final class ChatboxResizeService {
 			return false;
 		}
 
-		/*
-		 * Do not mutate visibility here. MenuOptionClicked occurs before the
-		 * native chat-control scripts finish. Mark the interaction and allow
-		 * RuneScape to perform its own CHAT_VIEW transition first.
-		 */
 		chatControlClickPending = true;
 		return true;
 	}
@@ -428,8 +380,6 @@ public final class ChatboxResizeService {
 			return;
 		}
 
-		rememberVisibleChatGraphic();
-
 		lastVisibleChatView = chatView;
 		suppressionOwnsHiddenView = true;
 
@@ -460,8 +410,7 @@ public final class ChatboxResizeService {
 			}
 
 			final int spriteId = graphic.getSpriteId();
-			if (spriteId == SpriteID.ChatTabButton.SELECTED
-					|| spriteId == SpriteID.ChatTabButton.SELECTED_HOVERED) {
+			if (spriteId == SpriteID.ChatTabButton.SELECTED || spriteId == SpriteID.ChatTabButton.SELECTED_HOVERED) {
 				lastVisibleChatGraphic = graphicId;
 				return;
 			}
@@ -504,18 +453,26 @@ public final class ChatboxResizeService {
 	}
 
 	private void setNativeChatView(int chatView) {
-		if (client.getVarcIntValue(VarClientID.CHAT_VIEW) != chatView) {
-			client.setVarcIntValue(VarClientID.CHAT_VIEW, chatView);
-
-			if (performanceMetrics != null) {
-				performanceMetrics.recordRefreshChat(
-						PerformanceMetrics.RefreshReason.OTHER);
-			}
-
-			client.refreshChat();
+		final int currentChatView = client.getVarcIntValue(VarClientID.CHAT_VIEW);
+		if (currentChatView == chatView) {
+			syncChatAreaVisibility();
+			return;
 		}
 
+		if (chatView == CHAT_VIEW_HIDDEN) {
+			rememberVisibleChatGraphic();
+		}
+
+		client.setVarcIntValue(VarClientID.CHAT_VIEW, chatView);
+
+		if (performanceMetrics != null) {
+			performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.OTHER);
+		}
+
+		client.refreshChat();
+
 		syncChatAreaVisibility();
+		syncStoredChatGraphic(chatView != CHAT_VIEW_HIDDEN);
 	}
 
 	private void syncChatAreaVisibility() {
@@ -533,9 +490,7 @@ public final class ChatboxResizeService {
 	}
 
 	private boolean isSuppressionRequested() {
-		return manualSuppressionActive
-				|| foregroundSuppressionActive
-				&& !foregroundSuppressionOverridden;
+		return manualSuppressionActive || foregroundSuppressionActive && !foregroundSuppressionOverridden;
 	}
 
 	private void resetChatPresentation() {
@@ -566,8 +521,7 @@ public final class ChatboxResizeService {
 		}
 
 		if (layout == ChatboxLayout.RESIZABLE_MODERN) {
-			final SideContainerLayout.Result sideResult =
-					sideContainerLayout.restoreNative();
+			final SideContainerLayout.Result sideResult = sideContainerLayout.restoreNative();
 
 			recordMutations(sideResult.getMutations());
 			recordRevalidates(sideResult.getRevalidates());
@@ -582,9 +536,7 @@ public final class ChatboxResizeService {
 			return;
 		}
 
-		slot.setSize(
-				ChatboxGeometry.NATIVE_WIDTH,
-				ChatboxGeometry.NATIVE_SLOT_HEIGHT);
+		slot.setSize(ChatboxGeometry.NATIVE_WIDTH, ChatboxGeometry.NATIVE_SLOT_HEIGHT);
 		slot.setForcedPosition(-1, -1);
 		recordMutation();
 
@@ -602,8 +554,7 @@ public final class ChatboxResizeService {
 		recordMutations(controlsLayout.restoreNative());
 		recordRevalidates(ChatboxWidgets.revalidateChildren(universe));
 
-		final ChatboxBackgroundService.Result backgroundResult =
-				backgroundService.restore(chatArea);
+		final ChatboxBackgroundService.Result backgroundResult = backgroundService.restore(chatArea);
 
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
@@ -617,11 +568,7 @@ public final class ChatboxResizeService {
 
 	@SuppressWarnings("deprecation")
 	private void restoreNativeUniverse(Widget universe) {
-		universe.setSize(
-				0,
-				0,
-				WidgetSizeMode.MINUS,
-				WidgetSizeMode.MINUS);
+		universe.setSize(0, 0, WidgetSizeMode.MINUS, WidgetSizeMode.MINUS);
 		universe.setForcedPosition(-1, -1);
 		recordMutation();
 
@@ -638,18 +585,12 @@ public final class ChatboxResizeService {
 	 * PERFORMANCE HELPERS
 	 * ================================================================
 	 */
-	private void recordApply(
-			long started,
-			boolean widthChanged,
-			boolean heightChanged) {
+	private void recordApply(long started, boolean widthChanged, boolean heightChanged) {
 		if (performanceMetrics == null || !performanceMetrics.isEnabled()) {
 			return;
 		}
 
-		performanceMetrics.recordResizeApply(
-				System.nanoTime() - started,
-				widthChanged,
-				heightChanged);
+		performanceMetrics.recordResizeApply(System.nanoTime() - started, widthChanged, heightChanged);
 	}
 
 	private void recordMissingWidgets() {
@@ -698,10 +639,7 @@ public final class ChatboxResizeService {
 		private final boolean widthChanged;
 		private final boolean heightChanged;
 
-		private ResizeResult(
-				boolean applied,
-				boolean widthChanged,
-				boolean heightChanged) {
+		private ResizeResult(boolean applied, boolean widthChanged, boolean heightChanged) {
 			this.applied = applied;
 			this.widthChanged = widthChanged;
 			this.heightChanged = heightChanged;
