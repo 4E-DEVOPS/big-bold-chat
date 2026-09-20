@@ -22,6 +22,7 @@ public final class DebugManager {
 
 	private ChatboxDiagnostics chatboxDiagnostics;
 	private FontDiagnostics fontDiagnostics;
+	private SideContainerDiagnostics sideContainerDiagnostics;
 
 	@Inject
 	public DebugManager(
@@ -41,6 +42,7 @@ public final class DebugManager {
 		performanceMetrics.reset();
 		chatboxDiagnostics = new ChatboxDiagnostics(client);
 		fontDiagnostics = new FontDiagnostics(client, config);
+		sideContainerDiagnostics = new SideContainerDiagnostics(client, config);
 		return performanceMetrics;
 	}
 
@@ -53,12 +55,21 @@ public final class DebugManager {
 			chatboxDiagnostics.reset();
 		}
 
+		if (sideContainerDiagnostics != null) {
+			sideContainerDiagnostics.reset();
+		}
+
 		fontDiagnostics = null;
 		chatboxDiagnostics = null;
+		sideContainerDiagnostics = null;
 	}
 
 	public boolean onCommandExecuted(CommandExecuted event) {
 		if (chatboxDiagnostics != null && chatboxDiagnostics.onCommandExecuted(event)) {
+			return true;
+		}
+
+		if (sideContainerDiagnostics != null && sideContainerDiagnostics.onCommandExecuted(event)) {
 			return true;
 		}
 
@@ -99,6 +110,10 @@ public final class DebugManager {
 		if (chatboxDiagnostics != null) {
 			chatboxDiagnostics.onScriptPreFired(event);
 		}
+
+		if (sideContainerDiagnostics != null) {
+			sideContainerDiagnostics.onScriptPreFired(event);
+		}
 	}
 
 	public void onFontScriptPreFired(ScriptPreFired event) {
@@ -110,6 +125,10 @@ public final class DebugManager {
 	public void onChatboxScriptPostFired(ScriptPostFired event) {
 		if (chatboxDiagnostics != null) {
 			chatboxDiagnostics.onScriptPostFired(event);
+		}
+
+		if (sideContainerDiagnostics != null) {
+			sideContainerDiagnostics.onScriptPostFired(event);
 		}
 	}
 

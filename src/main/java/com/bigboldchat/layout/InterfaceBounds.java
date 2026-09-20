@@ -33,10 +33,10 @@ final class InterfaceBounds {
 			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelOsrsStretch.MAP_CONTAINER));
 			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelOsrsStretch.ORBS));
 		} else if (topLevel == InterfaceID.TOPLEVEL_PRE_EOC) {
-			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_BACKGROUND));
-			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_STATIC_LAYER));
-			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_MOVABLE_LAYER));
-			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_CONTAINER));
+			addLive(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_BACKGROUND));
+			addLive(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_STATIC_LAYER));
+			addLive(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_MOVABLE_LAYER));
+			addLive(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_CONTAINER));
 			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.MAP_CONTAINER));
 			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.ORBS));
 		}
@@ -50,6 +50,30 @@ final class InterfaceBounds {
 
 	List<Rectangle> getObstacles() {
 		return obstacles;
+	}
+
+	static Rectangle liveBounds(Widget widget) {
+		if (widget == null || widget.isHidden() || widget.getWidth() <= 0 || widget.getHeight() <= 0) {
+			return null;
+		}
+
+		int x = widget.getRelativeX();
+		int y = widget.getRelativeY();
+		for (Widget parent = widget.getParent(); parent != null; parent = parent.getParent()) {
+			x += parent.getRelativeX();
+			y += parent.getRelativeY();
+		}
+
+		return new Rectangle(x, y, widget.getWidth(), widget.getHeight());
+	}
+
+	private static void addLive(List<Rectangle> obstacles, Rectangle canvas, Widget widget) {
+		final Rectangle bounds = liveBounds(widget);
+		if (bounds == null || !bounds.intersects(canvas)) {
+			return;
+		}
+
+		obstacles.add(bounds);
 	}
 
 	private static void add(List<Rectangle> obstacles, Rectangle canvas, Widget widget) {

@@ -2,6 +2,7 @@ package com.bigboldchat.chatbox;
 
 import com.bigboldchat.debug.PerformanceMetrics;
 import com.bigboldchat.layout.ChatboxBounds;
+import com.bigboldchat.layout.SideContainerLayout;
 
 import net.runelite.api.Client;
 import net.runelite.api.ScriptID;
@@ -30,6 +31,7 @@ public final class ChatboxResizeService {
 	private final PerformanceMetrics performanceMetrics;
 	private final ChatboxControlsLayout controlsLayout;
 	private final ChatboxBackgroundService backgroundService;
+	private final SideContainerLayout sideContainerLayout;
 
 	private boolean resizedLayoutApplied;
 
@@ -38,6 +40,7 @@ public final class ChatboxResizeService {
 		this.performanceMetrics = performanceMetrics;
 		this.controlsLayout = new ChatboxControlsLayout(client);
 		this.backgroundService = new ChatboxBackgroundService(client);
+		this.sideContainerLayout = new SideContainerLayout(client);
 	}
 
 	/*
@@ -86,6 +89,10 @@ public final class ChatboxResizeService {
 		}
 
 		final int scriptId = event.getScriptId();
+		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE) {
+			sideContainerLayout.beginNativeLayout();
+		}
+
 		if (scriptId == ScriptID.BUILD_CHATBOX
 				|| scriptId == ScriptID.SPLITPM_CHANGED
 				|| scriptId == TOPLEVEL_RELAYOUT) {
@@ -101,6 +108,10 @@ public final class ChatboxResizeService {
 		}
 
 		final int scriptId = event.getScriptId();
+		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE) {
+			sideContainerLayout.endNativeLayout();
+		}
+
 		if (scriptId == ScriptID.TOPLEVEL_REDRAW
 				|| scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE
 				|| scriptId == ScriptID.MESSAGE_LAYER_OPEN) {
@@ -121,6 +132,7 @@ public final class ChatboxResizeService {
 				: 0L;
 		final ChatboxLayout layout = getLayout();
 		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN) {
+			sideContainerLayout.reset();
 			resizedLayoutApplied = false;
 			return ResizeResult.NOT_APPLIED;
 		}
@@ -140,6 +152,14 @@ public final class ChatboxResizeService {
 		final Widget parent = universe.getParent();
 		if (parent == null || parent.getId() != slot.getId()) {
 			return ResizeResult.NOT_APPLIED;
+		}
+
+		if (layout == ChatboxLayout.RESIZABLE_MODERN) {
+			final SideContainerLayout.Result sideResult = sideContainerLayout.apply(slot, width, height);
+			recordMutations(sideResult.getMutations());
+			recordRevalidates(sideResult.getRevalidates());
+		} else {
+			sideContainerLayout.reset();
 		}
 
 		/*
@@ -242,8 +262,17 @@ public final class ChatboxResizeService {
 		final boolean wasApplied = resizedLayoutApplied;
 		final ChatboxLayout layout = getLayout();
 		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN) {
+			sideContainerLayout.reset();
 			resizedLayoutApplied = false;
 			return;
+		}
+
+		if (layout == ChatboxLayout.RESIZABLE_MODERN) {
+			final SideContainerLayout.Result sideResult = sideContainerLayout.restoreNative();
+			recordMutations(sideResult.getMutations());
+			recordRevalidates(sideResult.getRevalidates());
+		} else {
+			sideContainerLayout.reset();
 		}
 
 		final Widget slot = getSlot(layout);
