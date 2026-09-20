@@ -65,13 +65,12 @@ public final class ChatboxResizeService {
 	private boolean manualSuppressionActive;
 	private int chatVisibilityDepth;
 
-	private int manualSelectedChatControl = -1;
-	private int manualSelectedGraphic = -1;
-	private int manualSelectedSprite = -1;
+	private int suppressedSelectedChatControl = -1;
+	private int suppressedSelectedGraphic = -1;
 
 	private boolean chatControlClickPending;
 	private boolean chatControlRevealPending;
-	private boolean restoreManualViewPending;
+	private boolean restoreSuppressedViewPending;
 	private int pendingChatControl = -1;
 	private int pendingChatView;
 	private int pendingChatHighlight;
@@ -328,10 +327,12 @@ public final class ChatboxResizeService {
 		}
 
 		if (suppressedChatArea != null && suppressedChatArea != chatArea) {
+			restoreSuppressedChatSelection();
 			releaseChatPresentation();
 		}
 
 		if (!isSuppressionRequested() || chatArea == null) {
+			restoreSuppressedChatSelection();
 			releaseChatPresentation();
 			return;
 		}
@@ -339,15 +340,12 @@ public final class ChatboxResizeService {
 		if (suppressedChatArea == null) {
 			suppressedChatArea = chatArea;
 			suppressedChatAreaHidden = chatArea.isSelfHidden();
+			captureSuppressedChatSelection();
 		}
 
 		if (!chatArea.isSelfHidden()) {
 			chatArea.setHidden(true);
 			recordMutation();
-		}
-
-		if (manualSuppressionActive) {
-			hideManualChatSelection();
 		}
 	}
 
@@ -357,7 +355,6 @@ public final class ChatboxResizeService {
 			return;
 		}
 
-		captureManualChatSelection();
 		manualSuppressionActive = true;
 		syncChatPresentation(
 				client.getWidget(InterfaceID.Chatbox.CHATAREA),
@@ -371,7 +368,7 @@ public final class ChatboxResizeService {
 		}
 
 		forceChatPresentationVisible(client.getWidget(InterfaceID.Chatbox.CHATAREA));
-		restoreManualChatSelection();
+		restoreSuppressedChatSelection();
 	}
 
 	public boolean onChatControlClicked(Widget widget) {
@@ -384,8 +381,8 @@ public final class ChatboxResizeService {
 		chatControlRevealPending = isSuppressionRequested();
 		pendingChatControl = controlId;
 
-		restoreManualViewPending = manualSuppressionActive && controlId == manualSelectedChatControl;
-		if (restoreManualViewPending) {
+		restoreSuppressedViewPending = chatControlRevealPending && controlId == suppressedSelectedChatControl;
+		if (restoreSuppressedViewPending) {
 			pendingChatView = client.getVarcIntValue(VarClientID.CHAT_VIEW);
 			pendingChatHighlight = client.getVarcIntValue(VarClientID.CHAT_HIGHLIGHT);
 			pendingChatViewSaved = client.getVarcIntValue(VarClientID.CHAT_VIEW_SAVED);
@@ -401,7 +398,7 @@ public final class ChatboxResizeService {
 
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
 		final boolean reveal = chatControlRevealPending;
-		final boolean restoreView = restoreManualViewPending;
+		final boolean restoreView = restoreSuppressedViewPending;
 		final int controlId = pendingChatControl;
 
 		clearPendingChatControl();
@@ -419,16 +416,16 @@ public final class ChatboxResizeService {
 			forceChatPresentationVisible(chatArea);
 
 			if (restoreView) {
-				restoreManualChatSelection();
+				restoreSuppressedChatSelection();
 			} else {
-				discardManualChatSelection();
+				discardSuppressedChatSelection();
 				ensureChatControlSelected(controlId);
 			}
 
 			return;
 		}
 
-		discardManualChatSelection();
+		discardSuppressedChatSelection();
 		if (foregroundSuppressionActive && chatArea != null) {
 			foregroundSuppressionOverridden = !chatArea.isSelfHidden();
 		}
@@ -447,8 +444,8 @@ public final class ChatboxResizeService {
 		return -1;
 	}
 
-	private void captureManualChatSelection() {
-		discardManualChatSelection();
+	private void captureSuppressedChatSelection() {
+		discardSuppressedChatSelection();
 
 		for (int i = 0; i < CHAT_CONTROL_GRAPHIC_IDS.length; i++) {
 			final Widget graphic = client.getWidget(CHAT_CONTROL_GRAPHIC_IDS[i]);
@@ -456,49 +453,39 @@ public final class ChatboxResizeService {
 				continue;
 			}
 
-			manualSelectedChatControl = CHAT_CONTROL_IDS[i];
-			manualSelectedGraphic = CHAT_CONTROL_GRAPHIC_IDS[i];
-			manualSelectedSprite = graphic.getSpriteId();
-			hideManualChatSelection();
+			suppressedSelectedChatControl = CHAT_CONTROL_IDS[i];
+			suppressedSelectedGraphic = CHAT_CONTROL_GRAPHIC_IDS[i];
+
+			final int normalSprite = graphic.getSpriteId() == SpriteID.ChatTabButton.SELECTED_HOVERED
+					? SpriteID.ChatTabButton.HOVERED
+					: SpriteID.ChatTabButton.BUTTON;
+			if (graphic.getSpriteId() != normalSprite) {
+				graphic.setSpriteId(normalSprite);
+				recordMutation();
+			}
+
 			return;
 		}
 	}
 
-	private void hideManualChatSelection() {
-		if (manualSelectedGraphic == -1) {
-			return;
-		}
-
-		final Widget graphic = client.getWidget(manualSelectedGraphic);
-		if (graphic == null) {
-			return;
-		}
-
-		final int normalSprite = manualSelectedSprite == SpriteID.ChatTabButton.SELECTED_HOVERED
-				? SpriteID.ChatTabButton.HOVERED
-				: SpriteID.ChatTabButton.BUTTON;
-		if (graphic.getSpriteId() != normalSprite) {
-			graphic.setSpriteId(normalSprite);
-			recordMutation();
-		}
-	}
-
-	private void restoreManualChatSelection() {
-		if (manualSelectedGraphic != -1 && manualSelectedSprite != -1) {
-			final Widget graphic = client.getWidget(manualSelectedGraphic);
-			if (graphic != null && graphic.getSpriteId() != manualSelectedSprite) {
-				graphic.setSpriteId(manualSelectedSprite);
+	private void restoreSuppressedChatSelection() {
+		if (suppressedSelectedGraphic != -1) {
+			final Widget graphic = client.getWidget(suppressedSelectedGraphic);
+			if (graphic != null && !isSelectedChatSprite(graphic.getSpriteId())) {
+				final int selectedSprite = graphic.getSpriteId() == SpriteID.ChatTabButton.HOVERED
+						? SpriteID.ChatTabButton.SELECTED_HOVERED
+						: SpriteID.ChatTabButton.SELECTED;
+				graphic.setSpriteId(selectedSprite);
 				recordMutation();
 			}
 		}
 
-		discardManualChatSelection();
+		discardSuppressedChatSelection();
 	}
 
-	private void discardManualChatSelection() {
-		manualSelectedChatControl = -1;
-		manualSelectedGraphic = -1;
-		manualSelectedSprite = -1;
+	private void discardSuppressedChatSelection() {
+		suppressedSelectedChatControl = -1;
+		suppressedSelectedGraphic = -1;
 	}
 
 	private void ensureChatControlSelected(int controlId) {
@@ -544,7 +531,7 @@ public final class ChatboxResizeService {
 	private void clearPendingChatControl() {
 		chatControlClickPending = false;
 		chatControlRevealPending = false;
-		restoreManualViewPending = false;
+		restoreSuppressedViewPending = false;
 		pendingChatControl = -1;
 	}
 
@@ -554,7 +541,7 @@ public final class ChatboxResizeService {
 		foregroundSuppressionOverridden = false;
 		chatVisibilityDepth = 0;
 		clearPendingChatControl();
-		restoreManualChatSelection();
+		restoreSuppressedChatSelection();
 		releaseChatPresentation();
 	}
 
