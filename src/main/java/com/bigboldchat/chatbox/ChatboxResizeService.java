@@ -20,10 +20,12 @@ import net.runelite.api.widgets.WidgetSizeMode;
  */
 public final class ChatboxResizeService {
 	/*
-	 * Native top-level relayout helper. Script 113 resets chat geometry
-	 * immediately before invoking this helper, making PRE the earliest
-	 * observable point where ChatXL can restore its committed geometry
-	 * before the remainder of the native relayout uses it.
+	 * Native chat-button visibility lifecycle.
+	 */
+	private static final int CHAT_VISIBILITY = 923;
+
+	/*
+	 * Native top-level relayout helper.
 	 */
 	private static final int TOPLEVEL_RELAYOUT = 1972;
 
@@ -38,6 +40,8 @@ public final class ChatboxResizeService {
 	private boolean suppressedChatAreaHidden;
 	private boolean foregroundSuppressionActive;
 	private boolean foregroundSuppressionOverridden;
+	private boolean manualSuppressionActive;
+	private int chatVisibilityDepth;
 
 	public ChatboxResizeService(Client client, PerformanceMetrics performanceMetrics) {
 		this.client = client;
@@ -93,6 +97,10 @@ public final class ChatboxResizeService {
 		}
 
 		final int scriptId = event.getScriptId();
+		if (scriptId == CHAT_VISIBILITY) {
+			chatVisibilityDepth++;
+		}
+
 		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE) {
 			sideContainerLayout.beginNativeLayout();
 		}
@@ -112,6 +120,16 @@ public final class ChatboxResizeService {
 		}
 
 		final int scriptId = event.getScriptId();
+		if (scriptId == CHAT_VISIBILITY) {
+			if (chatVisibilityDepth > 0) {
+				chatVisibilityDepth--;
+			}
+
+			if (chatVisibilityDepth == 0) {
+				acceptNativeChatVisibility();
+			}
+		}
+
 		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE) {
 			sideContainerLayout.endNativeLayout();
 		}
@@ -135,8 +153,9 @@ public final class ChatboxResizeService {
 				? System.nanoTime()
 				: 0L;
 		final ChatboxLayout layout = getLayout();
+		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
 		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN) {
-			restoreChatPresentation();
+			syncChatPresentation(chatArea, false);
 			sideContainerLayout.reset();
 			resizedLayoutApplied = false;
 			return ResizeResult.NOT_APPLIED;
@@ -144,10 +163,6 @@ public final class ChatboxResizeService {
 
 		final Widget slot = getSlot(layout);
 		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
-		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
-		if (suppressedChatArea != null && suppressedChatArea != chatArea) {
-			restoreChatPresentation();
-		}
 		if (slot == null || universe == null || chatArea == null) {
 			recordMissingWidgets();
 			return ResizeResult.NOT_APPLIED;
@@ -268,21 +283,28 @@ public final class ChatboxResizeService {
 	 * PRESENTATION
 	 * ================================================================
 	 */
-	private void syncChatPresentation(Widget chatArea, boolean suppress) {
-		if (!suppress) {
-			restoreChatPresentation();
+	private void syncChatPresentation(Widget chatArea, boolean foregroundSuppression) {
+		if (chatVisibilityDepth > 0) {
 			return;
 		}
 
-		if (!foregroundSuppressionActive) {
-			foregroundSuppressionActive = true;
+		if (foregroundSuppression != foregroundSuppressionActive) {
+			foregroundSuppressionActive = foregroundSuppression;
 			foregroundSuppressionOverridden = false;
+		}
+
+		if (suppressedChatArea != null && suppressedChatArea != chatArea) {
+			releaseChatPresentation();
+		}
+
+		if (!isSuppressionRequested() || chatArea == null) {
+			releaseChatPresentation();
+			return;
+		}
+
+		if (suppressedChatArea == null) {
 			suppressedChatArea = chatArea;
 			suppressedChatAreaHidden = chatArea.isSelfHidden();
-		}
-
-		if (foregroundSuppressionOverridden) {
-			return;
 		}
 
 		if (!chatArea.isSelfHidden()) {
@@ -291,45 +313,62 @@ public final class ChatboxResizeService {
 		}
 	}
 
-	public void onChatControlClicked(Widget widget) {
-		if (widget == null || !isChatControl(widget)) {
+	public void toggleChatPresentation() {
+		if (isSuppressionRequested()) {
+			showChatPresentation();
 			return;
 		}
 
-		showChatPresentation();
+		manualSuppressionActive = true;
+		syncChatPresentation(
+				client.getWidget(InterfaceID.Chatbox.CHATAREA),
+				foregroundSuppressionActive);
 	}
 
 	public void showChatPresentation() {
-		if (!foregroundSuppressionActive) {
+		manualSuppressionActive = false;
+		if (foregroundSuppressionActive) {
+			foregroundSuppressionOverridden = true;
+		}
+
+		syncChatPresentation(client.getWidget(InterfaceID.Chatbox.CHATAREA), foregroundSuppressionActive);
+	}
+
+	private void acceptNativeChatVisibility() {
+		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+		if (chatArea == null) {
 			return;
 		}
 
-		foregroundSuppressionOverridden = true;
-		releaseChatPresentation();
-	}
+		manualSuppressionActive = false;
 
-	private boolean isChatControl(Widget widget) {
-		for (Widget current = widget; current != null; current = current.getParent()) {
-			final int id = current.getId();
-			if (id == InterfaceID.Chatbox.CONTROLS
-					|| id == InterfaceID.Chatbox.CHAT_ALL
-					|| id == InterfaceID.Chatbox.CHAT_GAME
-					|| id == InterfaceID.Chatbox.CHAT_PUBLIC
-					|| id == InterfaceID.Chatbox.CHAT_PRIVATE
-					|| id == InterfaceID.Chatbox.CHAT_FRIENDSCHAT
-					|| id == InterfaceID.Chatbox.CHAT_CLAN
-					|| id == InterfaceID.Chatbox.CHAT_TRADE) {
-				return true;
+		/*
+		 * Native script 923 owns chat-button visibility. Accept its final state
+		 * without restoring the visibility captured before the button click.
+		 */
+		if (suppressedChatArea != null) {
+			if (suppressedChatArea != chatArea) {
+				releaseChatPresentation();
+			} else {
+				suppressedChatArea = null;
 			}
 		}
 
-		return false;
+		foregroundSuppressionOverridden = foregroundSuppressionActive
+				&& !chatArea.isSelfHidden();
 	}
 
-	private void restoreChatPresentation() {
-		releaseChatPresentation();
+	private boolean isSuppressionRequested() {
+		return manualSuppressionActive
+				|| foregroundSuppressionActive && !foregroundSuppressionOverridden;
+	}
+
+	private void resetChatPresentation() {
+		manualSuppressionActive = false;
 		foregroundSuppressionActive = false;
 		foregroundSuppressionOverridden = false;
+		chatVisibilityDepth = 0;
+		releaseChatPresentation();
 	}
 
 	private void releaseChatPresentation() {
@@ -351,7 +390,7 @@ public final class ChatboxResizeService {
 	 * ================================================================
 	 */
 	public void restoreNativeSize() {
-		restoreChatPresentation();
+		resetChatPresentation();
 
 		final boolean wasApplied = resizedLayoutApplied;
 		final ChatboxLayout layout = getLayout();

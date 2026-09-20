@@ -7,6 +7,7 @@ import com.bigboldchat.config.ChatboxConfigHandler;
 import com.bigboldchat.config.FontConfigHandler;
 import com.bigboldchat.debug.DebugManager;
 import com.bigboldchat.debug.PerformanceMetrics;
+import com.bigboldchat.input.ChatboxHotkey;
 
 import com.google.inject.Provides;
 
@@ -22,7 +23,6 @@ import net.runelite.api.MessageNode;
 import net.runelite.api.events.CanvasSizeChanged;
 import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
-import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.events.WidgetClosed;
@@ -31,6 +31,7 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 
@@ -53,6 +54,8 @@ public class ChatXL extends Plugin {
 	private Configurations config;
 	@Inject
 	private DebugManager debugManager;
+	@Inject
+	private KeyManager keyManager;
 
 	/*
 	 * Diagnostics & performance.
@@ -65,6 +68,7 @@ public class ChatXL extends Plugin {
 	private FontMeasurementService fontMeasurementService;
 	private FontLayoutService fontLayoutService;
 	private ChatboxResizeService chatboxResizeService;
+	private ChatboxHotkey chatboxHotkey;
 
 	/*
 	 * Configuration handlers.
@@ -76,6 +80,8 @@ public class ChatXL extends Plugin {
 	protected void startUp() {
 		performanceMetrics = debugManager.activate();
 		chatboxResizeService = new ChatboxResizeService(client, performanceMetrics);
+		chatboxHotkey = new ChatboxHotkey(clientThread, config, chatboxResizeService, keyManager);
+		chatboxHotkey.activate();
 		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
 		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);
 		chatboxConfigHandler = new ChatboxConfigHandler(client, clientThread, config, chatboxResizeService, performanceMetrics);
@@ -116,8 +122,13 @@ public class ChatXL extends Plugin {
 			fontConfigHandler.deactivate();
 		}
 
+		if (chatboxHotkey != null) {
+			chatboxHotkey.deactivate();
+		}
+
 		fontLayoutService = null;
 		chatboxResizeService = null;
+		chatboxHotkey = null;
 		fontMeasurementService = null;
 		chatboxConfigHandler = null;
 		fontConfigHandler = null;
@@ -219,15 +230,6 @@ public class ChatXL extends Plugin {
 	 * CHAT COMMANDS
 	 * ================================================================
 	 */
-	@Subscribe
-	public void onMenuOptionClicked(MenuOptionClicked event) {
-		if (event == null || chatboxResizeService == null) {
-			return;
-		}
-
-		chatboxResizeService.onChatControlClicked(event.getWidget());
-	}
-
 	@Subscribe
 	public void onCommandExecuted(CommandExecuted event) {
 		if (event == null) {
