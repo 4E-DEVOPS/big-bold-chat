@@ -25,7 +25,7 @@ public final class UpdateMessages {
 			+ " Report any issues you find to Github.";
 	private static final String UNINSTALL_MESSAGE = "Thank you for using ChatXL!"
 			+ " Please submit a review/issue report on Github of your experience.";
-	private static final String UPDATE_MESSAGE = "Resizable Chatbox, and a Broadcast + Logged Message fix.";
+	private static final String UPDATE_MESSAGE = "Resizable chatbox + broadcast, logged in/out, and white-spaced Message fixes.";
 
 	private final Client client;
 	private final ClientThread clientThread;
