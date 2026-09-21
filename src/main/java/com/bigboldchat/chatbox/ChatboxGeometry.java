@@ -21,4 +21,10 @@ public final class ChatboxGeometry {
 	public static int bodyHeight(int slotHeight) {
 		return Math.max(0, slotHeight - NATIVE_TAB_HEIGHT);
 	}
+
+	public static int bodyHeight(int slotHeight, boolean buttonsHidden) {
+		return buttonsHidden
+				? Math.max(0, slotHeight)
+				: bodyHeight(slotHeight);
+	}
 }

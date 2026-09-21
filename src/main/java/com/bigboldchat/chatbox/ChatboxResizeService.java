@@ -209,20 +209,23 @@ public final class ChatboxResizeService {
 		/*
 		 * Clamp live geometry without changing configured dimensions.
 		 */
-		final ChatboxBounds.Result effective = ChatboxBounds.resolve(client, slot, width, height);
+		final ChatboxBounds.Result effective = ChatboxBounds.resolve(client, slot, width, height, chatboxButtonsHidden);
 		final int effectiveWidth = effective.getWidth();
 		final int effectiveHeight = effective.getHeight();
+		final int effectiveBodyHeight = ChatboxGeometry.bodyHeight(effectiveHeight, chatboxButtonsHidden);
 		final boolean widthChanged = slot.getWidth() != effectiveWidth
 				|| universe.getWidth() != effectiveWidth || chatArea.getWidth() != effectiveWidth;
-		final boolean heightChanged = slot.getHeight() != effectiveHeight || universe.getHeight() != effectiveHeight;
+		final boolean heightChanged = slot.getHeight() != effectiveHeight
+				|| universe.getHeight() != effectiveHeight || chatArea.getHeight() != effectiveBodyHeight;
 		final boolean controlsChanged = !controlsLayout.matches(effectiveWidth);
 
 		if (widthChanged || heightChanged || controlsChanged) {
-			applyGeometry(slot, universe, chatArea, effectiveWidth, effectiveHeight, controlsChanged);
+			applyGeometry(
+					slot, universe, chatArea, effectiveWidth, effectiveHeight, effectiveBodyHeight, controlsChanged);
 		}
 
 		final ChatboxBackgroundService.Result backgroundResult =
-				backgroundService.apply(chatArea, effectiveWidth, ChatboxGeometry.bodyHeight(effectiveHeight));
+				backgroundService.apply(chatArea, effectiveWidth, effectiveBodyHeight);
 
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
@@ -242,6 +245,7 @@ public final class ChatboxResizeService {
 			Widget chatArea,
 			int width,
 			int height,
+			int bodyHeight,
 			boolean controlsChanged) {
 		if (slot.getWidth() != width || slot.getHeight() != height) {
 			slot.setSize(width, height);
@@ -260,8 +264,10 @@ public final class ChatboxResizeService {
 			recordRevalidate();
 		}
 
-		if (chatArea.getWidth() != width) {
-			chatArea.setOriginalWidth(width);
+		final int bodyMargin = Math.max(0, height - bodyHeight);
+		if (chatArea.getOriginalWidth() != width
+				|| chatArea.getOriginalHeight() != bodyMargin || chatArea.getHeightMode() != WidgetSizeMode.MINUS) {
+			chatArea.setSize(width, bodyMargin, chatArea.getWidthMode(), WidgetSizeMode.MINUS);
 			recordMutation();
 		}
 
@@ -557,7 +563,11 @@ public final class ChatboxResizeService {
 
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
 		if (chatArea != null) {
-			chatArea.setOriginalWidth(ChatboxGeometry.NATIVE_WIDTH);
+			chatArea.setSize(
+					ChatboxGeometry.NATIVE_WIDTH,
+					ChatboxGeometry.NATIVE_TAB_HEIGHT,
+					chatArea.getWidthMode(),
+					WidgetSizeMode.MINUS);
 			recordMutation();
 		}
 

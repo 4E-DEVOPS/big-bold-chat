@@ -61,6 +61,7 @@ public final class ChatboxConfigHandler {
 			clientThread.invokeLater(() -> {
 				if (active && resizeService != null) {
 					resizeService.setChatboxButtonsHidden(config.hideChatboxButtons());
+					queueCommit(true, false, false);
 				}
 			});
 			return true;

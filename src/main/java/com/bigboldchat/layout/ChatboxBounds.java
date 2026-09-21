@@ -23,6 +23,15 @@ public final class ChatboxBounds {
 	}
 
 	public static Result resolve(Client client, Widget slot, int configuredWidth, int configuredHeight) {
+		return resolve(client, slot, configuredWidth, configuredHeight, false);
+	}
+
+	public static Result resolve(
+			Client client,
+			Widget slot,
+			int configuredWidth,
+			int configuredHeight,
+			boolean buttonsHidden) {
 		if (client == null || slot == null) {
 			return new Result(configuredWidth, configuredHeight, false);
 		}
@@ -44,7 +53,10 @@ public final class ChatboxBounds {
 		final Result fitted = fit(
 				anchorX, anchorBottom, desiredWidth, desiredHeight, canvas, interfaces.getObstacles());
 		final Rectangle presentationBounds = new Rectangle(
-				anchorX, anchorBottom - fitted.height, fitted.width, ChatboxGeometry.bodyHeight(fitted.height));
+				anchorX,
+				anchorBottom - fitted.height,
+				fitted.width,
+				ChatboxGeometry.bodyHeight(fitted.height, buttonsHidden));
 
 		return new Result(fitted.width, fitted.height, interfaces.intersectsForeground(presentationBounds));
 	}
