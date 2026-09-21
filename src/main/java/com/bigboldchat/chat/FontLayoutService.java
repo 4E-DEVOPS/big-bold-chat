@@ -242,12 +242,9 @@ public final class FontLayoutService {
 		 * miss and reuse it for the remainder of this POST.
 		 */
 		final FallbackCorrelationContext fallbackContext = new FallbackCorrelationContext(surface);
-		final Widget bodyWidget = findTargetWidgetForLine(
-				state.semanticBody,
-				lineWidget,
-				surface,
-				rowWidgets,
-				fallbackContext);
+		final Widget bodyWidget = state.semanticBody.isEmpty()
+				? matchEmptyBodyRow(rowWidgets, state.nativeBodyX)
+				: findTargetWidgetForLine(state.semanticBody, lineWidget, surface, rowWidgets, fallbackContext);
 
 		if (bodyWidget == null) {
 			return;
@@ -954,6 +951,37 @@ public final class FontLayoutService {
 
 			final String semantic = textNormalizer.normalizeSemantic(widget.getText());
 			if (semantic == null || !semantic.equalsIgnoreCase(targetText)) {
+				continue;
+			}
+
+			match = widget;
+			matches++;
+
+			if (matches > 1) {
+				return null;
+			}
+		}
+
+		return matches == 1
+				? match
+				: null;
+	}
+
+	private Widget matchEmptyBodyRow(List<Widget> rowWidgets, int nativeBodyX) {
+		if (rowWidgets == null || rowWidgets.isEmpty()) {
+			return null;
+		}
+
+		Widget match = null;
+		int matches = 0;
+
+		for (Widget widget : rowWidgets) {
+			if (widget == null || widget.getOriginalX() != nativeBodyX) {
+				continue;
+			}
+
+			final String semantic = textNormalizer.normalizeSemantic(widget.getText());
+			if (semantic == null || !semantic.isEmpty()) {
 				continue;
 			}
 

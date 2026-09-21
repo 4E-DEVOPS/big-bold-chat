@@ -66,6 +66,7 @@ public final class ChatboxResizeService {
 	private boolean manualSuppressionActive;
 	private boolean suppressionOwnsHiddenView;
 	private boolean chatControlClickPending;
+	private boolean chatboxButtonsHidden;
 
 	private int lastVisibleChatView = CHAT_VIEW_ALL;
 	private int lastVisibleChatGraphic = -1;
@@ -144,6 +145,7 @@ public final class ChatboxResizeService {
 		if (scriptId == CHAT_VISIBILITY) {
 			rememberVisibleChatView();
 			syncChatAreaVisibility();
+			recordMutations(controlsLayout.syncHidden(chatboxButtonsHidden));
 		}
 
 		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE) {
@@ -170,6 +172,8 @@ public final class ChatboxResizeService {
 				: 0L;
 		final ChatboxLayout layout = getLayout();
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+
+		recordMutations(controlsLayout.syncHidden(chatboxButtonsHidden));
 
 		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN) {
 			syncChatPresentation(false);
@@ -296,6 +300,11 @@ public final class ChatboxResizeService {
 
 		restoreOwnedChatView();
 		syncChatAreaVisibility();
+	}
+
+	public void setChatboxButtonsHidden(boolean hidden) {
+		chatboxButtonsHidden = hidden;
+		recordMutations(controlsLayout.syncHidden(hidden));
 	}
 
 	public void toggleChatPresentation() {
@@ -510,6 +519,7 @@ public final class ChatboxResizeService {
 	 */
 	public void restoreNativeSize() {
 		resetChatPresentation();
+		recordMutations(controlsLayout.restoreHidden());
 
 		final boolean wasApplied = resizedLayoutApplied;
 		final ChatboxLayout layout = getLayout();

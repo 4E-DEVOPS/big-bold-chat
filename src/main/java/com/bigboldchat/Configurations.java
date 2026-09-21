@@ -23,11 +23,11 @@ public interface Configurations extends Config {
 	String chatBoxSection = "chatBox";
 
 	@ConfigItem(
-		keyName = "chatFont",
-		name = "Font",
-		description = "Font used for chatbox and private-message text.",
-		position = 0,
-		section = chatBoxSection
+			keyName = "chatFont",
+			name = "Font",
+			description = "Font used for chatbox and private-message text.",
+			position = 0,
+			section = chatBoxSection
 	)
 	default ChatFont chatFont() {
 		return ChatFont.PLAIN_12;
@@ -36,11 +36,11 @@ public interface Configurations extends Config {
 	@Range(min = 200, max = 8192)
 	@Units(Units.PIXELS)
 	@ConfigItem(
-		keyName = "chatboxWidth",
-		name = "Chatbox Width",
-		description = "Width of the chatbox.",
-		position = 1,
-		section = chatBoxSection
+			keyName = "chatboxWidth",
+			name = "Chatbox Width",
+			description = "Width of the chatbox.",
+			position = 1,
+			section = chatBoxSection
 	)
 	default int chatboxWidth() {
 		return 519;
@@ -49,22 +49,33 @@ public interface Configurations extends Config {
 	@Range(min = 100, max = 8192)
 	@Units(Units.PIXELS)
 	@ConfigItem(
-		keyName = "chatboxHeight",
-		name = "Chatbox Height",
-		description = "Height of the chatbox.",
-		position = 2,
-		section = chatBoxSection
+			keyName = "chatboxHeight",
+			name = "Chatbox Height",
+			description = "Height of the chatbox.",
+			position = 2,
+			section = chatBoxSection
 	)
 	default int chatboxHeight() {
 		return 165;
 	}
 
 	@ConfigItem(
-		keyName = "hideChatboxHotkey",
-		name = "Hide Chatbox Hotkey",
-		description = "Toggle the chatbox body between hidden and visible.",
-		position = 3,
-		section = chatBoxSection
+			keyName = "hideChatboxButtons",
+			name = "Hide Chatbox Buttons",
+			description = "Hide the chatbox button row.",
+			position = 3,
+			section = chatBoxSection
+	)
+	default boolean hideChatboxButtons() {
+		return false;
+	}
+
+	@ConfigItem(
+			keyName = "hideChatboxHotkey",
+			name = "Hide Chatbox Hotkey",
+			description = "Toggle the chatbox body between hidden and visible.",
+			position = 4,
+			section = chatBoxSection
 	)
 	default Keybind hideChatboxHotkey() {
 		return Keybind.NOT_SET;

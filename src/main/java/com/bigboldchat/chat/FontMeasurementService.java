@@ -89,13 +89,14 @@ public final class FontMeasurementService {
 		final Object[] objectStack = client.getObjectStack();
 		final int objectStackSize = client.getObjectStackSize();
 
-		final String rawBody = findBody(objectStack, objectStackSize);
-		if (rawBody == null) {
+		final int bodyIndex = findBodyIndex(objectStack, objectStackSize);
+		if (bodyIndex < 0) {
 			return null;
 		}
 
+		final String rawBody = (String) objectStack[bodyIndex];
 		final String semanticBody = textNormalizer.normalizeSemantic(rawBody);
-		if (semanticBody == null || semanticBody.isEmpty()) {
+		if (semanticBody == null) {
 			return null;
 		}
 
@@ -179,7 +180,7 @@ public final class FontMeasurementService {
 
 		final List<String> rawPrefixComponents = scriptId == GAME_BODY_SCRIPT
 				? new ArrayList<>()
-				: findPrefixComponents(objectStack, objectStackSize, semanticBody);
+				: findPrefixComponents(objectStack, bodyIndex);
 
 		/*
 		 * Script 199 is the ordinary prefix-less GAME / system-message
@@ -600,60 +601,33 @@ public final class FontMeasurementService {
 	 * OBJECT-STACK EXTRACTION
 	 * ================================================================
 	 */
-	private String findBody(Object[] stack, int size) {
+	private int findBodyIndex(Object[] stack, int size) {
 		if (stack == null || size <= 0) {
-			return null;
+			return -1;
 		}
 
 		final int safeSize = Math.min(size, stack.length);
 		for (int i = safeSize - 1; i >= 0; i--) {
-			final Object value = stack[i];
-			if (!(value instanceof String)) {
-				continue;
+			if (stack[i] instanceof String && !((String) stack[i]).isEmpty()) {
+				return i;
 			}
-
-			final String raw = (String) value;
-			final String semantic = textNormalizer.normalizeSemantic(raw);
-			if (semantic == null || semantic.isEmpty()) {
-				continue;
-			}
-
-			return raw;
 		}
 
-		return null;
+		return -1;
 	}
 
-	private List<String> findPrefixComponents(Object[] stack, int size, String semanticBody) {
+	private List<String> findPrefixComponents(Object[] stack, int bodyIndex) {
 		final List<String> result = new ArrayList<>();
-		if (stack == null || size <= 0 || semanticBody == null) {
+		if (stack == null || bodyIndex < 0) {
 			return result;
 		}
 
-		final int safeSize = Math.min(size, stack.length);
+		final int safeSize = Math.min(bodyIndex, stack.length);
 		for (int i = 0; i < safeSize; i++) {
 			final Object value = stack[i];
-			if (!(value instanceof String)) {
-				continue;
+			if (value instanceof String) {
+				result.add((String) value);
 			}
-
-			final String raw = (String) value;
-			final String semantic = textNormalizer.normalizeSemantic(raw);
-			if (semantic == null) {
-				continue;
-			}
-
-			if (semantic.equalsIgnoreCase(semanticBody)) {
-				break;
-			}
-
-			/*
-			 * Preserve empty prefix components.
-			 *
-			 * Script 4483 uses them to represent title-only and
-			 * prefix-less system rows.
-			 */
-			result.add(raw);
 		}
 
 		return result;

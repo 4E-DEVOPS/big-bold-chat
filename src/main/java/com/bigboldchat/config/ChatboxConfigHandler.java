@@ -11,12 +11,13 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.events.ConfigChanged;
 
 /**
- * Owns chatbox-size configuration changes.
+ * Owns chatbox configuration changes.
  */
 public final class ChatboxConfigHandler {
 	private static final String CONFIG_GROUP = "bigboldchat";
 	private static final String WIDTH_KEY = "chatboxWidth";
 	private static final String HEIGHT_KEY = "chatboxHeight";
+	private static final String BUTTONS_KEY = "hideChatboxButtons";
 
 	private final Client client;
 	private final ClientThread clientThread;
@@ -54,6 +55,15 @@ public final class ChatboxConfigHandler {
 	public boolean onConfigChanged(ConfigChanged event) {
 		if (!active || event == null || !CONFIG_GROUP.equals(event.getGroup())) {
 			return false;
+		}
+
+		if (BUTTONS_KEY.equals(event.getKey())) {
+			clientThread.invokeLater(() -> {
+				if (active && resizeService != null) {
+					resizeService.setChatboxButtonsHidden(config.hideChatboxButtons());
+				}
+			});
+			return true;
 		}
 
 		if (!WIDTH_KEY.equals(event.getKey()) && !HEIGHT_KEY.equals(event.getKey())) {
@@ -112,6 +122,8 @@ public final class ChatboxConfigHandler {
 		if (!active || resizeService == null || config == null) {
 			return null;
 		}
+
+		resizeService.setChatboxButtonsHidden(config.hideChatboxButtons());
 
 		final int width = config.chatboxWidth();
 		final int height = config.chatboxHeight();

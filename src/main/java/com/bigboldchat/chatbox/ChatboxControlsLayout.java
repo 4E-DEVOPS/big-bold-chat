@@ -6,7 +6,7 @@ import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetPositionMode;
 
 /**
- * Owns the resizable chat control/tab bar geometry.
+ * Owns chat control/tab bar geometry and visibility.
  */
 public final class ChatboxControlsLayout {
 	private static final int TAB_NATIVE_WIDTH = 56;
@@ -32,6 +32,9 @@ public final class ChatboxControlsLayout {
 	};
 
 	private final Client client;
+
+	private Widget hiddenControls;
+	private boolean nativeControlsHidden;
 
 	public ChatboxControlsLayout(Client client) {
 		this.client = client;
@@ -84,6 +87,34 @@ public final class ChatboxControlsLayout {
 		return mutations;
 	}
 
+	int syncHidden(boolean hidden) {
+		final Widget controls = client.getWidget(InterfaceID.Chatbox.CONTROLS);
+		if (controls == null) {
+			return 0;
+		}
+
+		if (!hidden) {
+			return restoreHidden(controls);
+		}
+
+		if (hiddenControls != controls) {
+			hiddenControls = controls;
+			nativeControlsHidden = controls.isSelfHidden();
+		}
+
+		if (controls.isSelfHidden()) {
+			return 0;
+		}
+
+		controls.setHidden(true);
+		return 1;
+	}
+
+	int restoreHidden() {
+		final Widget controls = client.getWidget(InterfaceID.Chatbox.CONTROLS);
+		return restoreHidden(controls);
+	}
+
 	int restoreNative() {
 		return apply(ChatboxGeometry.NATIVE_WIDTH);
 	}
@@ -116,6 +147,26 @@ public final class ChatboxControlsLayout {
 		}
 
 		return true;
+	}
+
+	private int restoreHidden(Widget controls) {
+		if (hiddenControls == null) {
+			return 0;
+		}
+
+		if (controls != hiddenControls) {
+			hiddenControls = null;
+			return 0;
+		}
+
+		int mutations = 0;
+		if (controls.isSelfHidden() != nativeControlsHidden) {
+			controls.setHidden(nativeControlsHidden);
+			mutations++;
+		}
+
+		hiddenControls = null;
+		return mutations;
 	}
 
 	private Widget[] getReadyTabs() {
