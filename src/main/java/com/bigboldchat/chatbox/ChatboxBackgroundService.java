@@ -35,6 +35,11 @@ final class ChatboxBackgroundService {
 	private Widget[] borderPieces;
 	private Widget trimmedBackground;
 	private Widget zoomedBody;
+	private int zoomedBodyOriginalWidth;
+	private int zoomedBodyOriginalHeight;
+	private int zoomedBodyWidthMode;
+	private int zoomedBodyHeightMode;
+	private boolean zoomedBodySpriteTiling;
 
 	ChatboxBackgroundService(Client client) {
 		this.client = client;
@@ -100,7 +105,6 @@ final class ChatboxBackgroundService {
 		return result;
 	}
 
-	@SuppressWarnings("deprecation")
 	private Result zoomParchment(Widget body, int targetWidth, int targetHeight) {
 		final Result result = new Result();
 		final int overscanX = bevelOverscan(targetWidth, ChatboxGeometry.NATIVE_WIDTH);
@@ -109,28 +113,36 @@ final class ChatboxBackgroundService {
 		final int height = targetHeight + overscanY * 2;
 		final int x = body.getOriginalX() - overscanX;
 		final int y = body.getOriginalY() - overscanY;
+		boolean changed = false;
 
-		if (body.getWidth() != width) {
-			body.setWidth(width);
-			result.mutations++;
+		if (zoomedBody != body) {
+			rememberZoomState(body);
 		}
 
-		if (body.getHeight() != height) {
-			body.setHeight(height);
+		if (body.getOriginalWidth() != width || body.getOriginalHeight() != height
+				|| body.getWidthMode() != WidgetSizeMode.ABSOLUTE || body.getHeightMode() != WidgetSizeMode.ABSOLUTE) {
+			body.setSize(width, height, WidgetSizeMode.ABSOLUTE, WidgetSizeMode.ABSOLUTE);
 			result.mutations++;
+			changed = true;
 		}
 
 		if (body.getRelativeX() != x || body.getRelativeY() != y) {
 			body.setForcedPosition(x, y);
 			result.mutations++;
+			changed = true;
 		}
 
 		if (body.getSpriteTiling()) {
 			body.setSpriteTiling(false);
 			result.mutations++;
+			changed = true;
 		}
 
-		zoomedBody = body;
+		if (changed) {
+			body.revalidate();
+			result.revalidates++;
+		}
+
 		return result;
 	}
 
@@ -138,7 +150,7 @@ final class ChatboxBackgroundService {
 		final Result result = new Result();
 		boolean changed = false;
 
-		if (background.getWidth() != CORNER_BLEED_TRIM || background.getHeight() != CORNER_BLEED_TRIM) {
+		if (background.getOriginalWidth() != CORNER_BLEED_TRIM || background.getOriginalHeight() != CORNER_BLEED_TRIM) {
 			background.setSize(CORNER_BLEED_TRIM, CORNER_BLEED_TRIM);
 			result.mutations++;
 			changed = true;
@@ -186,19 +198,33 @@ final class ChatboxBackgroundService {
 		}
 
 		if (zoomedBody != currentBody) {
-			zoomedBody = null;
+			clearZoomState();
 			return result;
 		}
 
-		zoomedBody.setSpriteTiling(true);
+		zoomedBody.setSize(zoomedBodyOriginalWidth, zoomedBodyOriginalHeight, zoomedBodyWidthMode, zoomedBodyHeightMode);
 		zoomedBody.setForcedPosition(-1, -1);
+		zoomedBody.setSpriteTiling(zoomedBodySpriteTiling);
 		zoomedBody.revalidate();
 
-		result.mutations += 2;
+		result.mutations += 3;
 		result.revalidates++;
-		zoomedBody = null;
+		clearZoomState();
 
 		return result;
+	}
+
+	private void rememberZoomState(Widget body) {
+		zoomedBody = body;
+		zoomedBodyOriginalWidth = body.getOriginalWidth();
+		zoomedBodyOriginalHeight = body.getOriginalHeight();
+		zoomedBodyWidthMode = body.getWidthMode();
+		zoomedBodyHeightMode = body.getHeightMode();
+		zoomedBodySpriteTiling = body.getSpriteTiling();
+	}
+
+	private void clearZoomState() {
+		zoomedBody = null;
 	}
 
 	private Result stackGradientBands(Widget background, int targetHeight) {
