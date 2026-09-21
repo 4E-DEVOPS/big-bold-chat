@@ -13,6 +13,9 @@ import net.runelite.api.widgets.Widget;
  * Resolves configured chatbox dimensions against visible interface bounds.
  */
 public final class ChatboxBounds {
+	private static final int MIN_WIDTH = 200;
+	private static final int MIN_HEIGHT = 100;
+
 	private ChatboxBounds() {
 		/*
 		 * CHATBOX BOUNDS
@@ -35,8 +38,8 @@ public final class ChatboxBounds {
 		final int anchorBottom = slotBounds.y + slotBounds.height;
 		final int availableWidth = canvas.x + canvas.width - anchorX;
 		final int availableHeight = anchorBottom - canvas.y;
-		final int desiredWidth = constrain(configuredWidth, availableWidth, ChatboxGeometry.NATIVE_WIDTH);
-		final int desiredHeight = constrain(configuredHeight, availableHeight, ChatboxGeometry.NATIVE_SLOT_HEIGHT);
+		final int desiredWidth = constrain(configuredWidth, availableWidth, MIN_WIDTH);
+		final int desiredHeight = constrain(configuredHeight, availableHeight, MIN_HEIGHT);
 
 		final Result fitted = fit(
 				anchorX, anchorBottom, desiredWidth, desiredHeight, canvas, interfaces.getObstacles());

@@ -33,7 +33,7 @@ public interface Configurations extends Config {
 		return ChatFont.PLAIN_12;
 	}
 
-	@Range(min = 320, max = 1000)
+	@Range(min = 200, max = 8192)
 	@Units(Units.PIXELS)
 	@ConfigItem(
 		keyName = "chatboxWidth",
@@ -46,7 +46,7 @@ public interface Configurations extends Config {
 		return 519;
 	}
 
-	@Range(min = 100, max = 500)
+	@Range(min = 100, max = 8192)
 	@Units(Units.PIXELS)
 	@ConfigItem(
 		keyName = "chatboxHeight",
