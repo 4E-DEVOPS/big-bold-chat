@@ -341,11 +341,8 @@ public class ChatXL extends Plugin {
 	public void onScriptPreFired(ScriptPreFired event) {
 		debugManager.onChatboxScriptPreFired(event);
 
-		final ChatboxResizeService.ResizeResult resizeResult = chatboxResizeService != null
-				? chatboxResizeService.onScriptPreFired(event, config.chatboxWidth(), config.chatboxHeight())
-				: null;
-		if (chatRebuildCoordinator != null) {
-			chatRebuildCoordinator.onLayoutChanged(resizeResult);
+		if (chatboxResizeService != null) {
+			chatboxResizeService.onScriptPreFired(event, config.chatboxWidth(), config.chatboxHeight());
 		}
 
 		debugManager.onFontScriptPreFired(event);
@@ -389,11 +386,11 @@ public class ChatXL extends Plugin {
 			}
 		}
 
-		final ChatboxResizeService.ResizeResult resizeResult = chatboxResizeService != null
-				? chatboxResizeService.onScriptPostFired(event, config.chatboxWidth(), config.chatboxHeight())
-				: null;
+		if (chatboxResizeService != null) {
+			chatboxResizeService.onScriptPostFired(event, config.chatboxWidth(), config.chatboxHeight());
+		}
+
 		if (chatRebuildCoordinator != null) {
-			chatRebuildCoordinator.onLayoutChanged(resizeResult);
 			chatRebuildCoordinator.onScriptPostFired(event);
 		}
 
