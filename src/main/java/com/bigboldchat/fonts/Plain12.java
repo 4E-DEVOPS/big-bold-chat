@@ -18,7 +18,7 @@ public final class Plain12 implements ChatFontProfile {
 	private static final int FRIENDS_CHAT_TEXT_Y_OFFSET = 0;
 	private static final int FRIENDS_CHAT_PLAYER_ICON_SPACING = 1;
 
-	private static final int RANK_ICON_RIGHT_ADJUSTMENT = 0;
+	private static final int RANK_ICON_RIGHT_ADJUSTMENT = 1;
 	private static final int RANK_ICON_SIZE_ADJUSTMENT = 0;
 
 	private static final int ACCOUNT_BUILD_ICON_PADDING = 0;

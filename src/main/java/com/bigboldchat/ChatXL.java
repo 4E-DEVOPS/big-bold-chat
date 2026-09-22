@@ -77,6 +77,11 @@ public class ChatXL extends Plugin {
 	private ChatboxConfigHandler chatboxConfigHandler;
 	private FontConfigHandler fontConfigHandler;
 
+	/**
+	 * ================================================================
+	 * START-UP & SHUT-DOWN
+	 * ================================================================
+	 */
 	@Override
 	protected void startUp() {
 		performanceMetrics = debugManager.activate();
@@ -165,7 +170,7 @@ public class ChatXL extends Plugin {
 		log.debug("[Chat XL] Plugin Terminated.");
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * GAME STATE
 	 * ================================================================
@@ -183,7 +188,7 @@ public class ChatXL extends Plugin {
 		debugManager.onLoggedIn();
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * CANVAS SIZE
 	 * ================================================================
@@ -199,7 +204,7 @@ public class ChatXL extends Plugin {
 		}
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * INTERFACE LIFECYCLE
 	 * ================================================================
@@ -226,7 +231,7 @@ public class ChatXL extends Plugin {
 		}
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * CHAT CONTROLS
 	 * ================================================================
@@ -248,7 +253,7 @@ public class ChatXL extends Plugin {
 		});
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * CHAT COMMANDS
 	 * ================================================================
@@ -294,7 +299,7 @@ public class ChatXL extends Plugin {
 		}
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * CONFIGURATION
 	 * ================================================================
@@ -312,7 +317,7 @@ public class ChatXL extends Plugin {
 		}
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * CONFIGURATION PROVIDER
 	 * ================================================================
@@ -322,7 +327,7 @@ public class ChatXL extends Plugin {
 		return configManager.getConfig(Configurations.class);
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * CHAT CONSTRUCTION
 	 * ================================================================

@@ -9,10 +9,10 @@ public final class Verdana13Bold implements ChatFontProfile {
 	private static final int LINE_HEIGHT_ADJUSTMENT = 0;
 	private static final int ROW_Y_OFFSET = 0;
 
-	private static final int PRIVATE_CHAT_GAP = 0;
+	private static final int PRIVATE_CHAT_GAP = -2;
 
 	private static final int CHANNEL_NAME_Y_OFFSET = 0;
-	private static final int CHANNEL_RANK_ICON_Y_OFFSET = 2;
+	private static final int CHANNEL_RANK_ICON_Y_OFFSET = 0;
 	private static final int CHANNEL_ACCOUNT_BUILD_ICON_SPACING = 0;
 	private static final int CHANNEL_USERNAME_Y_OFFSET = 0;
 	private static final int CHANNEL_TEXT_Y_OFFSET = 0;

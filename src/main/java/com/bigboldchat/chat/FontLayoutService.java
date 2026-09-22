@@ -20,6 +20,7 @@ import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetTextAlignment;
 import net.runelite.api.widgets.WidgetUtil;
 
 /**
@@ -36,6 +37,7 @@ public final class FontLayoutService {
 	 * Script used to apply queued component-specific Y offsets.
 	 */
 	private static final int CHAT_FINALIZE_SCRIPT = 72;
+	private static final int TEXT_Y_ALIGNMENT = WidgetTextAlignment.BOTTOM;
 
 	private final Client client;
 	private final Configurations config;
@@ -300,6 +302,7 @@ public final class FontLayoutService {
 
 		boolean changed = setFontIdIfChanged(bodyWidget, state.selectedFontId);
 		changed |= setLineHeightIfChanged(bodyWidget, state.selectedLineHeight);
+		changed |= setYTextAlignmentIfChanged(bodyWidget, TEXT_Y_ALIGNMENT);
 
 		/*
 		 * Correlation has already completed against the native body text.
@@ -347,6 +350,12 @@ public final class FontLayoutService {
 
 			boolean changed = setFontIdIfChanged(widget, state.selectedFontId);
 			changed |= setLineHeightIfChanged(widget, state.selectedLineHeight);
+
+			/*
+			 * Prefix widgets render one line even when the body wraps.
+			 */
+			changed |= setOriginalHeightIfChanged(widget, state.selectedLineHeight);
+			changed |= setYTextAlignmentIfChanged(widget, TEXT_Y_ALIGNMENT);
 
 			/*
 			 * Script 203 uses one textual prefix widget.
@@ -428,10 +437,6 @@ public final class FontLayoutService {
 				queueTextYOffset(widget, fontProfile.getFriendsChatPrefixYOffset());
 			} else {
 				pendingYOffsets.remove(widget);
-			}
-
-			if (widget.getOriginalHeight() < state.selectedLineHeight) {
-				changed |= setOriginalHeightIfChanged(widget, state.selectedLineHeight);
 			}
 
 			revalidateWidgetIfChanged(widget, changed);
@@ -710,6 +715,25 @@ public final class FontLayoutService {
 
 		state.appliedLineHeight = lineHeight;
 		widget.setLineHeight(lineHeight);
+		recordWidgetMutation();
+
+		return true;
+	}
+
+	private boolean setYTextAlignmentIfChanged(Widget widget, int alignment) {
+		if (widget == null || widget.getYTextAlignment() == alignment) {
+			return false;
+		}
+
+		final NativeWidgetState state = nativeState(widget);
+		final int currentAlignment = widget.getYTextAlignment();
+		if (!state.yTextAlignmentCaptured || currentAlignment != state.appliedYTextAlignment) {
+			state.nativeYTextAlignment = currentAlignment;
+			state.yTextAlignmentCaptured = true;
+		}
+
+		state.appliedYTextAlignment = alignment;
+		widget.setYTextAlignment(alignment);
 		recordWidgetMutation();
 
 		return true;
@@ -1652,6 +1676,15 @@ public final class FontLayoutService {
 				changed = true;
 			}
 
+			if (state.yTextAlignmentCaptured
+					&& widget.getYTextAlignment()
+					== state.appliedYTextAlignment
+					&& widget.getYTextAlignment()
+					!= state.nativeYTextAlignment) {
+				widget.setYTextAlignment(state.nativeYTextAlignment);
+				changed = true;
+			}
+
 			if (state.textCaptured
 					&& sameText(widget.getText(), state.appliedText)
 					&& !sameText(widget.getText(), state.nativeText)) {
@@ -1731,6 +1764,10 @@ public final class FontLayoutService {
 		private boolean lineHeightCaptured;
 		private int nativeLineHeight;
 		private int appliedLineHeight;
+
+		private boolean yTextAlignmentCaptured;
+		private int nativeYTextAlignment;
+		private int appliedYTextAlignment;
 
 		private boolean textCaptured;
 		private String nativeText;

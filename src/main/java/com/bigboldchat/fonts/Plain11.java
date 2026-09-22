@@ -3,13 +3,13 @@ package com.bigboldchat.fonts;
 import com.bigboldchat.config.ChatFont;
 
 public final class Plain11 implements ChatFontProfile {
-	private static final int LINE_HEIGHT_ADJUSTMENT = -2;
-	private static final int ROW_Y_OFFSET = 0;
+	private static final int LINE_HEIGHT_ADJUSTMENT = -1;
+	private static final int ROW_Y_OFFSET = 1;
 
-	private static final int PRIVATE_CHAT_GAP = 0;
+	private static final int PRIVATE_CHAT_GAP = -2;
 
 	private static final int CHANNEL_NAME_Y_OFFSET = 0;
-	private static final int CHANNEL_RANK_ICON_Y_OFFSET = -2;
+	private static final int CHANNEL_RANK_ICON_Y_OFFSET = 0;
 	private static final int CHANNEL_ACCOUNT_BUILD_ICON_SPACING = 0;
 	private static final int CHANNEL_USERNAME_Y_OFFSET = 0;
 	private static final int CHANNEL_TEXT_Y_OFFSET = 0;
@@ -19,7 +19,7 @@ public final class Plain11 implements ChatFontProfile {
 	private static final int FRIENDS_CHAT_PLAYER_ICON_SPACING = 1;
 
 	private static final int RANK_ICON_RIGHT_ADJUSTMENT = 0;
-	private static final int RANK_ICON_SIZE_ADJUSTMENT = 0;
+	private static final int RANK_ICON_SIZE_ADJUSTMENT = -1;
 
 	private static final int ACCOUNT_BUILD_ICON_PADDING = 0;
 
