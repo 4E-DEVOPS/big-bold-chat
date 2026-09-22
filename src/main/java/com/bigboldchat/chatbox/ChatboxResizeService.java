@@ -27,7 +27,7 @@ public final class ChatboxResizeService {
 	/*
 	 * Native chat visibility lifecycle.
 	 */
-	private static final int CHAT_VISIBILITY = 923;
+	static final int CHAT_VISIBILITY = 923;
 
 	/*
 	 * Native top-level relayout helper.
@@ -463,7 +463,7 @@ public final class ChatboxResizeService {
 		recordMutation();
 	}
 
-	private boolean isChatViewHidden() {
+	boolean isChatViewHidden() {
 		return client.getVarcIntValue(VarClientID.CHAT_VIEW) == CHAT_VIEW_HIDDEN;
 	}
 

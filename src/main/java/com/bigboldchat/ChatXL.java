@@ -2,6 +2,7 @@ package com.bigboldchat;
 
 import com.bigboldchat.chat.FontLayoutService;
 import com.bigboldchat.chat.FontMeasurementService;
+import com.bigboldchat.chatbox.ChatRebuildCoordinator;
 import com.bigboldchat.chatbox.ChatboxResizeService;
 import com.bigboldchat.config.ChatboxConfigHandler;
 import com.bigboldchat.config.FontConfigHandler;
@@ -69,6 +70,7 @@ public class ChatXL extends Plugin {
 	private FontMeasurementService fontMeasurementService;
 	private FontLayoutService fontLayoutService;
 	private ChatboxResizeService chatboxResizeService;
+	private ChatRebuildCoordinator chatRebuildCoordinator;
 	private ChatboxHotkey chatboxHotkey;
 
 	/*
@@ -86,23 +88,21 @@ public class ChatXL extends Plugin {
 	protected void startUp() {
 		performanceMetrics = debugManager.activate();
 		chatboxResizeService = new ChatboxResizeService(client, performanceMetrics);
+		chatRebuildCoordinator = new ChatRebuildCoordinator(
+				client, clientThread, config, chatboxResizeService, performanceMetrics);
 		chatboxHotkey = new ChatboxHotkey(clientThread, config, chatboxResizeService, keyManager);
 		chatboxHotkey.activate();
 		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
 		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);
-		chatboxConfigHandler = new ChatboxConfigHandler(client, clientThread, config, chatboxResizeService, performanceMetrics);
+		chatboxConfigHandler = new ChatboxConfigHandler(chatRebuildCoordinator);
 		fontConfigHandler = new FontConfigHandler(client, clientThread, fontLayoutService, performanceMetrics);
-		performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.STARTUP);
-
 		/*
 		 * Refresh retained rows through the active layout pipeline.
 		 */
 		clientThread.invokeLater(() -> {
-			if (chatboxConfigHandler != null) {
-				chatboxConfigHandler.applyConfiguredSize();
+			if (chatRebuildCoordinator != null) {
+				chatRebuildCoordinator.onStartup();
 			}
-
-			client.refreshChat();
 
 			debugManager.onLoggedIn();
 		});
@@ -124,6 +124,10 @@ public class ChatXL extends Plugin {
 			chatboxConfigHandler.deactivate();
 		}
 
+		if (chatRebuildCoordinator != null) {
+			chatRebuildCoordinator.deactivate();
+		}
+
 		if (fontConfigHandler != null) {
 			fontConfigHandler.deactivate();
 		}
@@ -134,6 +138,7 @@ public class ChatXL extends Plugin {
 
 		fontLayoutService = null;
 		chatboxResizeService = null;
+		chatRebuildCoordinator = null;
 		chatboxHotkey = null;
 		fontMeasurementService = null;
 		chatboxConfigHandler = null;
@@ -181,8 +186,8 @@ public class ChatXL extends Plugin {
 			return;
 		}
 
-		if (chatboxConfigHandler != null) {
-			chatboxConfigHandler.applyConfiguredSize();
+		if (chatRebuildCoordinator != null) {
+			chatRebuildCoordinator.onLoggedIn();
 		}
 
 		debugManager.onLoggedIn();
@@ -199,8 +204,8 @@ public class ChatXL extends Plugin {
 			return;
 		}
 
-		if (chatboxConfigHandler != null) {
-			chatboxConfigHandler.onCanvasSizeChanged();
+		if (chatRebuildCoordinator != null) {
+			chatRebuildCoordinator.onCanvasSizeChanged();
 		}
 	}
 
@@ -215,8 +220,8 @@ public class ChatXL extends Plugin {
 			return;
 		}
 
-		if (chatboxConfigHandler != null) {
-			chatboxConfigHandler.onInterfaceChanged();
+		if (chatRebuildCoordinator != null) {
+			chatRebuildCoordinator.onInterfaceChanged();
 		}
 	}
 
@@ -226,8 +231,8 @@ public class ChatXL extends Plugin {
 			return;
 		}
 
-		if (chatboxConfigHandler != null) {
-			chatboxConfigHandler.onInterfaceChanged();
+		if (chatRebuildCoordinator != null) {
+			chatRebuildCoordinator.onInterfaceChanged();
 		}
 	}
 
@@ -339,8 +344,8 @@ public class ChatXL extends Plugin {
 		final ChatboxResizeService.ResizeResult resizeResult = chatboxResizeService != null
 				? chatboxResizeService.onScriptPreFired(event, config.chatboxWidth(), config.chatboxHeight())
 				: null;
-		if (chatboxConfigHandler != null) {
-			chatboxConfigHandler.onLayoutChanged(resizeResult);
+		if (chatRebuildCoordinator != null) {
+			chatRebuildCoordinator.onLayoutChanged(resizeResult);
 		}
 
 		debugManager.onFontScriptPreFired(event);
@@ -387,8 +392,9 @@ public class ChatXL extends Plugin {
 		final ChatboxResizeService.ResizeResult resizeResult = chatboxResizeService != null
 				? chatboxResizeService.onScriptPostFired(event, config.chatboxWidth(), config.chatboxHeight())
 				: null;
-		if (chatboxConfigHandler != null) {
-			chatboxConfigHandler.onLayoutChanged(resizeResult);
+		if (chatRebuildCoordinator != null) {
+			chatRebuildCoordinator.onLayoutChanged(resizeResult);
+			chatRebuildCoordinator.onScriptPostFired(event);
 		}
 
 		debugManager.onFontScriptPostFired(event);

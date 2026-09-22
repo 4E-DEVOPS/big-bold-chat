@@ -25,7 +25,7 @@ public final class UpdateMessages {
 			+ " Report any issues you find to Github.";
 	private static final String UNINSTALL_MESSAGE = "Thank you for using ChatXL!"
 			+ " Please submit a review/issue report on Github of your experience.";
-	private static final String UPDATE_MESSAGE = "Resizable chatbox + broadcast, logged in/out, and white-spaced Message fixes.";
+	private static final String UPDATE_MESSAGE = "Centered chatbox text for compatibility with <shad=ffffff>RuneTags</shad>, refined icon positioning, and fixed wrapped text when starting with the chatbox hidden.";
 
 	private final Client client;
 	private final ClientThread clientThread;
@@ -114,32 +114,21 @@ public final class UpdateMessages {
 	}
 
 	private void showInstallMessage() {
-		client.addChatMessage(
-				ChatMessageType.GAMEMESSAGE,
-				"",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> " + INSTALL_MESSAGE,
-				null);
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", prefix() + INSTALL_MESSAGE, null);
 	}
 
 	private void showVersionMessage(String currentVersion) {
 		client.addChatMessage(
-				ChatMessageType.GAMEMESSAGE,
-				"",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> Updated to v" + currentVersion + "!",
-				null);
+				ChatMessageType.GAMEMESSAGE, "", prefix() + "Updated to v" + currentVersion + "!", null);
 
-		client.addChatMessage(
-				ChatMessageType.GAMEMESSAGE,
-				"",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> " + UPDATE_MESSAGE,
-				null);
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", prefix() + UPDATE_MESSAGE, null);
 	}
 
 	private void showUninstallMessage() {
-		client.addChatMessage(
-				ChatMessageType.GAMEMESSAGE,
-				"",
-				"<col=ff981f><shad=E6B955>ChatXL:</shad></col> " + UNINSTALL_MESSAGE,
-				null);
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", prefix() + UNINSTALL_MESSAGE, null);
+	}
+
+	private static String prefix() {
+		return "<col=FF981F><shad=E1140A>ChatXL:</shad></col> ";
 	}
 }
