@@ -107,6 +107,30 @@ public final class ChatRebuildCoordinator {
 		queueCommit(true, result.isWidthChanged(), result.isHeightChanged());
 	}
 
+	public void refreshLiveHeight() {
+		if (!active || refreshing || resizeService == null) {
+			return;
+		}
+
+		final ChatboxResizeService.ScrollBaseline scrollBaseline = resizeService.captureScrollBaseline();
+
+		/*
+		 * Live collision geometry is already stable. Refresh presentation only;
+		 * do not feed this path back through the geometry commit queue.
+		 */
+		refreshing = true;
+		try {
+			if (performanceMetrics != null) {
+				performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.HEIGHT_CHANGED);
+			}
+
+			client.refreshChat();
+			resizeService.restoreRebuildScroll(scrollBaseline);
+		} finally {
+			refreshing = false;
+		}
+	}
+
 	public void onScriptPostFired(ScriptPostFired event) {
 		if (!active || event == null || event.getScriptId() != ChatboxResizeService.CHAT_VISIBILITY
 				|| resizeService == null || resizeService.isChatViewHidden()) {

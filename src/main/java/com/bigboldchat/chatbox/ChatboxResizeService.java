@@ -30,8 +30,9 @@ public final class ChatboxResizeService {
 	static final int CHAT_VISIBILITY = 923;
 
 	/*
-	 * Native top-level relayout helper.
+	 * Native chat and top-level relayout helpers.
 	 */
+	private static final int CHAT_REFRESH = 663;
 	private static final int TOPLEVEL_RELAYOUT = 1972;
 
 	private static final int[] CHAT_CONTROL_IDS = {
@@ -68,6 +69,7 @@ public final class ChatboxResizeService {
 	private boolean chatControlClickPending;
 	private boolean chatboxButtonsHidden;
 	private boolean liveChanged;
+	private boolean liveHeightRefreshPending;
 
 	private int liveDepth;
 	private int lastVisibleChatView = CHAT_VIEW_ALL;
@@ -129,6 +131,10 @@ public final class ChatboxResizeService {
 		}
 
 		final int scriptId = event.getScriptId();
+		if (scriptId == CHAT_REFRESH || scriptId == ScriptID.SPLITPM_CHANGED) {
+			liveHeightRefreshPending = false;
+		}
+
 		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE) {
 			sideContainerLayout.beginNativeLayout();
 		}
@@ -330,7 +336,17 @@ public final class ChatboxResizeService {
 
 		if (changed) {
 			restoreScrollBaseline(baseline, true);
+			liveHeightRefreshPending = true;
 		}
+	}
+
+	public boolean consumeLiveHeightRefresh() {
+		if (liveDepth != 0 || !liveHeightRefreshPending) {
+			return false;
+		}
+
+		liveHeightRefreshPending = false;
+		return true;
 	}
 
 	public ScrollBaseline captureScrollBaseline() {
