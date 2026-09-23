@@ -74,14 +74,14 @@ public final class ChatboxBounds {
 
 		addCandidate(widths, desiredWidth, ChatboxGeometry.NATIVE_WIDTH, desiredWidth);
 		addCandidate(widths, ChatboxGeometry.NATIVE_WIDTH, ChatboxGeometry.NATIVE_WIDTH, desiredWidth);
-		addCandidate(heights, desiredHeight, ChatboxGeometry.NATIVE_SLOT_HEIGHT, desiredHeight);
-		addCandidate(heights, ChatboxGeometry.NATIVE_SLOT_HEIGHT, ChatboxGeometry.NATIVE_SLOT_HEIGHT, desiredHeight);
+		addCandidate(heights, desiredHeight, MIN_HEIGHT, desiredHeight);
+		addCandidate(heights, ChatboxGeometry.NATIVE_SLOT_HEIGHT, MIN_HEIGHT, desiredHeight);
 
 		for (Rectangle obstacle : obstacles) {
 			addCandidate(widths, obstacle.x - anchorX, ChatboxGeometry.NATIVE_WIDTH, desiredWidth);
 			addCandidate(
 					heights, anchorBottom - (obstacle.y + obstacle.height),
-					ChatboxGeometry.NATIVE_SLOT_HEIGHT, desiredHeight);
+					MIN_HEIGHT, desiredHeight);
 		}
 
 		Result best = null;
@@ -141,7 +141,7 @@ public final class ChatboxBounds {
 		}
 
 		if ((long) heightLoss * desiredWidth <= (long) widthLoss * desiredHeight) {
-			return new Result(desiredWidth, Math.min(desiredHeight, ChatboxGeometry.NATIVE_SLOT_HEIGHT), false, true);
+			return new Result(desiredWidth, Math.min(desiredHeight, MIN_HEIGHT), false, true);
 		}
 
 		return new Result(Math.min(desiredWidth, ChatboxGeometry.NATIVE_WIDTH), desiredHeight, false, true);
