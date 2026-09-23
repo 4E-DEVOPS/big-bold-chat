@@ -108,9 +108,9 @@ public final class ChatboxBounds {
 		}
 
 		/*
-		 * Never shrink both axes just because another interface enters RuneScape's
-		 * native chatbox footprint. Preserve the axis that would require the larger
-		 * proportional reduction and accept overlap on the constrained axis.
+		 * Preserve the axis that would require the larger proportional
+		 * reduction and accept overlap on the constrained axis.
+		 * Never shrink both axes when an interface enters native chatbox footprint.
 		 */
 		return fallback(anchorX, anchorBottom, desiredWidth, desiredHeight, obstacles);
 	}
