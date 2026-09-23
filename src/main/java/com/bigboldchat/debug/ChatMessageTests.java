@@ -102,6 +102,11 @@ public final class ChatMessageTests {
 		addChatTest(
 				ChatMessageType.MODAUTOTYPER,
 				IconID.PLAYER_MODERATOR.toString() + "PMod");
+
+		addChatTest(
+				ChatMessageType.PUBLICCHAT,
+				"Long",
+				"The quick brown fox jumped over the lazy yellow @dog who was sleeping peacefully.");
 	}
 
 	/*
@@ -116,6 +121,7 @@ public final class ChatMessageTests {
 		addChatTest(ChatMessageType.MODPRIVATECHAT, IconID.PLAYER_MODERATOR.toString() + "PMod");
 		addChatTest(ChatMessageType.LOGINLOGOUTNOTIFICATION, "", "Player has logged in.");
 		addChatTest(ChatMessageType.LOGINLOGOUTNOTIFICATION, "", "Player has logged out.");
+		addChatTest(ChatMessageType.PRIVATECHATOUT, "Private", "The quick brown fox jumped over the lazy yellow @dog who slept peacefully.");
 	}
 
 	/*

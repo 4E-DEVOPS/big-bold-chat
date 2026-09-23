@@ -280,11 +280,15 @@ public final class FontMeasurementService {
 			selectedBodyX = selectedChannelLayout.bodyX;
 		}
 
-		final int rightPadding = isSplitPrivate(parentWidgetId)
+		final boolean splitPrivate = isSplitPrivate(parentWidgetId);
+		final int rightPadding = splitPrivate
 				? 0
 				: SCROLLBAR_PADDING;
+		final int selectedRightBoundary = splitPrivate
+				? splitPrivateRightBoundary(leftBoundary, rightBoundary)
+				: rightBoundary;
 		final int nativeBodyWidth = rightBoundary - nativeBodyX;
-		final int selectedBodyWidth = rightBoundary - selectedBodyX - rightPadding;
+		final int selectedBodyWidth = selectedRightBoundary - selectedBodyX - rightPadding;
 		if (nativeBodyWidth <= 0 || selectedBodyWidth <= 0) {
 			return null;
 		}
@@ -375,6 +379,32 @@ public final class FontMeasurementService {
 	 */
 	private boolean isSplitPrivate(int parentWidgetId) {
 		return WidgetUtil.componentToInterface(parentWidgetId) == InterfaceID.PM_CHAT;
+	}
+
+	private int splitPrivateRightBoundary(int leftBoundary, int nativeRightBoundary) {
+		final Widget pmHost = activeSplitPrivateHost();
+		if (pmHost == null || pmHost.getWidth() <= 0) {
+			return nativeRightBoundary;
+		}
+
+		/*
+		 * REBUILDPMBOX continues to expose RuneScape's native construction
+		 * boundary even when ChatXL has constrained the movable PM host. Measure
+		 * selected wrapping against the host's effective width while preserving
+		 * the native boundary above for native-line compensation and correlation.
+		 */
+		return leftBoundary + pmHost.getWidth();
+	}
+
+	private Widget activeSplitPrivateHost() {
+		final int topLevel = client.getTopLevelInterfaceId();
+		if (topLevel == InterfaceID.TOPLEVEL_OSRS_STRETCH) {
+			return client.getWidget(InterfaceID.ToplevelOsrsStretch.PM_CONTAINER);
+		}
+		if (topLevel == InterfaceID.TOPLEVEL_PRE_EOC) {
+			return client.getWidget(InterfaceID.ToplevelPreEoc.PM_CONTAINER);
+		}
+		return null;
 	}
 
 	/*

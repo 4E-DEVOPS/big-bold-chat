@@ -37,7 +37,8 @@ public final class FontLayoutService {
 	 * Script used to apply queued component-specific Y offsets.
 	 */
 	private static final int CHAT_FINALIZE_SCRIPT = 72;
-	private static final int TEXT_Y_ALIGNMENT = WidgetTextAlignment.BOTTOM;
+	private static final int BODY_TEXT_Y_ALIGNMENT = WidgetTextAlignment.BOTTOM;
+	private static final int PREFIX_TEXT_Y_ALIGNMENT = WidgetTextAlignment.BOTTOM;
 
 	private final Client client;
 	private final Configurations config;
@@ -302,7 +303,7 @@ public final class FontLayoutService {
 
 		boolean changed = setFontIdIfChanged(bodyWidget, state.selectedFontId);
 		changed |= setLineHeightIfChanged(bodyWidget, state.selectedLineHeight);
-		changed |= setYTextAlignmentIfChanged(bodyWidget, TEXT_Y_ALIGNMENT);
+		changed |= setYTextAlignmentIfChanged(bodyWidget, BODY_TEXT_Y_ALIGNMENT);
 
 		/*
 		 * Correlation has already completed against the native body text.
@@ -348,14 +349,23 @@ public final class FontLayoutService {
 				continue;
 			}
 
+			final int previousOriginalY = widget.getOriginalY();
+			final int previousRelativeY = widget.getRelativeY();
+
 			boolean changed = setFontIdIfChanged(widget, state.selectedFontId);
 			changed |= setLineHeightIfChanged(widget, state.selectedLineHeight);
 
 			/*
-			 * Prefix widgets render one line even when the body wraps.
+			 * Script 203's prefix widget uses bottom-aligned text natively. Changing
+			 * that alignment breaks ordinary one-line PM rows, so keep BOTTOM and
+			 * instead move the one-line prefix widget upward when the selected body
+			 * wraps. This keeps the sender on the first visual line without changing
+			 * the single-line baseline RuneScape already expects.
 			 */
 			changed |= setOriginalHeightIfChanged(widget, state.selectedLineHeight);
-			changed |= setYTextAlignmentIfChanged(widget, TEXT_Y_ALIGNMENT);
+			changed |= setYTextAlignmentIfChanged(widget, PREFIX_TEXT_Y_ALIGNMENT);
+			final boolean prefixYChanged = applySplitPrivatePrefixWrapOffset(state, widget);
+			changed |= prefixYChanged;
 
 			/*
 			 * Script 203 uses one textual prefix widget.
@@ -440,7 +450,40 @@ public final class FontLayoutService {
 			}
 
 			revalidateWidgetIfChanged(widget, changed);
+			if (prefixYChanged) {
+				notifyIndexedWidgetGeometryChanged(widget, previousOriginalY, previousRelativeY);
+			}
 		}
+	}
+
+	/*
+	 * Split private-chat prefixes are separate one-line widgets. RuneScape places
+	 * them on the row's bottom line, which is correct for a one-line message but
+	 * becomes the final line after ChatXL allocates extra height for wrapping.
+	 * Preserve the native bottom alignment and shift only the prefix widget upward
+	 * by the selected body's additional wrapped-line height.
+	 */
+	private boolean applySplitPrivatePrefixWrapOffset(
+			FontMeasurementService.ConstructionMeasurement state,
+			Widget widget) {
+		if (!isSplitPrivateConstruction(state) || widget == null) {
+			return false;
+		}
+
+		final int extraHeight = Math.max(0, state.desiredHeight - state.selectedLineHeight);
+		final NativeWidgetState widgetState = nativeWidgetStates.get(widget);
+		final int baseOriginalY = widgetState != null
+				&& widgetState.originalYCaptured
+				&& widget.getOriginalY() == widgetState.appliedOriginalY
+				? widgetState.nativeOriginalY
+				: widget.getOriginalY();
+
+		return setOriginalYIfChanged(widget, baseOriginalY + extraHeight);
+	}
+
+	private boolean isSplitPrivateConstruction(FontMeasurementService.ConstructionMeasurement state) {
+		return state != null
+				&& WidgetUtil.componentToInterface(state.parentWidgetId) == InterfaceID.PM_CHAT;
 	}
 
 	/*
