@@ -9,6 +9,8 @@ import com.bigboldchat.config.FontConfigHandler;
 import com.bigboldchat.debug.DebugManager;
 import com.bigboldchat.debug.PerformanceMetrics;
 import com.bigboldchat.input.ChatboxHotkey;
+import com.bigboldchat.layout.PrivateChatLayout;
+import com.bigboldchat.overlay.PrivateChatOverlay;
 
 import com.google.inject.Provides;
 
@@ -37,6 +39,7 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.ui.overlay.OverlayManager;
 
 @Slf4j
 @PluginDescriptor(
@@ -56,9 +59,13 @@ public class ChatXL extends Plugin {
 	@Inject
 	private Configurations config;
 	@Inject
+	private ConfigManager configManager;
+	@Inject
 	private DebugManager debugManager;
 	@Inject
 	private KeyManager keyManager;
+	@Inject
+	private OverlayManager overlayManager;
 
 	/*
 	 * Diagnostics & performance.
@@ -73,6 +80,8 @@ public class ChatXL extends Plugin {
 	private ChatboxResizeService chatboxResizeService;
 	private ChatRebuildCoordinator chatRebuildCoordinator;
 	private ChatboxHotkey chatboxHotkey;
+	private PrivateChatOverlay privateChatOverlay;
+	private PrivateChatLayout privateChatLayout;
 
 	/*
 	 * Configuration handlers.
@@ -89,6 +98,9 @@ public class ChatXL extends Plugin {
 	protected void startUp() {
 		performanceMetrics = debugManager.activate();
 		chatboxResizeService = new ChatboxResizeService(client, performanceMetrics);
+		privateChatOverlay = new PrivateChatOverlay();
+		privateChatLayout = new PrivateChatLayout(client, config, configManager, privateChatOverlay);
+		overlayManager.add(privateChatOverlay);
 		chatRebuildCoordinator = new ChatRebuildCoordinator(
 				client, clientThread, config, chatboxResizeService, performanceMetrics);
 		chatboxHotkey = new ChatboxHotkey(clientThread, config, chatboxResizeService, keyManager);
@@ -115,6 +127,8 @@ public class ChatXL extends Plugin {
 	protected void shutDown() {
 		final FontLayoutService shutdownLayoutService = fontLayoutService;
 		final ChatboxResizeService shutdownResizeService = chatboxResizeService;
+		final PrivateChatOverlay shutdownPrivateChatOverlay = privateChatOverlay;
+		final PrivateChatLayout shutdownPrivateChatLayout = privateChatLayout;
 		final PerformanceMetrics shutdownPerformanceMetrics = performanceMetrics;
 		final boolean uninstalling = debugManager.prepareShutdown();
 
@@ -141,9 +155,15 @@ public class ChatXL extends Plugin {
 		chatboxResizeService = null;
 		chatRebuildCoordinator = null;
 		chatboxHotkey = null;
+		privateChatOverlay = null;
+		privateChatLayout = null;
 		fontMeasurementService = null;
 		chatboxConfigHandler = null;
 		fontConfigHandler = null;
+
+		if (shutdownPrivateChatOverlay != null) {
+			overlayManager.remove(shutdownPrivateChatOverlay);
+		}
 
 		debugManager.deactivate();
 
@@ -153,6 +173,10 @@ public class ChatXL extends Plugin {
 
 		// Restore native presentation on the client thread.
 		clientThread.invokeLater(() -> {
+			if (shutdownPrivateChatLayout != null) {
+				shutdownPrivateChatLayout.restoreNative();
+			}
+
 			final ChatboxResizeService.ScrollBaseline scrollBaseline = shutdownResizeService != null
 					? shutdownResizeService.captureScrollBaseline()
 					: null;
@@ -322,6 +346,10 @@ public class ChatXL extends Plugin {
 	public void onConfigChanged(ConfigChanged event) {
 		debugManager.onConfigChanged(event);
 
+		if (privateChatLayout != null) {
+			privateChatLayout.onConfigChanged(event);
+		}
+
 		if (chatboxConfigHandler != null && chatboxConfigHandler.onConfigChanged(event)) {
 			return;
 		}
@@ -409,20 +437,34 @@ public class ChatXL extends Plugin {
 
 	@Subscribe
 	public void onBeforeRender(BeforeRender event) {
-		if (chatboxResizeService == null || chatRebuildCoordinator == null) {
-			return;
+		boolean widthChanged = false;
+		boolean heightChanged = false;
+
+		if (privateChatLayout != null) {
+			/*
+			 * Resolve movable split-PM placement and effective width before the
+			 * render-boundary rebuild. rebuildpmbox and FontMeasurementService then
+			 * see the constrained host width during the same native reconstruction.
+			 */
+			final PrivateChatLayout.Result privateResult = privateChatLayout.sync();
+			widthChanged |= privateResult.isWidthChanged();
 		}
 
-		final ChatboxResizeService.LiveRefresh refresh = chatboxResizeService.consumeLiveRefresh();
-		if (refresh == null) {
-			return;
+		if (chatboxResizeService != null) {
+			final ChatboxResizeService.LiveRefresh refresh = chatboxResizeService.consumeLiveRefresh();
+			if (refresh != null) {
+				widthChanged |= refresh.isWidthChanged();
+				heightChanged |= refresh.isHeightChanged();
+			}
 		}
 
-		/*
-		 * Native relayout may change the chatbox several times before one frame.
-		 * Rebuild once here so split PM and retained row wrapping follow the final
-		 * geometry without re-entering the resize commit path.
-		 */
-		chatRebuildCoordinator.refreshLiveGeometry(refresh);
+		if (chatRebuildCoordinator != null && (widthChanged || heightChanged)) {
+			/*
+			 * Coalesce chatbox and split-PM width changes into one refreshChat().
+			 * The coordinator rebuilds retained presentation only and never feeds the
+			 * result back through the geometry commit path that previously flickered.
+			 */
+			chatRebuildCoordinator.refreshLiveGeometry(widthChanged, heightChanged);
+		}
 	}
 }
