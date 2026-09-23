@@ -409,10 +409,20 @@ public class ChatXL extends Plugin {
 
 	@Subscribe
 	public void onBeforeRender(BeforeRender event) {
-		if (chatboxResizeService == null || chatRebuildCoordinator == null || !chatboxResizeService.consumeLiveHeightRefresh()) {
+		if (chatboxResizeService == null || chatRebuildCoordinator == null) {
 			return;
 		}
 
-		chatRebuildCoordinator.refreshLiveHeight();
+		final ChatboxResizeService.LiveRefresh refresh = chatboxResizeService.consumeLiveRefresh();
+		if (refresh == null) {
+			return;
+		}
+
+		/*
+		 * Native relayout may change the chatbox several times before one frame.
+		 * Rebuild once here so split PM and retained row wrapping follow the final
+		 * geometry without re-entering the resize commit path.
+		 */
+		chatRebuildCoordinator.refreshLiveGeometry(refresh);
 	}
 }

@@ -107,21 +107,30 @@ public final class ChatRebuildCoordinator {
 		queueCommit(true, result.isWidthChanged(), result.isHeightChanged());
 	}
 
-	public void refreshLiveHeight() {
-		if (!active || refreshing || resizeService == null) {
+	public void refreshLiveGeometry(ChatboxResizeService.LiveRefresh refresh) {
+		if (!active || refreshing || resizeService == null || refresh == null) {
 			return;
 		}
 
 		final ChatboxResizeService.ScrollBaseline scrollBaseline = resizeService.captureScrollBaseline();
 
 		/*
-		 * Live collision geometry is already stable. Refresh presentation only;
-		 * do not feed this path back through the geometry commit queue.
+		 * Live collision geometry is already authoritative. Rebuild retained rows
+		 * only; sending this path through the geometry commit queue previously made
+		 * ChatXL fight RuneScape's native relayout and caused visible oscillation.
 		 */
 		refreshing = true;
 		try {
 			if (performanceMetrics != null) {
-				performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.HEIGHT_CHANGED);
+				/*
+				 * A single rebuild may satisfy both axes. Classify it as a width refresh
+				 * when wrapping is involved, otherwise as a height-only refresh.
+				 */
+				final PerformanceMetrics.RefreshReason reason = refresh.isWidthChanged()
+						? PerformanceMetrics.RefreshReason.WIDTH_CHANGED
+						: PerformanceMetrics.RefreshReason.HEIGHT_CHANGED;
+
+				performanceMetrics.recordRefreshChat(reason);
 			}
 
 			client.refreshChat();

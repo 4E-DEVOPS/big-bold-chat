@@ -32,7 +32,7 @@ public final class ChatboxResizeService {
 	/*
 	 * Native chat and top-level relayout helpers.
 	 */
-	private static final int CHAT_REFRESH = 663;
+	private static final int CHAT_ONCHATTRANSMIT = 663;
 	private static final int TOPLEVEL_RELAYOUT = 1972;
 
 	private static final int[] CHAT_CONTROL_IDS = {
@@ -68,7 +68,9 @@ public final class ChatboxResizeService {
 	private boolean suppressionOwnsHiddenView;
 	private boolean chatControlClickPending;
 	private boolean chatboxButtonsHidden;
-	private boolean liveChanged;
+	private boolean liveWidthChanged;
+	private boolean liveHeightChanged;
+	private boolean liveWidthRefreshPending;
 	private boolean liveHeightRefreshPending;
 
 	private int liveDepth;
@@ -131,7 +133,13 @@ public final class ChatboxResizeService {
 		}
 
 		final int scriptId = event.getScriptId();
-		if (scriptId == CHAT_REFRESH || scriptId == ScriptID.SPLITPM_CHANGED) {
+
+		/*
+		 * Discard any queued plugin refresh so a native
+		 * rebuild never causes a duplicate refresh.
+		 */
+		if (scriptId == CHAT_ONCHATTRANSMIT || scriptId == ScriptID.SPLITPM_CHANGED) {
+			liveWidthRefreshPending = false;
 			liveHeightRefreshPending = false;
 		}
 
@@ -143,7 +151,16 @@ public final class ChatboxResizeService {
 			beginLiveScroll();
 
 			final ResizeResult result = applySize(width, height);
-			liveChanged |= result.isApplied() && result.isHeightChanged();
+			if (result.isApplied()) {
+				/*
+				 * Native relayout can fire repeatedly while an interface is moving. Track
+				 * only real geometry changes so one render-boundary refresh can rebuild
+				 * retained rows without feeding geometry back through the commit queue.
+				 */
+				liveWidthChanged |= result.isWidthChanged();
+				liveHeightChanged |= result.isHeightChanged();
+			}
+
 			return result;
 		}
 
@@ -316,7 +333,8 @@ public final class ChatboxResizeService {
 		}
 
 		liveBaseline = captureScrollBaseline();
-		liveChanged = false;
+		liveWidthChanged = false;
+		liveHeightChanged = false;
 	}
 
 	private void finishLiveScroll() {
@@ -330,23 +348,35 @@ public final class ChatboxResizeService {
 		}
 
 		final ScrollBaseline baseline = liveBaseline;
-		final boolean changed = liveChanged;
+		final boolean widthChanged = liveWidthChanged;
+		final boolean heightChanged = liveHeightChanged;
 		liveBaseline = null;
-		liveChanged = false;
+		liveWidthChanged = false;
+		liveHeightChanged = false;
 
-		if (changed) {
+		if (widthChanged || heightChanged) {
 			restoreScrollBaseline(baseline, true);
-			liveHeightRefreshPending = true;
+
+			/*
+			 * Defer reconstruction until the render boundary. This coalesces nested
+			 * relayouts while still letting RuneScape rebuild PM placement and retained
+			 * row wrapping against the final geometry for that frame.
+			 */
+			liveWidthRefreshPending |= widthChanged;
+			liveHeightRefreshPending |= heightChanged;
 		}
 	}
 
-	public boolean consumeLiveHeightRefresh() {
-		if (liveDepth != 0 || !liveHeightRefreshPending) {
-			return false;
+	public LiveRefresh consumeLiveRefresh() {
+		if (liveDepth != 0 || !liveWidthRefreshPending && !liveHeightRefreshPending) {
+			return null;
 		}
 
+		final LiveRefresh refresh = new LiveRefresh(liveWidthRefreshPending, liveHeightRefreshPending);
+
+		liveWidthRefreshPending = false;
 		liveHeightRefreshPending = false;
-		return true;
+		return refresh;
 	}
 
 	public ScrollBaseline captureScrollBaseline() {
@@ -836,6 +866,24 @@ public final class ChatboxResizeService {
 		private ScrollBaseline(ScrollPosition position, int viewportBottom) {
 			this.position = position;
 			this.viewportBottom = viewportBottom;
+		}
+	}
+
+	public static final class LiveRefresh {
+		private final boolean widthChanged;
+		private final boolean heightChanged;
+
+		private LiveRefresh(boolean widthChanged, boolean heightChanged) {
+			this.widthChanged = widthChanged;
+			this.heightChanged = heightChanged;
+		}
+
+		public boolean isWidthChanged() {
+			return widthChanged;
+		}
+
+		public boolean isHeightChanged() {
+			return heightChanged;
 		}
 	}
 

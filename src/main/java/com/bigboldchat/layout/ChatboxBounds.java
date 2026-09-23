@@ -72,13 +72,13 @@ public final class ChatboxBounds {
 		final List<Integer> widths = new ArrayList<>();
 		final List<Integer> heights = new ArrayList<>();
 
-		addCandidate(widths, desiredWidth, ChatboxGeometry.NATIVE_WIDTH, desiredWidth);
-		addCandidate(widths, ChatboxGeometry.NATIVE_WIDTH, ChatboxGeometry.NATIVE_WIDTH, desiredWidth);
+		addCandidate(widths, desiredWidth, MIN_WIDTH, desiredWidth);
+		addCandidate(widths, ChatboxGeometry.NATIVE_WIDTH, MIN_WIDTH, desiredWidth);
 		addCandidate(heights, desiredHeight, MIN_HEIGHT, desiredHeight);
 		addCandidate(heights, ChatboxGeometry.NATIVE_SLOT_HEIGHT, MIN_HEIGHT, desiredHeight);
 
 		for (Rectangle obstacle : obstacles) {
-			addCandidate(widths, obstacle.x - anchorX, ChatboxGeometry.NATIVE_WIDTH, desiredWidth);
+			addCandidate(widths, obstacle.x - anchorX, MIN_WIDTH, desiredWidth);
 			addCandidate(
 					heights, anchorBottom - (obstacle.y + obstacle.height),
 					MIN_HEIGHT, desiredHeight);
@@ -144,7 +144,7 @@ public final class ChatboxBounds {
 			return new Result(desiredWidth, Math.min(desiredHeight, MIN_HEIGHT), false, true);
 		}
 
-		return new Result(Math.min(desiredWidth, ChatboxGeometry.NATIVE_WIDTH), desiredHeight, false, true);
+		return new Result(Math.max(MIN_WIDTH, desiredWidth - widthLoss), desiredHeight, false, true);
 	}
 
 	private static int requiredLoss(int desiredSize, int limit) {
