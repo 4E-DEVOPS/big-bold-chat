@@ -153,25 +153,15 @@ public class ChatXL extends Plugin {
 		// Restore native presentation on the client thread.
 		clientThread.invokeLater(() -> {
 			if (shutdownResizeService != null) {
-				shutdownResizeService.beginScrollBaseline();
+				shutdownResizeService.restoreNativeSize();
 			}
 
-			try {
-				if (shutdownResizeService != null) {
-					shutdownResizeService.restoreNativeSize();
-				}
-
-				if (shutdownLayoutService != null) {
-					shutdownLayoutService.restoreNativePresentation();
-					shutdownLayoutService.reset();
-				}
-
-				client.refreshChat();
-			} finally {
-				if (shutdownResizeService != null) {
-					shutdownResizeService.endScrollBaseline();
-				}
+			if (shutdownLayoutService != null) {
+				shutdownLayoutService.restoreNativePresentation();
+				shutdownLayoutService.reset();
 			}
+
+			client.refreshChat();
 
 			debugManager.finishShutdown(uninstalling);
 

@@ -67,10 +67,7 @@ public final class ChatboxResizeService {
 	private boolean suppressionOwnsHiddenView;
 	private boolean chatControlClickPending;
 	private boolean chatboxButtonsHidden;
-	private boolean scrollBaselineBottom;
-	private boolean scrollBaselineAvailable;
 
-	private int scrollBaselineDepth;
 	private int lastVisibleChatView = CHAT_VIEW_ALL;
 	private int lastVisibleChatGraphic = -1;
 
@@ -128,10 +125,6 @@ public final class ChatboxResizeService {
 		}
 
 		final int scriptId = event.getScriptId();
-		if (tracksScrollBaseline(scriptId)) {
-			beginScrollBaseline();
-		}
-
 		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE) {
 			sideContainerLayout.beginNativeLayout();
 		}
@@ -159,27 +152,13 @@ public final class ChatboxResizeService {
 			sideContainerLayout.endNativeLayout();
 		}
 
-		ResizeResult result = ResizeResult.NOT_APPLIED;
 		if (scriptId == ScriptID.TOPLEVEL_REDRAW
 				|| scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE
 				|| scriptId == ScriptID.MESSAGE_LAYER_OPEN) {
-			result = applySize(width, height);
+			return applySize(width, height);
 		}
 
-		if (tracksScrollBaseline(scriptId)) {
-			endScrollBaseline();
-		}
-
-		return result;
-	}
-
-	private boolean tracksScrollBaseline(int scriptId) {
-		return scriptId == ScriptID.BUILD_CHATBOX
-				|| scriptId == ScriptID.SPLITPM_CHANGED
-				|| scriptId == TOPLEVEL_RELAYOUT
-				|| scriptId == ScriptID.TOPLEVEL_REDRAW
-				|| scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE
-				|| scriptId == ScriptID.MESSAGE_LAYER_OPEN;
+		return ResizeResult.NOT_APPLIED;
 	}
 
 	/*
@@ -297,61 +276,6 @@ public final class ChatboxResizeService {
 		}
 
 		recordRevalidates(ChatboxWidgets.revalidateChildren(universe));
-	}
-
-	/*
-	 * ================================================================
-	 * SCROLL BASELINE
-	 * ================================================================
-	 */
-	public void beginScrollBaseline() {
-		if (scrollBaselineDepth++ != 0) {
-			return;
-		}
-
-		final Widget scrollArea = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
-		if (scrollArea == null) {
-			scrollBaselineAvailable = false;
-			return;
-		}
-
-		final int bottom = Math.max(0, scrollArea.getScrollHeight() - scrollArea.getHeight());
-		scrollBaselineBottom = scrollArea.getScrollY() >= bottom;
-		scrollBaselineAvailable = true;
-	}
-
-	public void endScrollBaseline() {
-		if (scrollBaselineDepth <= 0) {
-			return;
-		}
-
-		scrollBaselineDepth--;
-		if (scrollBaselineDepth != 0) {
-			return;
-		}
-
-		final boolean restoreBottom = scrollBaselineAvailable && scrollBaselineBottom;
-		scrollBaselineAvailable = false;
-		scrollBaselineBottom = false;
-		if (!restoreBottom) {
-			return;
-		}
-
-		final Widget scrollArea = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
-		if (scrollArea == null) {
-			return;
-		}
-
-		final int bottom = Math.max(0, scrollArea.getScrollHeight() - scrollArea.getHeight());
-		if (scrollArea.getScrollY() != bottom) {
-			scrollArea.setScrollY(bottom);
-		}
-	}
-
-	public void resetScrollBaseline() {
-		scrollBaselineDepth = 0;
-		scrollBaselineAvailable = false;
-		scrollBaselineBottom = false;
 	}
 
 	/*
@@ -554,18 +478,13 @@ public final class ChatboxResizeService {
 			rememberVisibleChatGraphic();
 		}
 
-		beginScrollBaseline();
-		try {
-			client.setVarcIntValue(VarClientID.CHAT_VIEW, chatView);
+		client.setVarcIntValue(VarClientID.CHAT_VIEW, chatView);
 
-			if (performanceMetrics != null) {
-				performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.OTHER);
-			}
-
-			client.refreshChat();
-		} finally {
-			endScrollBaseline();
+		if (performanceMetrics != null) {
+			performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.OTHER);
 		}
+
+		client.refreshChat();
 
 		syncChatAreaVisibility();
 		syncStoredChatGraphic(chatView != CHAT_VIEW_HIDDEN);

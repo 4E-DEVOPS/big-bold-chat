@@ -5,6 +5,8 @@ import com.bigboldchat.debug.PerformanceMetrics;
 
 import net.runelite.api.Client;
 import net.runelite.api.events.ScriptPostFired;
+import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.widgets.Widget;
 import net.runelite.client.callback.ClientThread;
 
 /**
@@ -34,7 +36,6 @@ public final class ChatRebuildCoordinator {
 	private boolean visibilityRefreshPending;
 	private PerformanceMetrics.RefreshReason visibilityRefreshReason;
 	private boolean refreshing;
-	private boolean scrollBaselineOpen;
 	private int committedWidth;
 	private int committedHeight;
 
@@ -144,10 +145,6 @@ public final class ChatRebuildCoordinator {
 		refreshReason = null;
 		visibilityRefreshPending = false;
 		visibilityRefreshReason = null;
-		scrollBaselineOpen = false;
-		if (resizeService != null) {
-			resizeService.resetScrollBaseline();
-		}
 	}
 
 	private void applyConfiguredSize(PerformanceMetrics.RefreshReason reason, boolean trackVisibility) {
@@ -155,7 +152,6 @@ public final class ChatRebuildCoordinator {
 			return;
 		}
 
-		beginScrollBaseline();
 		resizeService.setChatboxButtonsHidden(config.hideChatboxButtons());
 
 		final int width = config.chatboxWidth();
@@ -253,13 +249,11 @@ public final class ChatRebuildCoordinator {
 			return;
 		}
 
-		beginScrollBaseline();
 		final ChatboxResizeService.ResizeResult result = resizeService.applySize(width, height);
 		if (result == null || !result.isApplied()) {
 			if (resizeService.getLayout() == ChatboxLayout.FIXED) {
 				clearForcedCommit();
 			}
-			endScrollBaseline();
 			return;
 		}
 
@@ -270,13 +264,10 @@ public final class ChatRebuildCoordinator {
 			clearForcedCommit();
 		}
 
-		final boolean refreshQueued = queueRefresh(
+		queueRefresh(
 				widthRefresh || result.isWidthChanged(),
 				heightRefresh || result.isHeightChanged(),
 				forceRefresh, forcedReason, trackVisibility);
-		if (!refreshQueued) {
-			endScrollBaseline();
-		}
 	}
 
 	private synchronized void clearForcedCommit() {
@@ -285,10 +276,10 @@ public final class ChatRebuildCoordinator {
 		forceRefreshReason = null;
 	}
 
-	private synchronized boolean queueRefresh(boolean widthChanged, boolean heightChanged,
+	private synchronized void queueRefresh(boolean widthChanged, boolean heightChanged,
 			boolean forced, PerformanceMetrics.RefreshReason reason, boolean trackVisibility) {
 		if (!active || (!forced && !widthChanged && !heightChanged)) {
-			return false;
+			return;
 		}
 
 		refreshWidthChanged |= widthChanged;
@@ -300,12 +291,11 @@ public final class ChatRebuildCoordinator {
 		}
 
 		if (refreshQueued) {
-			return true;
+			return;
 		}
 
 		refreshQueued = true;
 		clientThread.invokeLater(this::drainRefresh);
-		return true;
 	}
 
 	private void drainRefresh() {
@@ -344,11 +334,14 @@ public final class ChatRebuildCoordinator {
 			 */
 			client.refreshChat();
 
+			if (widthChanged || heightChanged) {
+				scrollToBottom();
+			}
+
 			if (trackVisibility) {
 				rememberVisibilityRefresh(explicitReason);
 			}
 		} finally {
-			endScrollBaseline();
 			refreshing = false;
 		}
 	}
@@ -379,21 +372,15 @@ public final class ChatRebuildCoordinator {
 		visibilityRefreshReason = reason;
 	}
 
-	private void beginScrollBaseline() {
-		if (scrollBaselineOpen || resizeService == null) {
+	private void scrollToBottom() {
+		final Widget scrollArea = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
+		if (scrollArea == null) {
 			return;
 		}
 
-		resizeService.beginScrollBaseline();
-		scrollBaselineOpen = true;
-	}
-
-	private void endScrollBaseline() {
-		if (!scrollBaselineOpen || resizeService == null) {
-			return;
+		final int scrollY = Math.max(0, scrollArea.getScrollHeight() - scrollArea.getHeight());
+		if (scrollArea.getScrollY() != scrollY) {
+			scrollArea.setScrollY(scrollY);
 		}
-
-		scrollBaselineOpen = false;
-		resizeService.endScrollBaseline();
 	}
 }
