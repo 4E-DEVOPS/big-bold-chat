@@ -25,7 +25,7 @@ public final class UpdateMessages {
 			+ " Report any issues you find to Github.";
 	private static final String UNINSTALL_MESSAGE = "Thank you for using ChatXL!"
 			+ " Please submit a review/issue report on Github of your experience.";
-	private static final String UPDATE_MESSAGE = "Centered chatbox text for compatibility with <shad=ffffff>RuneTags</shad>, refined icon positioning, scroll preservation, and removed the hidden chat-button row.";
+	private static final String UPDATE_MESSAGE = "Centered chatbox text for compatibility with <shad=ffffff>RuneTags</shad>, refined icon positioning, scroll preservation, chatbox collision handling, and removed the hidden chat-button row.";
 
 	private final Client client;
 	private final ClientThread clientThread;
