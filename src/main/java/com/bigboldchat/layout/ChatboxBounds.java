@@ -44,7 +44,7 @@ public final class ChatboxBounds {
 		}
 
 		final int anchorX = slotBounds.x;
-		final int anchorBottom = slotBounds.y + slotBounds.height;
+		final int anchorBottom = canvas.y + canvas.height;
 		final int availableWidth = canvas.x + canvas.width - anchorX;
 		final int availableHeight = anchorBottom - canvas.y;
 		final int desiredWidth = constrain(configuredWidth, availableWidth, MIN_WIDTH);
