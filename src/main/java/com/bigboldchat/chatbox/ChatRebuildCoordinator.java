@@ -199,8 +199,8 @@ public final class ChatRebuildCoordinator {
 		}
 
 		/*
-		 * Retained rows need one native rebuild even when configured geometry
-		 * already matches the mounted chatbox.
+		 * Retained rows need one native rebuild even when
+		 * configured  geometry already matches the mounted chatbox.
 		 */
 		queueRefresh(
 				result != null && result.isWidthChanged(),
@@ -371,10 +371,6 @@ public final class ChatRebuildCoordinator {
 				performanceMetrics.recordRefreshChat(resolveRefreshReason(widthChanged, heightChanged, explicitReason));
 			}
 
-			/*
-			 * Geometry is stable before refreshChat so native row wrapping and
-			 * scroll metrics resolve against the final effective viewport.
-			 */
 			client.refreshChat();
 			resizeService.restoreRebuildScroll(scrollBaseline);
 

@@ -358,9 +358,7 @@ public final class ChatboxResizeService {
 			restoreScrollBaseline(baseline, true);
 
 			/*
-			 * Defer reconstruction until the render boundary. This coalesces nested
-			 * relayouts while still letting RuneScape rebuild PM placement and retained
-			 * row wrapping against the final geometry for that frame.
+			 * Defer reconstruction until the render boundary.
 			 */
 			liveWidthRefreshPending |= widthChanged;
 			liveHeightRefreshPending |= heightChanged;
