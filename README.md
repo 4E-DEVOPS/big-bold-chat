@@ -132,10 +132,10 @@ ChatXL is intended for players who want:
 - Better readability while keeping the game interface familiar.
 
 ## Coming Soon
-<b>V1.3</b> [POSTPONED]: GIM channel support<br>
-<b>V2.0</b>: Integrated resizeable chatbox<br>
-<b>V2.1</b>: Resize UX polish<br>
-<b>V2.2</b>: Accessibility and player-facing improvements<br>
+<b>V1.3</b> [DONE]: GIM channel support<br>
+<b>V2.0</b> [DONE]: Integrated resizeable chatbox<br>
+<b>V2.5</b>: Resize UX polish<br>
+<b>V2.6</b>: Accessibility and player-facing improvements<br>
 <b>V3.0</b>: Further resizable interface integrations (Inventory, Minimap, et cetera)<br>
 
 ---
