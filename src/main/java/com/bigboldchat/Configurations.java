@@ -59,11 +59,29 @@ public interface Configurations extends Config {
 		return 165;
 	}
 
+	@Range(min = 200, max = 8192)
+	@Units(Units.PIXELS)
+	@ConfigItem(
+			keyName = "splitPmWidth",
+			name = "Split-PM Width",
+			description = "Maximum width of split private chat. Follows the live chatbox width until overridden.",
+			position = 3,
+			section = chatBoxSection
+	)
+	default int splitPmWidth() {
+		/*
+		 * Keep the visible default synchronized with Chatbox Width. ConfigManager
+		 * supplies a stored split-PM value instead once the user explicitly
+		 * overrides this item; resetting it returns to inherited live width.
+		 */
+		return chatboxWidth();
+	}
+
 	@ConfigItem(
 			keyName = "hideChatboxButtons",
 			name = "Hide Chatbox Buttons",
 			description = "Hide the chatbox button row.",
-			position = 3,
+			position = 4,
 			section = chatBoxSection
 	)
 	default boolean hideChatboxButtons() {
@@ -74,7 +92,7 @@ public interface Configurations extends Config {
 			keyName = "hideChatboxHotkey",
 			name = "Hide Chatbox Hotkey",
 			description = "Toggle the chatbox body between hidden and visible.",
-			position = 4,
+			position = 5,
 			section = chatBoxSection
 	)
 	default Keybind hideChatboxHotkey() {
