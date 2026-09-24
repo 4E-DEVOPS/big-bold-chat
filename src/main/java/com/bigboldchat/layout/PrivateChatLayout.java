@@ -99,13 +99,6 @@ public final class PrivateChatLayout {
 				? manualOffset(baseContentBounds)
 				: chatboxOffset(chatSlot);
 
-		/*
-		 * Translate the PM host as one unit. REBUILDPMBOX remains responsible for
-		 * every row's font-specific Y geometry; this layer owns only the external
-		 * RuneLite placement and horizontal surface available to those rows.
-		 */
-		applyOffset(pmHost, target.x, target.y);
-
 		final Rectangle expectedContentBounds = baseContentBounds == null
 				? null
 				: translated(baseContentBounds, target.x, target.y);
@@ -127,6 +120,14 @@ public final class PrivateChatLayout {
 				pmChat.revalidate();
 			}
 		}
+
+		/*
+		 * Width changes revalidate PM_CONTAINER before native rows are rebuilt. That
+		 * revalidation recalculates the host's relative position and can temporarily
+		 * discard our forced placement. Applying the external translation last keeps
+		 * the host stable while refreshChat() reconstructs and rewraps its children.
+		 */
+		applyOffset(pmHost, target.x, target.y);
 
 		/*
 		 * The overlay hitbox represents the effective PM surface width. Visible
