@@ -111,7 +111,7 @@ You can configure the chatbox width and height directly from ChatXL while retain
 ChatXL also accounts for movable RuneLite interface elements when determining the effective chatbox area, helping the chatbox remain usable when other interface elements overlap its normal space.
 
 <p align="left">
-  <img src="images/Resizable-Chatbox.jpg" alt="Resizable Chatbox" width="500">
+  <img src="images/Resizable-Chatbox.jpg" alt="Resizable Chatbox" width="800">
 </p>
 
 ---
@@ -157,7 +157,7 @@ After installing the plugin:
 There is no need to restart RuneLite when changing fonts or supported ChatXL presentation settings.
 
 <p align="left">
-  <img src="images/PluginConfigs.jpg" alt="Configurations" width="225">
+  <img src="images/Configurations.jpg" alt="Configurations" width="225">
 </p>
 
 ---
