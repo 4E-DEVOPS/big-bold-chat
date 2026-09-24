@@ -8,13 +8,15 @@ import net.runelite.client.input.KeyManager;
 import net.runelite.client.util.HotkeyListener;
 
 /**
- * Owns the chatbox visibility hotkey lifecycle.
+ * Owns the chatbox hotkey lifecycle.
  */
 public final class ChatboxHotkey {
 	private final ClientThread clientThread;
 	private final ChatboxResizeService resizeService;
 	private final KeyManager keyManager;
-	private final HotkeyListener hotkeyListener;
+	private final Runnable clearChat;
+	private final HotkeyListener visibilityHotkeyListener;
+	private final HotkeyListener clearHotkeyListener;
 
 	private volatile boolean active;
 
@@ -22,11 +24,13 @@ public final class ChatboxHotkey {
 			ClientThread clientThread,
 			Configurations config,
 			ChatboxResizeService resizeService,
-			KeyManager keyManager) {
+			KeyManager keyManager,
+			Runnable clearChat) {
 		this.clientThread = clientThread;
 		this.resizeService = resizeService;
 		this.keyManager = keyManager;
-		this.hotkeyListener = new HotkeyListener(config::hideChatboxHotkey) {
+		this.clearChat = clearChat;
+		this.visibilityHotkeyListener = new HotkeyListener(config::hideChatboxHotkey) {
 			@Override
 			public void hotkeyPressed() {
 				if (!active) {
@@ -40,6 +44,25 @@ public final class ChatboxHotkey {
 				});
 			}
 		};
+
+		/*
+		 * Route the hotkey through the same clear action used by ::clear / ::cls so
+		 * keyboard and command behavior cannot drift apart.
+		 */
+		this.clearHotkeyListener = new HotkeyListener(config::clearChatHotkey) {
+			@Override
+			public void hotkeyPressed() {
+				if (!active) {
+					return;
+				}
+
+				clientThread.invokeLater(() -> {
+					if (active) {
+						ChatboxHotkey.this.clearChat.run();
+					}
+				});
+			}
+		};
 	}
 
 	public void activate() {
@@ -48,7 +71,8 @@ public final class ChatboxHotkey {
 		}
 
 		active = true;
-		keyManager.registerKeyListener(hotkeyListener);
+		keyManager.registerKeyListener(visibilityHotkeyListener);
+		keyManager.registerKeyListener(clearHotkeyListener);
 	}
 
 	public void deactivate() {
@@ -57,6 +81,7 @@ public final class ChatboxHotkey {
 		}
 
 		active = false;
-		keyManager.unregisterKeyListener(hotkeyListener);
+		keyManager.unregisterKeyListener(visibilityHotkeyListener);
+		keyManager.unregisterKeyListener(clearHotkeyListener);
 	}
 }

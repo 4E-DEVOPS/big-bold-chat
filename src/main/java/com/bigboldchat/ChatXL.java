@@ -103,7 +103,8 @@ public class ChatXL extends Plugin {
 		overlayManager.add(privateChatOverlay);
 		chatRebuildCoordinator = new ChatRebuildCoordinator(
 				client, clientThread, config, chatboxResizeService, performanceMetrics);
-		chatboxHotkey = new ChatboxHotkey(clientThread, config, chatboxResizeService, keyManager);
+		chatboxHotkey = new ChatboxHotkey(
+				clientThread, config, chatboxResizeService, keyManager, this::clearChatHistory);
 		chatboxHotkey.activate();
 		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
 		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);

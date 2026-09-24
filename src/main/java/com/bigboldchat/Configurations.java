@@ -2,6 +2,9 @@ package com.bigboldchat;
 
 import com.bigboldchat.config.ChatFont;
 
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
@@ -96,6 +99,17 @@ public interface Configurations extends Config {
 			section = chatBoxSection
 	)
 	default Keybind hideChatboxHotkey() {
-		return Keybind.NOT_SET;
+		return new Keybind(KeyEvent.VK_C, InputEvent.ALT_DOWN_MASK);
+	}
+
+	@ConfigItem(
+			keyName = "clearChatHotkey",
+			name = "Clear Chat Hotkey",
+			description = "Clear all chat messages.<br>You can also type ::clear or ::cls.",
+			position = 6,
+			section = chatBoxSection
+	)
+	default Keybind clearChatHotkey() {
+		return new Keybind(KeyEvent.VK_X, InputEvent.ALT_DOWN_MASK);
 	}
 }
