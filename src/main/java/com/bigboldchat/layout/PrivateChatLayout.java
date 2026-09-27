@@ -429,14 +429,14 @@ public final class PrivateChatLayout {
 
 		Rectangle bounds = null;
 		for (Widget child : pmChat.getDynamicChildren()) {
-			bounds = union(bounds, visibleBounds(child));
+			bounds = union(bounds, visibleLiveBounds(child));
 		}
 
-		bounds = union(bounds, visibleBounds(client.getWidget(InterfaceID.PmChat.PM1)));
-		bounds = union(bounds, visibleBounds(client.getWidget(InterfaceID.PmChat.PM2)));
-		bounds = union(bounds, visibleBounds(client.getWidget(InterfaceID.PmChat.PM3)));
-		bounds = union(bounds, visibleBounds(client.getWidget(InterfaceID.PmChat.PM4)));
-		bounds = union(bounds, visibleBounds(client.getWidget(InterfaceID.PmChat.PM5)));
+		bounds = union(bounds, visibleLiveBounds(client.getWidget(InterfaceID.PmChat.PM1)));
+		bounds = union(bounds, visibleLiveBounds(client.getWidget(InterfaceID.PmChat.PM2)));
+		bounds = union(bounds, visibleLiveBounds(client.getWidget(InterfaceID.PmChat.PM3)));
+		bounds = union(bounds, visibleLiveBounds(client.getWidget(InterfaceID.PmChat.PM4)));
+		bounds = union(bounds, visibleLiveBounds(client.getWidget(InterfaceID.PmChat.PM5)));
 		return bounds;
 	}
 
@@ -462,15 +462,27 @@ public final class PrivateChatLayout {
 		return null;
 	}
 
-	private static Rectangle visibleBounds(Widget widget) {
+	private static Rectangle visibleLiveBounds(Widget widget) {
 		if (widget == null || widget.isHidden() || widget.getWidth() <= 0 || widget.getHeight() <= 0) {
 			return null;
 		}
 
-		final Rectangle bounds = widget.getBounds();
-		return bounds == null || bounds.isEmpty()
-				? null
-				: new Rectangle(bounds);
+		/*
+		 * getBounds() can retain the previous on-canvas PM coordinates after the
+		 * externally-forced host has moved. Detached placement derives a native
+		 * content origin by subtracting the host offset, so mixing those stale
+		 * bounds with the live host offset compounds the translation every frame.
+		 * Build the current canvas position from resolved relative coordinates
+		 * instead so both sides of that calculation use the same geometry state.
+		 */
+		int x = widget.getRelativeX();
+		int y = widget.getRelativeY();
+		for (Widget parent = widget.getParent(); parent != null; parent = parent.getParent()) {
+			x += parent.getRelativeX();
+			y += parent.getRelativeY();
+		}
+
+		return new Rectangle(x, y, widget.getWidth(), widget.getHeight());
 	}
 
 	private static Rectangle union(Rectangle first, Rectangle second) {
