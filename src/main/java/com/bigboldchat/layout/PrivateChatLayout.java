@@ -6,11 +6,13 @@ import java.awt.Rectangle;
 
 import com.bigboldchat.overlay.PrivateChatOverlay;
 import net.runelite.api.Client;
+import net.runelite.api.ScriptID;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetSizeMode;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.api.events.ScriptPostFired;
 import net.runelite.client.ui.overlay.OverlayPosition;
 
 /*
@@ -19,10 +21,22 @@ import net.runelite.client.ui.overlay.OverlayPosition;
  */
 public final class PrivateChatLayout {
 	private static final String CONFIG_GROUP = "bigboldchat";
+
 	private static final String WIDTH_KEY = "splitPmWidth";
 	private static final String WIDTH_OVERRIDE_KEY = "splitPmWidthOverride";
 	private static final String CHATBOX_WIDTH_KEY = "chatboxWidth";
+
 	private static final int MIN_WIDTH = 200;
+	private static final int SURFACE_TOP_PADDING = 4;
+	private static final int SURFACE_BOTTOM_PADDING = 2;
+
+	/*
+	 * RuneLite currently exposes no ScriptID constants for the native top-level
+	 * relayout or chat_onchattransmit scripts. Observe them only; ChatXL never
+	 * executes either script directly.
+	 */
+	private static final int TOPLEVEL_LAYOUT_SCRIPT = 1972;
+	private static final int CHAT_ON_CHAT_TRANSMIT_SCRIPT = 663;
 
 	private final Client client;
 	private final Configurations config;
@@ -30,6 +44,9 @@ public final class PrivateChatLayout {
 	private final PrivateChatOverlay overlay;
 
 	private Widget forcedHost;
+	private Widget shiftedContent;
+	private int nativeContentScrollY;
+	private int appliedContentShiftY;
 	private Widget sizedHost;
 	private int nativeOriginalWidth;
 	private int appliedOriginalWidth;
@@ -50,6 +67,7 @@ public final class PrivateChatLayout {
 	 */
 	private int stableCollisionHeight;
 	private int stableDesiredWidth;
+	private boolean nativeLayoutDirty;
 
 	public PrivateChatLayout(
 			Client client,
@@ -80,12 +98,33 @@ public final class PrivateChatLayout {
 			restoreSizedHost();
 		}
 
+		final Widget pmChat = client.getWidget(InterfaceID.PM_CHAT, 0);
+		if (shiftedContent != null && shiftedContent != pmChat) {
+			restoreContentShift();
+		}
+
 		final Rectangle contentBounds = visiblePmBounds();
+		if (contentBounds == null) {
+			overlay.setNaturalBounds(null);
+			restoreContentShift();
+			restoreForcedHost();
+			restoreSizedHost();
+			stableCollisionHeight = 0;
+			stableDesiredWidth = 0;
+			return Result.NO_CHANGE;
+		}
+
 		final int currentOffsetX = pmHost.getRelativeX() - pmHost.getOriginalX();
 		final int currentOffsetY = pmHost.getRelativeY() - pmHost.getOriginalY();
+		final int currentContentShiftY = shiftedContent == pmChat
+				? appliedContentShiftY
+				: 0;
 		final Rectangle baseContentBounds = contentBounds == null
 				? null
-				: translated(contentBounds, -currentOffsetX, -currentOffsetY);
+				: translated(
+						contentBounds,
+						-currentOffsetX,
+						-currentOffsetY - currentContentShiftY);
 
 		/*
 		 * RuneLite's BOTTOM_LEFT snap corner is the green anchor above the
@@ -114,33 +153,43 @@ public final class PrivateChatLayout {
 			stableDesiredWidth = desiredWidth;
 		}
 
-		if (widthChanged) {
-			final Widget pmChat = client.getWidget(InterfaceID.PM_CHAT, 0);
-			if (pmChat != null) {
-				pmChat.revalidate();
-			}
+		if (widthChanged && pmChat != null) {
+			pmChat.revalidate();
 		}
 
 		/*
-		 * Width changes revalidate PM_CONTAINER before native rows are rebuilt. That
-		 * revalidation recalculates the host's relative position and can temporarily
-		 * discard our forced placement. Applying the external translation last keeps
-		 * the host stable while refreshChat() reconstructs and rewraps its children.
+		 * Native split-PM rows are built upward from PM_CHAT and can therefore occupy
+		 * negative Y coordinates relative to PM_CHAT. That works while the native
+		 * clipping hierarchy remains above them, but a detached PM_CONTAINER can be
+		 * moved below those rows after a top-level canvas relayout. The RuneLite
+		 * overlay then remains visible while the game clips the actual PM text.
+		 *
+		 * Keep PM_CHAT at its native geometry. Move PM_CONTAINER upward only enough
+		 * to contain the requested visible row surface, then compensate the children
+		 * with a negative PM_CHAT scroll value. The rows stay at the overlay location
+		 * while both native clipping containers begin at or above the visible text.
 		 */
-		applyOffset(pmHost, target.x, target.y);
+		applyClippingSafePlacement(pmHost, pmChat, target, expectedContentBounds);
 
 		/*
-		 * The overlay hitbox represents the effective PM surface width. Visible
-		 * row widgets contribute only the vertical span so malformed/stale text
-		 * cannot create an enormous horizontal drag region.
+		 * Width rewraps and newly-arrived PMs can change the real row union after
+		 * the first placement calculation. Reconcile once against those live rows
+		 * so a newly-grown top line cannot escape either native clipping envelope.
+		 * The second pass is idempotent when the first placement already contains
+		 * the complete visible row surface.
 		 */
-		final Rectangle overlayBounds = expectedContentBounds == null
-				? null
-				: new Rectangle(
-						expectedContentBounds.x,
-						expectedContentBounds.y,
-						effectiveWidth,
-						expectedContentBounds.height);
+		Rectangle finalContentBounds = visiblePmBounds();
+		if (finalContentBounds != null) {
+			applyClippingSafePlacement(pmHost, pmChat, target, finalContentBounds);
+			finalContentBounds = visiblePmBounds();
+		}
+
+		/*
+		 * The RuneLite drag surface should match the actual visible PM stack, not a
+		 * fixed or predicted height. Keep its width constrained to effectiveWidth so
+		 * an unbreakable native word cannot create an oversized horizontal handle.
+		 */
+		final Rectangle overlayBounds = surfaceBounds(finalContentBounds, effectiveWidth);
 		overlay.setNaturalBounds(overlayBounds);
 
 		return widthChanged
@@ -148,11 +197,89 @@ public final class PrivateChatLayout {
 				: Result.NO_CHANGE;
 	}
 
+	public void onScriptPostFired(ScriptPostFired event) {
+		if (event == null) {
+			return;
+		}
+
+		final int scriptId = event.getScriptId();
+		if (scriptId == TOPLEVEL_LAYOUT_SCRIPT
+				|| scriptId == CHAT_ON_CHAT_TRANSMIT_SCRIPT
+				|| scriptId == ScriptID.SPLITPM_CHANGED) {
+			nativeLayoutDirty = true;
+		}
+	}
+
+	public void reconcileAfterClientTick() {
+		if (!nativeLayoutDirty) {
+			return;
+		}
+
+		nativeLayoutDirty = false;
+
+		final Widget pmHost = activePmHost();
+		final Widget pmChat = client.getWidget(InterfaceID.PM_CHAT, 0);
+		final Rectangle contentBounds = visiblePmBounds();
+		final Rectangle overlayBounds = overlay.getBounds();
+		if (pmHost == null
+				|| pmChat == null
+				|| contentBounds == null
+				|| overlayBounds == null
+				|| overlayBounds.isEmpty()) {
+			return;
+		}
+
+		/*
+		 * ClientTick runs client scripts before PostClientTick. Top-level relayout
+		 * can therefore fire 1972 several times and expose multiple intermediate PM
+		 * geometries during one cycle. Only reconcile here, after that whole native
+		 * script batch has completed, so ChatXL never fights a transient 1972 state.
+		 *
+		 * Recover the rows' native vertical offset from the final geometry, then
+		 * reassert the existing movable-overlay placement before the next frame.
+		 */
+		final int nativeRowOffsetY = contentBounds.y
+				- pmHost.getRelativeY()
+				+ pmChat.getScrollY()
+				- nativeContentScrollY;
+		final int desiredContentY = overlayBounds.y + SURFACE_TOP_PADDING;
+		final int contentShiftY = Math.max(
+				0,
+				SURFACE_TOP_PADDING - nativeRowOffsetY);
+		final int targetHostY = desiredContentY
+				- nativeRowOffsetY
+				- contentShiftY;
+
+		/*
+		 * Horizontal PM rows do not use the vertical scroll compensation. Preserve
+		 * their final native offset while translating the host so the row union
+		 * remains aligned with the movable overlay.
+		 */
+		final int targetHostX = pmHost.getRelativeX()
+				+ overlayBounds.x
+				- contentBounds.x;
+
+		applyContentShift(pmChat, contentShiftY);
+		applyOffset(
+				pmHost,
+				targetHostX - pmHost.getOriginalX(),
+				targetHostY - pmHost.getOriginalY());
+
+		final Rectangle finalContentBounds = visiblePmBounds();
+		if (finalContentBounds != null) {
+			overlay.setNaturalBounds(surfaceBounds(
+					finalContentBounds,
+					Math.min(pmHost.getWidth(), finalContentBounds.width)));
+		}
+	}
+
 	public void restoreNative() {
+		restoreContentShift();
 		restoreForcedHost();
 		restoreSizedHost();
 		stableCollisionHeight = 0;
 		stableDesiredWidth = 0;
+		nativeLayoutDirty = false;
 	}
 
 	public void onConfigChanged(ConfigChanged event) {
@@ -308,7 +435,60 @@ public final class PrivateChatLayout {
 		final Rectangle overlayBounds = overlay.getBounds();
 		return new Offset(
 				overlayBounds.x - baseContentBounds.x,
-				overlayBounds.y - baseContentBounds.y);
+				overlayBounds.y + SURFACE_TOP_PADDING - baseContentBounds.y);
+	}
+
+	private void applyClippingSafePlacement(
+			Widget pmHost,
+			Widget pmChat,
+			Offset target,
+			Rectangle expectedContentBounds) {
+		if (pmChat == null || expectedContentBounds == null) {
+			restoreContentShift();
+			applyOffset(pmHost, target.x, target.y);
+			return;
+		}
+
+		final int requestedHostY = pmHost.getOriginalY() + target.y;
+
+		/*
+		 * Width remains owned by PM_CONTAINER and horizontal placement remains
+		 * unchanged. The currently-proven failure is vertical: the visible PM rows
+		 * can sit above both native clipping containers after the canvas shrinks.
+		 */
+		final int envelopeY = Math.min(
+				requestedHostY,
+				expectedContentBounds.y - SURFACE_TOP_PADDING);
+		final int contentShiftY = requestedHostY - envelopeY;
+
+		applyContentShift(pmChat, contentShiftY);
+		applyOffset(
+				pmHost,
+				target.x,
+				envelopeY - pmHost.getOriginalY());
+	}
+
+	private void applyContentShift(Widget pmChat, int shiftY) {
+		if (shiftedContent != null && shiftedContent != pmChat) {
+			restoreContentShift();
+		}
+
+		if (shiftY <= 0) {
+			restoreContentShift();
+			return;
+		}
+
+		if (shiftedContent != pmChat) {
+			shiftedContent = pmChat;
+			nativeContentScrollY = pmChat.getScrollY();
+		}
+
+		final int targetScrollY = nativeContentScrollY - shiftY;
+		if (pmChat.getScrollY() != targetScrollY) {
+			pmChat.setScrollY(targetScrollY);
+		}
+
+		appliedContentShiftY = shiftY;
 	}
 
 	private void applyOffset(Widget pmHost, int offsetX, int offsetY) {
@@ -394,6 +574,22 @@ public final class PrivateChatLayout {
 		nativeWidthCaptured = true;
 	}
 
+	private void restoreContentShift() {
+		if (shiftedContent == null) {
+			nativeContentScrollY = 0;
+			appliedContentShiftY = 0;
+			return;
+		}
+
+		if (shiftedContent.getScrollY() != nativeContentScrollY) {
+			shiftedContent.setScrollY(nativeContentScrollY);
+		}
+
+		shiftedContent = null;
+		nativeContentScrollY = 0;
+		appliedContentShiftY = 0;
+	}
+
 	private void restoreForcedHost() {
 		if (forcedHost == null) {
 			return;
@@ -472,14 +668,14 @@ public final class PrivateChatLayout {
 		 * externally-forced host has moved. Detached placement derives a native
 		 * content origin by subtracting the host offset, so mixing those stale
 		 * bounds with the live host offset compounds the translation every frame.
-		 * Build the current canvas position from resolved relative coordinates
-		 * instead so both sides of that calculation use the same geometry state.
+		 * Build the current canvas position from resolved relative coordinates and
+		 * parent scroll offsets instead so both sides use the same geometry state.
 		 */
 		int x = widget.getRelativeX();
 		int y = widget.getRelativeY();
 		for (Widget parent = widget.getParent(); parent != null; parent = parent.getParent()) {
-			x += parent.getRelativeX();
-			y += parent.getRelativeY();
+			x += parent.getRelativeX() - parent.getScrollX();
+			y += parent.getRelativeY() - parent.getScrollY();
 		}
 
 		return new Rectangle(x, y, widget.getWidth(), widget.getHeight());
@@ -495,6 +691,18 @@ public final class PrivateChatLayout {
 
 		first.add(second);
 		return first;
+	}
+
+	private static Rectangle surfaceBounds(Rectangle contentBounds, int width) {
+		if (contentBounds == null || contentBounds.isEmpty() || width <= 0) {
+			return null;
+		}
+
+		return new Rectangle(
+				contentBounds.x,
+				contentBounds.y - SURFACE_TOP_PADDING,
+				width,
+				contentBounds.height + SURFACE_TOP_PADDING + SURFACE_BOTTOM_PADDING);
 	}
 
 	private static Rectangle translated(Rectangle bounds, int x, int y) {

@@ -25,7 +25,7 @@ public final class UpdateMessages {
 			+ " Report any issues you find to Github.";
 	private static final String UNINSTALL_MESSAGE = "Thank you for using ChatXL!"
 			+ " Please submit a review/issue report on Github of your experience.";
-	private static final String UPDATE_MESSAGE = "Movable Split-PM host (hold Alt), Split-PM username alignment, improved chatbox collision handling, and updated hotkeys for hiding/showing chat buttons and clearing chat.";
+	private static final String UPDATE_MESSAGE = "Improved Split-PM positioning and resizing.";
 
 	private final Client client;
 	private final ClientThread clientThread;

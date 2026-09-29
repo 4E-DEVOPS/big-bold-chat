@@ -28,6 +28,7 @@ import net.runelite.api.events.CanvasSizeChanged;
 import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.MenuOptionClicked;
+import net.runelite.api.events.PostClientTick;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.events.WidgetClosed;
@@ -432,8 +433,19 @@ public class ChatXL extends Plugin {
 			chatRebuildCoordinator.onScriptPostFired(event);
 		}
 
+		if (privateChatLayout != null) {
+			privateChatLayout.onScriptPostFired(event);
+		}
+
 		debugManager.onFontScriptPostFired(event);
 		debugManager.reportPerformanceIfDue();
+	}
+
+	@Subscribe
+	public void onPostClientTick(PostClientTick event) {
+		if (privateChatLayout != null) {
+			privateChatLayout.reconcileAfterClientTick();
+		}
 	}
 
 	@Subscribe
