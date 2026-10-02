@@ -9,6 +9,7 @@ import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.ui.overlay.OverlayManager;
 
 /**
  * Owns optional Chat XL diagnostics and routes debug-only events and commands.
@@ -17,6 +18,7 @@ public final class DebugManager {
 	private final Client client;
 	private final Configurations config;
 	private final ChatMessageTests chatMessageTests;
+	private final OverlayManager overlayManager;
 	private final PerformanceMetrics performanceMetrics;
 	private final UpdateMessages updateMessages;
 
@@ -25,14 +27,12 @@ public final class DebugManager {
 	private SideContainerDiagnostics sideContainerDiagnostics;
 
 	@Inject
-	public DebugManager(
-			Client client,
-			Configurations config,
-			ChatMessageTests chatMessageTests,
-			UpdateMessages updateMessages) {
+	public DebugManager(Client client, Configurations config, ChatMessageTests chatMessageTests,
+			OverlayManager overlayManager, UpdateMessages updateMessages) {
 		this.client = client;
 		this.config = config;
 		this.chatMessageTests = chatMessageTests;
+		this.overlayManager = overlayManager;
 		this.updateMessages = updateMessages;
 		this.performanceMetrics = new PerformanceMetrics();
 	}
@@ -42,7 +42,7 @@ public final class DebugManager {
 		performanceMetrics.reset();
 		chatboxDiagnostics = new ChatboxDiagnostics(client);
 		fontDiagnostics = new FontDiagnostics(client, config);
-		sideContainerDiagnostics = new SideContainerDiagnostics(client, config);
+		sideContainerDiagnostics = new SideContainerDiagnostics(client, config, overlayManager);
 		return performanceMetrics;
 	}
 
@@ -106,7 +106,7 @@ public final class DebugManager {
 		updateMessages.finishShutdown(uninstalling);
 	}
 
-	public void onChatboxScriptPreFired(ScriptPreFired event) {
+	public void onChatboxPre(ScriptPreFired event) {
 		if (chatboxDiagnostics != null) {
 			chatboxDiagnostics.onScriptPreFired(event);
 		}
@@ -116,13 +116,13 @@ public final class DebugManager {
 		}
 	}
 
-	public void onFontScriptPreFired(ScriptPreFired event) {
+	public void onFontPre(ScriptPreFired event) {
 		if (fontDiagnostics != null) {
 			fontDiagnostics.onScriptPreFired(event);
 		}
 	}
 
-	public void onChatboxScriptPostFired(ScriptPostFired event) {
+	public void onChatboxPost(ScriptPostFired event) {
 		if (chatboxDiagnostics != null) {
 			chatboxDiagnostics.onScriptPostFired(event);
 		}
@@ -132,13 +132,13 @@ public final class DebugManager {
 		}
 	}
 
-	public void onFontScriptPostFired(ScriptPostFired event) {
+	public void onFontPost(ScriptPostFired event) {
 		if (fontDiagnostics != null) {
 			fontDiagnostics.onScriptPostFired(event);
 		}
 	}
 
-	public void reportPerformanceIfDue() {
+	public void reportPerformance() {
 		performanceMetrics.reportIfDue();
 	}
 }
