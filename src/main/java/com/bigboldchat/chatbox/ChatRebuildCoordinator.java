@@ -144,7 +144,7 @@ public final class ChatRebuildCoordinator {
 
 	public void onScriptPostFired(ScriptPostFired event) {
 		if (!active || event == null || event.getScriptId() != ChatboxResizeService.CHAT_VISIBILITY
-				|| resizeService == null || resizeService.isChatViewHidden()) {
+				|| resizeService == null || resizeService.isChatHidden()) {
 			return;
 		}
 
@@ -400,7 +400,7 @@ public final class ChatRebuildCoordinator {
 	}
 
 	private synchronized void rememberVisibilityRefresh(PerformanceMetrics.RefreshReason reason) {
-		if (resizeService == null || !resizeService.isChatViewHidden()) {
+		if (resizeService == null || !resizeService.isChatHidden()) {
 			visibilityRefreshPending = false;
 			visibilityRefreshReason = null;
 			return;
