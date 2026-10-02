@@ -80,6 +80,8 @@ public final class ChatboxResizeService {
 
 	private boolean resizedLayoutApplied;
 	private boolean manualSuppressionActive;
+	private boolean nativeRevealActive;
+	private boolean nativeRefreshActive;
 	private boolean ownsHiddenView;
 	private boolean controlClickPending;
 	private boolean chatboxButtonsHidden;
@@ -170,6 +172,7 @@ public final class ChatboxResizeService {
 		 */
 		geometryState = null;
 		chatboxBoundsTracker.reset();
+		nativeRevealActive = false;
 		clearCanvasResize();
 
 		if (gameState == GameState.LOGGED_IN) {
@@ -306,6 +309,7 @@ public final class ChatboxResizeService {
 
 		controlClickPending = false;
 		manualSuppressionActive = false;
+		nativeRevealActive = false;
 		ownsHiddenView = false;
 
 		liveDepth = 0;
@@ -402,6 +406,10 @@ public final class ChatboxResizeService {
 
 		final int scriptId = event.getScriptId();
 
+		if (scriptId == ScriptID.MESSAGE_LAYER_OPEN || scriptId == CHAT_VISIBILITY && !controlClickPending && !nativeRefreshActive) {
+			beginNativeReveal();
+		}
+
 		/*
 		 * Clear pending plugin refreshes before native chat reconstruction.
 		 */
@@ -457,9 +465,20 @@ public final class ChatboxResizeService {
 
 		final int scriptId = event.getScriptId();
 		if (scriptId == CHAT_VISIBILITY) {
+			final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+			if (nativeRevealActive && (chatArea == null || chatArea.isSelfHidden())) {
+				nativeRevealActive = false;
+			}
+
 			rememberVisibleView();
-			syncChatVisibility();
+			if (!nativeRevealActive) {
+				syncChatVisibility();
+			}
 			recordMutations(controlsLayout.syncHidden(chatboxButtonsHidden));
+		}
+
+		if (scriptId == ScriptID.MESSAGE_LAYER_CLOSE) {
+			finishNativeReveal();
 		}
 
 		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE && sideLayoutDepth > 0 && --sideLayoutDepth == 0) {
@@ -716,7 +735,7 @@ public final class ChatboxResizeService {
 		recordRevalidates(ChatboxWidgets.revalidateChildren(universe));
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * SCROLL BASELINE
 	 * ================================================================
@@ -932,7 +951,7 @@ public final class ChatboxResizeService {
 		}
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * PRESENTATION
 	 * ================================================================
@@ -945,6 +964,10 @@ public final class ChatboxResizeService {
 		 */
 		if (controlClickPending) {
 			syncChatVisibility();
+			return;
+		}
+
+		if (nativeRevealActive) {
 			return;
 		}
 
@@ -978,12 +1001,14 @@ public final class ChatboxResizeService {
 
 		rememberVisibleView();
 
+		nativeRevealActive = false;
 		manualSuppressionActive = true;
 		hideNativeView();
 	}
 
 	public void showChatPresentation() {
 		manualSuppressionActive = false;
+		nativeRevealActive = false;
 		if (!isResizableLayout(getLayout())) {
 			ownsHiddenView = false;
 			return;
@@ -1013,6 +1038,7 @@ public final class ChatboxResizeService {
 		if (!isResizableLayout(getLayout())) {
 			controlClickPending = false;
 			manualSuppressionActive = false;
+			nativeRevealActive = false;
 			ownsHiddenView = false;
 			return;
 		}
@@ -1023,6 +1049,7 @@ public final class ChatboxResizeService {
 
 		controlClickPending = false;
 		manualSuppressionActive = false;
+		nativeRevealActive = false;
 		ownsHiddenView = false;
 
 		if (getLayout() == ChatboxLayout.RESIZABLE_MODERN) {
@@ -1052,6 +1079,26 @@ public final class ChatboxResizeService {
 		}
 
 		return -1;
+	}
+
+	private void beginNativeReveal() {
+		if (!manualSuppressionActive) {
+			return;
+		}
+
+		nativeRevealActive = true;
+		ownsHiddenView = false;
+	}
+
+	private void finishNativeReveal() {
+		if (!nativeRevealActive) {
+			return;
+		}
+
+		nativeRevealActive = false;
+		if (manualSuppressionActive) {
+			hideNativeView();
+		}
 	}
 
 	private void hideNativeView() {
@@ -1150,7 +1197,12 @@ public final class ChatboxResizeService {
 			performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.OTHER);
 		}
 
-		client.refreshChat();
+		nativeRefreshActive = true;
+		try {
+			client.refreshChat();
+		} finally {
+			nativeRefreshActive = false;
+		}
 
 		syncChatVisibility();
 		syncStoredGraphic(chatView != CHAT_VIEW_HIDDEN);
@@ -1173,12 +1225,13 @@ public final class ChatboxResizeService {
 	private void resetChatPresentation() {
 		controlClickPending = false;
 		manualSuppressionActive = false;
+		nativeRevealActive = false;
 
 		restoreOwnedView();
 		syncChatVisibility();
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * RESTORATION
 	 * ================================================================
@@ -1295,7 +1348,7 @@ public final class ChatboxResizeService {
 		recordMutation();
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * PERFORMANCE HELPERS
 	 * ================================================================
