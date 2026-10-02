@@ -2,6 +2,7 @@ package com.bigboldchat.chatbox;
 
 import java.awt.Rectangle;
 
+import com.bigboldchat.chat.DialoguePrompts;
 import com.bigboldchat.debug.PerformanceMetrics;
 import com.bigboldchat.layout.ChatboxBounds;
 import com.bigboldchat.layout.InterfaceBounds;
@@ -73,6 +74,7 @@ public final class ChatboxResizeService {
 	private final Client client;
 	private final PerformanceMetrics performanceMetrics;
 	private final ChatboxControlsLayout controlsLayout;
+	private final DialoguePrompts dialoguePrompts;
 	private final ChatboxBackgroundService backgroundService;
 	private final SideContainerLayout sideContainerLayout;
 	private final ChatboxPlacement chatboxPlacement;
@@ -119,6 +121,7 @@ public final class ChatboxResizeService {
 		this.client = client;
 		this.performanceMetrics = performanceMetrics;
 		this.controlsLayout = new ChatboxControlsLayout(client);
+		this.dialoguePrompts = new DialoguePrompts(client);
 		this.backgroundService = new ChatboxBackgroundService(client);
 		this.sideContainerLayout = new SideContainerLayout(client, overlayManager);
 		this.chatboxPlacement = new ChatboxPlacement(client, configManager, overlayManager);
@@ -172,6 +175,7 @@ public final class ChatboxResizeService {
 		 */
 		geometryState = null;
 		chatboxBoundsTracker.reset();
+		resetDialoguePrompts();
 		nativeRevealActive = false;
 		clearCanvasResize();
 
@@ -305,6 +309,7 @@ public final class ChatboxResizeService {
 
 		geometryState = null;
 		chatboxBoundsTracker.reset();
+		resetDialoguePrompts();
 		sideContainerLayout.reset();
 
 		controlClickPending = false;
@@ -499,13 +504,17 @@ public final class ChatboxResizeService {
 				recordRevalidates(sideResult.getRevalidates());
 			}
 
+			syncDialoguePrompts();
 			return ResizeResult.NOT_APPLIED;
 		}
 
 		if (scriptId == ScriptID.TOPLEVEL_REDRAW || scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE || scriptId == ScriptID.MESSAGE_LAYER_OPEN) {
-			return applySize(width, height);
+			final ResizeResult result = applySize(width, height);
+			syncDialoguePrompts();
+			return result;
 		}
 
+		syncDialoguePrompts();
 		return ResizeResult.NOT_APPLIED;
 	}
 
@@ -574,6 +583,9 @@ public final class ChatboxResizeService {
 
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
+		if (liveDepth == 0) {
+			syncDialoguePrompts(effectiveWidth);
+		}
 
 		syncChatPresentation();
 		resizedLayoutApplied = true;
@@ -680,6 +692,9 @@ public final class ChatboxResizeService {
 
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
+		if (liveDepth == 0) {
+			syncDialoguePrompts(effectiveWidth);
+		}
 
 		syncChatPresentation();
 
@@ -949,6 +964,24 @@ public final class ChatboxResizeService {
 			child.revalidate();
 			recordRevalidate();
 		}
+	}
+
+	private void syncDialoguePrompts() {
+		if (geometryState != null) {
+			syncDialoguePrompts(geometryState.effectiveBounds.width);
+		}
+	}
+
+	private void syncDialoguePrompts(int effectiveWidth) {
+		final DialoguePrompts.Result result = dialoguePrompts.apply(effectiveWidth);
+		recordMutations(result.getMutations());
+		recordRevalidates(result.getRevalidates());
+	}
+
+	private void resetDialoguePrompts() {
+		final DialoguePrompts.Result result = dialoguePrompts.reset();
+		recordMutations(result.getMutations());
+		recordRevalidates(result.getRevalidates());
 	}
 
 	/**
@@ -1251,6 +1284,7 @@ public final class ChatboxResizeService {
 		resizedLayoutApplied = false;
 
 		resetChatPresentation();
+		resetDialoguePrompts();
 		recordMutations(controlsLayout.restoreHidden());
 
 		restoreNativeUniverse(universe);
@@ -1284,6 +1318,7 @@ public final class ChatboxResizeService {
 		chatboxBoundsTracker.reset();
 		chatboxPlacement.reset();
 		resetChatPresentation();
+		resetDialoguePrompts();
 		recordMutations(controlsLayout.restoreHidden());
 
 		final boolean wasApplied = resizedLayoutApplied;
