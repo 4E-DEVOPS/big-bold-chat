@@ -1,10 +1,14 @@
 package com.bigboldchat.chatbox;
 
+import java.awt.Rectangle;
+
 import com.bigboldchat.debug.PerformanceMetrics;
 import com.bigboldchat.layout.ChatboxBounds;
+import com.bigboldchat.layout.InterfaceBounds;
 import com.bigboldchat.layout.SideContainerLayout;
 
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
 import net.runelite.api.ScriptID;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
@@ -13,6 +17,9 @@ import net.runelite.api.gameval.SpriteID;
 import net.runelite.api.gameval.VarClientID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetSizeMode;
+import net.runelite.client.config.ConfigManager;
+import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.ui.overlay.OverlayManager;
 
 /**
  * Owns resizable-layout chatbox geometry and presentation.
@@ -34,6 +41,14 @@ public final class ChatboxResizeService {
 	 */
 	private static final int CHAT_ONCHATTRANSMIT = 663;
 	private static final int TOPLEVEL_RELAYOUT = 1972;
+	private static final String RUNELITE_CONFIG_GROUP = "runelite";
+	private static final String INVENTORY_LOCATION_KEY = "RESIZABLE_VIEWPORT_BOTTOM_LINE_INVENTORY_PARENT_preferredLocation";
+
+	/*
+	 * Requires stable post-login placement before persistent collision tracking begins.
+	 */
+	private static final int LOGIN_STABLE_SAMPLES = 3;
+	private static final int RESIZE_STABLE_SAMPLES = 2;
 
 	private static final int[] CHAT_CONTROL_IDS = {
 			InterfaceID.Chatbox.CHAT_ALL,
@@ -60,53 +75,210 @@ public final class ChatboxResizeService {
 	private final ChatboxControlsLayout controlsLayout;
 	private final ChatboxBackgroundService backgroundService;
 	private final SideContainerLayout sideContainerLayout;
+	private final ChatboxPlacement chatboxPlacement;
+	private final ChatboxBounds.Tracker chatboxBoundsTracker;
 
 	private boolean resizedLayoutApplied;
-	private boolean foregroundSuppressionActive;
-	private boolean foregroundSuppressionOverridden;
 	private boolean manualSuppressionActive;
-	private boolean suppressionOwnsHiddenView;
-	private boolean chatControlClickPending;
+	private boolean ownsHiddenView;
+	private boolean controlClickPending;
 	private boolean chatboxButtonsHidden;
 	private boolean liveWidthChanged;
 	private boolean liveHeightChanged;
-	private boolean liveWidthRefreshPending;
-	private boolean liveHeightRefreshPending;
+	private boolean widthRefreshPending;
+	private boolean heightRefreshPending;
+	private boolean loginGeometryPending;
+	private boolean canvasResizePending;
 
 	private int liveDepth;
-	private int lastVisibleChatView = CHAT_VIEW_ALL;
-	private int lastVisibleChatGraphic = -1;
+	private int sideLayoutDepth;
+	private int loginStableSamples;
+	private int resizeStableSamples;
+	private int observedCanvasWidth = -1;
+	private int observedCanvasHeight = -1;
+	private long loginGeometryFingerprint = Long.MIN_VALUE;
+
+	private Rectangle loginDesiredBounds;
+	private int lastChatView = CHAT_VIEW_ALL;
+	private int lastChatGraphic = -1;
 
 	private ScrollBaseline liveBaseline;
+	private GeometryState geometryState;
 
 	public ChatboxResizeService(Client client, PerformanceMetrics performanceMetrics) {
+		this(client, null, null, performanceMetrics);
+	}
+
+	public ChatboxResizeService(Client client, ConfigManager configManager, PerformanceMetrics performanceMetrics) {
+		this(client, configManager, null, performanceMetrics);
+	}
+
+	public ChatboxResizeService(Client client, ConfigManager configManager, OverlayManager overlayManager, PerformanceMetrics performanceMetrics) {
 		this.client = client;
 		this.performanceMetrics = performanceMetrics;
 		this.controlsLayout = new ChatboxControlsLayout(client);
 		this.backgroundService = new ChatboxBackgroundService(client);
-		this.sideContainerLayout = new SideContainerLayout(client);
+		this.sideContainerLayout = new SideContainerLayout(client, overlayManager);
+		this.chatboxPlacement = new ChatboxPlacement(client, configManager, overlayManager);
+		this.chatboxBoundsTracker = new ChatboxBounds.Tracker();
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * LAYOUT
 	 * ================================================================
 	 */
 	ChatboxLayout getLayout() {
-		final int topLevel = client.getTopLevelInterfaceId();
-		if (topLevel == InterfaceID.TOPLEVEL) {
-			return ChatboxLayout.FIXED;
+		/*
+		 * Classify gameplay from the mounted GAMEFRAME; the welcome screen remains UNKNOWN.
+		 */
+		if (isVisible(InterfaceID.WelcomeScreen.UNIVERSE)) {
+			return ChatboxLayout.UNKNOWN;
 		}
 
-		if (topLevel == InterfaceID.TOPLEVEL_OSRS_STRETCH) {
+		if (isVisible(InterfaceID.ToplevelOsrsStretch.GAMEFRAME)) {
 			return ChatboxLayout.RESIZABLE_CLASSIC;
 		}
 
-		if (topLevel == InterfaceID.TOPLEVEL_PRE_EOC) {
+		if (isVisible(InterfaceID.ToplevelPreEoc.GAMEFRAME)) {
 			return ChatboxLayout.RESIZABLE_MODERN;
 		}
 
+		if (isVisible(InterfaceID.Toplevel.GAMEFRAME)) {
+			return ChatboxLayout.FIXED;
+		}
+
 		return ChatboxLayout.UNKNOWN;
+	}
+
+	private boolean isVisible(int widgetId) {
+		final Widget widget = client.getWidget(widgetId);
+		return widget != null && !widget.isHidden();
+	}
+
+	private static boolean isResizableLayout(ChatboxLayout layout) {
+		return layout == ChatboxLayout.RESIZABLE_CLASSIC || layout == ChatboxLayout.RESIZABLE_MODERN;
+	}
+
+	public void onGameStateChanged(GameState gameState) {
+		if (gameState == null) {
+			return;
+		}
+
+		/*
+		 * Clear transient collision and side-row state while preserving saved chatbox placement.
+		 */
+		geometryState = null;
+		chatboxBoundsTracker.reset();
+		clearCanvasResize();
+
+		if (gameState == GameState.LOGGED_IN) {
+			sideContainerLayout.resumeForGameState();
+
+			beginLoginStabilization();
+		} else {
+			cancelLoginStabilization();
+			sideContainerLayout.suspendForGameState();
+		}
+	}
+
+	private void beginLoginStabilization() {
+		loginGeometryPending = true;
+		resetLoginSamples();
+	}
+
+	private void cancelLoginStabilization() {
+		loginGeometryPending = false;
+		resetLoginSamples();
+	}
+
+	private void resetLoginSamples() {
+		loginStableSamples = 0;
+		loginGeometryFingerprint = Long.MIN_VALUE;
+		loginDesiredBounds = null;
+	}
+
+	private boolean isUsablePlacement(Rectangle desired) {
+		if (desired == null || desired.isEmpty()) {
+			return false;
+		}
+
+		final int canvasWidth = Math.max(0, client.getCanvasWidth());
+		final int canvasHeight = Math.max(0, client.getCanvasHeight());
+		if (canvasWidth <= 0 || canvasHeight <= 0) {
+			return false;
+		}
+
+		/*
+		 * A settled host must fit each canvas axis when its desired size fits that axis.
+		 */
+		final boolean horizontalReady = desired.width > canvasWidth || desired.x >= 0 && desired.x + desired.width <= canvasWidth;
+		final boolean verticalReady = desired.height > canvasHeight || desired.y >= 0 && desired.y + desired.height <= canvasHeight;
+
+		return horizontalReady && verticalReady;
+	}
+
+	/*
+	 * Waits for stable post-login placement before enabling persistent collision tracking.
+	 */
+	public void reconcilePostLoginGeometry(int width, int height) {
+		if (!loginGeometryPending || client.getGameState() != GameState.LOGGED_IN) {
+			return;
+		}
+
+		final ChatboxLayout layout = getLayout();
+		if (layout == ChatboxLayout.UNKNOWN) {
+			resetLoginSamples();
+			return;
+		}
+
+		if (layout == ChatboxLayout.FIXED) {
+			cancelLoginStabilization();
+			chatboxBoundsTracker.reset();
+			return;
+		}
+
+		if (!isResizableLayout(layout)) {
+			resetLoginSamples();
+			return;
+		}
+
+		final ResizeResult provisional = applySize(width, height);
+		if (!provisional.isApplied() || geometryState == null) {
+			resetLoginSamples();
+			return;
+		}
+
+		final Rectangle desired = geometryState.desiredBounds;
+		if (!isUsablePlacement(desired)) {
+			resetLoginSamples();
+			return;
+		}
+
+		final long fingerprint = InterfaceBounds.geometryFingerprint(client);
+		if (fingerprint == loginGeometryFingerprint && desired.equals(loginDesiredBounds)) {
+			loginStableSamples++;
+		} else {
+			loginGeometryFingerprint = fingerprint;
+			loginDesiredBounds = new Rectangle(desired);
+			loginStableSamples = 1;
+		}
+
+		if (loginStableSamples < LOGIN_STABLE_SAMPLES) {
+			return;
+		}
+
+		/*
+		 * Restart persistent collision tracking from the settled geometry.
+		 */
+		cancelLoginStabilization();
+		chatboxBoundsTracker.reset();
+
+		final ResizeResult settled = applySize(width, height);
+		if (settled.isApplied()) {
+			widthRefreshPending |= settled.isWidthChanged();
+			heightRefreshPending |= settled.isHeightChanged();
+		}
 	}
 
 	private Widget getSlot(ChatboxLayout layout) {
@@ -115,14 +287,104 @@ public final class ChatboxResizeService {
 				return client.getWidget(InterfaceID.ToplevelOsrsStretch.CHAT_CONTAINER);
 			case RESIZABLE_MODERN:
 				return client.getWidget(InterfaceID.ToplevelPreEoc.CHAT_CONTAINER);
-			case FIXED:
-				return client.getWidget(InterfaceID.Toplevel.CHAT_CONTAINER);
 			default:
 				return null;
 		}
 	}
 
+	private void handleInactiveLayout(ChatboxLayout layout) {
+		/*
+		 * Fixed restores ChatXL-owned shared geometry; UNKNOWN clears transient state only.
+		 */
+		if (layout == ChatboxLayout.FIXED && resizedLayoutApplied) {
+			restoreSharedGeometry();
+		}
+
+		geometryState = null;
+		chatboxBoundsTracker.reset();
+		sideContainerLayout.reset();
+
+		controlClickPending = false;
+		manualSuppressionActive = false;
+		ownsHiddenView = false;
+
+		liveDepth = 0;
+		sideLayoutDepth = 0;
+		liveBaseline = null;
+		liveWidthChanged = false;
+		liveHeightChanged = false;
+		widthRefreshPending = false;
+		heightRefreshPending = false;
+		clearCanvasResize();
+	}
+
+	private void clearCanvasResize() {
+		canvasResizePending = false;
+		resizeStableSamples = 0;
+		observedCanvasWidth = -1;
+		observedCanvasHeight = -1;
+		sideContainerLayout.endCanvasResize();
+	}
+
 	/*
+	 * Begins the Modern canvas-resize hold and translates captured side-row geometry.
+	 */
+	public void onCanvasSizeChanged() {
+		if (getLayout() != ChatboxLayout.RESIZABLE_MODERN) {
+			clearCanvasResize();
+			return;
+		}
+
+		canvasResizePending = true;
+		resizeStableSamples = 0;
+		observedCanvasWidth = Math.max(0, client.getCanvasWidth());
+		observedCanvasHeight = Math.max(0, client.getCanvasHeight());
+
+		final SideContainerLayout.Result sideResult = sideContainerLayout.onCanvasSizeChanged();
+		recordMutations(sideResult.getMutations());
+		recordRevalidates(sideResult.getRevalidates());
+	}
+
+	/*
+	 * Identifies RuneLite's movable inventory-overlay reset.
+	 */
+	public boolean isInventoryOverlayReset(ConfigChanged event) {
+		return event != null
+				&& RUNELITE_CONFIG_GROUP.equals(event.getGroup())
+				&& INVENTORY_LOCATION_KEY.equals(event.getKey())
+				&& event.getNewValue() == null;
+	}
+
+	/*
+	 * Preserves the owned inventory overlay during its reset transaction.
+	 */
+	public void guardInventoryOverlayReset() {
+		sideContainerLayout.guardInventoryOverlayReset();
+	}
+
+	/*
+	 * Reconciles an inventory-overlay reset with the owned Modern row layout.
+	 */
+	public void reconcileInventoryOverlayReset(int width, int height) {
+		if (getLayout() != ChatboxLayout.RESIZABLE_MODERN) {
+			return;
+		}
+
+		final SideContainerLayout.Result sideResult = sideContainerLayout.reconcileInventoryReset();
+		recordMutations(sideResult.getMutations());
+		recordRevalidates(sideResult.getRevalidates());
+		if (sideResult.getMutations() <= 0 && sideResult.getRevalidates() <= 0) {
+			return;
+		}
+
+		final ResizeResult result = applySizeInternal(width, height, false, sideResult.getInterfaceOverrides());
+		if (result.isApplied()) {
+			widthRefreshPending |= result.isWidthChanged();
+			heightRefreshPending |= result.isHeightChanged();
+		}
+	}
+
+	/**
 	 * ================================================================
 	 * SCRIPT LIFECYCLE
 	 * ================================================================
@@ -132,31 +394,38 @@ public final class ChatboxResizeService {
 			return ResizeResult.NOT_APPLIED;
 		}
 
+		final ChatboxLayout layout = getLayout();
+		if (!isResizableLayout(layout)) {
+			handleInactiveLayout(layout);
+			return ResizeResult.NOT_APPLIED;
+		}
+
 		final int scriptId = event.getScriptId();
 
 		/*
-		 * Discard any queued plugin refresh so a native
-		 * rebuild never causes a duplicate refresh.
+		 * Clear pending plugin refreshes before native chat reconstruction.
 		 */
 		if (scriptId == CHAT_ONCHATTRANSMIT || scriptId == ScriptID.SPLITPM_CHANGED) {
-			liveWidthRefreshPending = false;
-			liveHeightRefreshPending = false;
+			widthRefreshPending = false;
+			heightRefreshPending = false;
 		}
 
-		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE) {
-			sideContainerLayout.beginNativeLayout();
+		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE && !controlClickPending) {
+			if (sideLayoutDepth++ == 0) {
+				sideContainerLayout.beginNativeLayout();
+			}
 		}
 
 		if (scriptId == TOPLEVEL_RELAYOUT) {
 			beginLiveScroll();
 
-			final ResizeResult result = applySize(width, height);
+			/*
+			 * Chat-control relayout uses committed geometry; other relayouts resolve live geometry.
+			 */
+			final ResizeResult result = controlClickPending
+					? applyCommittedGeometry(width, height)
+					: applySize(width, height);
 			if (result.isApplied()) {
-				/*
-				 * Native relayout can fire repeatedly while an interface is moving. Track
-				 * only real geometry changes so one render-boundary refresh can rebuild
-				 * retained rows without feeding geometry back through the commit queue.
-				 */
 				liveWidthChanged |= result.isWidthChanged();
 				liveHeightChanged |= result.isHeightChanged();
 			}
@@ -180,51 +449,137 @@ public final class ChatboxResizeService {
 			return ResizeResult.NOT_APPLIED;
 		}
 
+		final ChatboxLayout layout = getLayout();
+		if (!isResizableLayout(layout)) {
+			handleInactiveLayout(layout);
+			return ResizeResult.NOT_APPLIED;
+		}
+
 		final int scriptId = event.getScriptId();
 		if (scriptId == CHAT_VISIBILITY) {
-			rememberVisibleChatView();
-			syncChatAreaVisibility();
+			rememberVisibleView();
+			syncChatVisibility();
 			recordMutations(controlsLayout.syncHidden(chatboxButtonsHidden));
 		}
 
-		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE) {
-			sideContainerLayout.endNativeLayout();
+		if (scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE && sideLayoutDepth > 0 && --sideLayoutDepth == 0) {
+			final SideContainerLayout.Result sideResult = sideContainerLayout.endNativeLayout();
+			recordMutations(sideResult.getMutations());
+			recordRevalidates(sideResult.getRevalidates());
 		}
 
 		if (scriptId == TOPLEVEL_RELAYOUT) {
 			finishLiveScroll();
+
+			/*
+			 * Reapply existing side-row ownership without reevaluating row policy.
+			 */
+			if (layout == ChatboxLayout.RESIZABLE_MODERN) {
+				final SideContainerLayout.Result sideResult = sideContainerLayout.reassertOwnedLayout();
+				recordMutations(sideResult.getMutations());
+				recordRevalidates(sideResult.getRevalidates());
+			}
+
 			return ResizeResult.NOT_APPLIED;
 		}
 
-		if (scriptId == ScriptID.TOPLEVEL_REDRAW
-				|| scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE
-				|| scriptId == ScriptID.MESSAGE_LAYER_OPEN) {
+		if (scriptId == ScriptID.TOPLEVEL_REDRAW || scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE || scriptId == ScriptID.MESSAGE_LAYER_OPEN) {
 			return applySize(width, height);
 		}
 
 		return ResizeResult.NOT_APPLIED;
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * CHATBOX GEOMETRY
 	 * ================================================================
 	 */
-	public ResizeResult applySize(int width, int height) {
+	private ResizeResult applyCommittedGeometry(int width, int height) {
+		/*
+		 * Use normal solving when committed geometry is unavailable, stale, or still stabilizing.
+		 */
+		final GeometryState committed = geometryState;
+		if (committed == null || committed.configuredWidth != width || committed.configuredHeight != height || loginGeometryPending) {
+			return applySize(width, height);
+		}
+
 		final long started = performanceMetrics != null && performanceMetrics.isEnabled()
 				? System.nanoTime()
 				: 0L;
 		final ChatboxLayout layout = getLayout();
-		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
-
-		recordMutations(controlsLayout.syncHidden(chatboxButtonsHidden));
-
-		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN) {
-			syncChatPresentation(false);
-			sideContainerLayout.reset();
-			resizedLayoutApplied = false;
+		if (!isResizableLayout(layout)) {
+			handleInactiveLayout(layout);
 			return ResizeResult.NOT_APPLIED;
 		}
+
+		final Widget slot = getSlot(layout);
+		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
+		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+		if (slot == null || universe == null || chatArea == null) {
+			recordMissingWidgets();
+			return ResizeResult.NOT_APPLIED;
+		}
+
+		final Widget parent = universe.getParent();
+		if (parent == null || parent.getId() != slot.getId()) {
+			return ResizeResult.NOT_APPLIED;
+		}
+
+		final Rectangle desiredBounds = committed.desiredBounds;
+
+		/*
+		 * Apply committed chatbox geometry without reevaluating side-row policy.
+		 */
+		final Rectangle effectiveBounds = committed.effectiveBounds;
+		final int hostWidth = desiredBounds.width;
+		final int hostHeight = desiredBounds.height;
+		final int effectiveWidth = effectiveBounds.width;
+		final int effectiveHeight = effectiveBounds.height;
+		final int effectiveX = Math.max(0, effectiveBounds.x - desiredBounds.x);
+		final int effectiveY = Math.max(0, effectiveBounds.y - desiredBounds.y);
+		final int effectiveBodyHeight = ChatboxGeometry.bodyHeight(effectiveHeight, chatboxButtonsHidden);
+		final boolean hostChanged = slot.getWidth() != hostWidth || slot.getHeight() != hostHeight;
+		final boolean positionChanged = universe.getRelativeX() != effectiveX || universe.getRelativeY() != effectiveY;
+		final boolean widthChanged = universe.getWidth() != effectiveWidth || chatArea.getWidth() != effectiveWidth;
+		final boolean heightChanged = universe.getHeight() != effectiveHeight || chatArea.getHeight() != effectiveBodyHeight;
+		final boolean controlsChanged = !controlsLayout.matches(effectiveWidth);
+
+		if (hostChanged || positionChanged || widthChanged || heightChanged || controlsChanged) {
+			applyGeometry(slot, universe, chatArea, hostWidth, hostHeight, effectiveX, effectiveY,
+					effectiveWidth, effectiveHeight, effectiveBodyHeight, controlsChanged);
+		}
+
+		final ChatboxBackgroundService.Result backgroundResult =
+				backgroundService.apply(chatArea, effectiveWidth, effectiveBodyHeight);
+
+		recordMutations(backgroundResult.getMutations());
+		recordRevalidates(backgroundResult.getRevalidates());
+
+		syncChatPresentation();
+		resizedLayoutApplied = true;
+
+		recordApply(started, widthChanged, heightChanged);
+
+		return new ResizeResult(true, widthChanged, heightChanged);
+	}
+
+	public ResizeResult applySize(int width, int height) {
+		return applySizeInternal(width, height, true, null);
+	}
+
+	private ResizeResult applySizeInternal(int width, int height, boolean evaluateSideLayout, InterfaceBounds.Overrides suppliedOverrides) {
+		final long started = performanceMetrics != null && performanceMetrics.isEnabled()
+				? System.nanoTime()
+				: 0L;
+		final ChatboxLayout layout = getLayout();
+		if (!isResizableLayout(layout)) {
+			handleInactiveLayout(layout);
+			return ResizeResult.NOT_APPLIED;
+		}
+
+		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+		recordMutations(controlsLayout.syncHidden(chatboxButtonsHidden));
 
 		final Widget slot = getSlot(layout);
 		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
@@ -234,38 +589,71 @@ public final class ChatboxResizeService {
 		}
 
 		/*
-		 * Ignore transient layout swaps before UNIVERSE mounts under the active chat container.
+		 * Require UNIVERSE to be mounted under the active chat container.
 		 */
 		final Widget parent = universe.getParent();
 		if (parent == null || parent.getId() != slot.getId()) {
 			return ResizeResult.NOT_APPLIED;
 		}
 
-		if (layout == ChatboxLayout.RESIZABLE_MODERN) {
+		final ChatboxPlacement.State placement = chatboxPlacement.capture(slot, width, height);
+		if (placement.requiresHostReposition()) {
+			/*
+			 * Correct a stale host remount offset once before collision solving.
+			 */
+			slot.setForcedPosition(
+					slot.getRelativeX() + placement.getHostDeltaX(),
+					slot.getRelativeY() + placement.getHostDeltaY());
+			recordMutation();
+
+			slot.revalidate();
+			recordRevalidate();
+		}
+
+		InterfaceBounds.Overrides interfaceOverrides = suppliedOverrides;
+		if (layout == ChatboxLayout.RESIZABLE_MODERN && evaluateSideLayout) {
+			/*
+			 * Use SideContainerLayout targets for same-pass chatbox collision solving.
+			 */
 			final SideContainerLayout.Result sideResult = sideContainerLayout.apply(slot, width, height);
 
 			recordMutations(sideResult.getMutations());
 			recordRevalidates(sideResult.getRevalidates());
-		} else {
+			interfaceOverrides = sideResult.getInterfaceOverrides();
+		} else if (layout != ChatboxLayout.RESIZABLE_MODERN) {
 			sideContainerLayout.reset();
 		}
 
 		/*
-		 * Clamp live geometry without changing configured dimensions.
+		 * Use the full desired rectangle until post-login geometry stabilizes.
 		 */
-		final ChatboxBounds.Result effective = ChatboxBounds.resolve(client, slot, width, height, chatboxButtonsHidden);
-		final int effectiveWidth = effective.getWidth();
-		final int effectiveHeight = effective.getHeight();
+		final Rectangle desiredBounds = placement.getDesiredBounds();
+		final Rectangle effectiveBounds;
+		if (loginGeometryPending) {
+			effectiveBounds = new Rectangle(desiredBounds);
+			geometryState = new GeometryState(width, height, desiredBounds, effectiveBounds);
+		} else {
+			final ChatboxBounds.Result effective = ChatboxBounds.resolve(
+					client, placement, chatboxButtonsHidden, chatboxBoundsTracker, interfaceOverrides);
+			effectiveBounds = effective.getEffectiveBounds();
+			geometryState = new GeometryState(width, height, effective.getDesiredBounds(), effectiveBounds);
+		}
+		final int hostWidth = desiredBounds.width;
+		final int hostHeight = desiredBounds.height;
+		final int effectiveWidth = effectiveBounds.width;
+		final int effectiveHeight = effectiveBounds.height;
+		final int effectiveX = Math.max(0, effectiveBounds.x - desiredBounds.x);
+		final int effectiveY = Math.max(0, effectiveBounds.y - desiredBounds.y);
 		final int effectiveBodyHeight = ChatboxGeometry.bodyHeight(effectiveHeight, chatboxButtonsHidden);
-		final boolean widthChanged = slot.getWidth() != effectiveWidth
-				|| universe.getWidth() != effectiveWidth || chatArea.getWidth() != effectiveWidth;
-		final boolean heightChanged = slot.getHeight() != effectiveHeight
-				|| universe.getHeight() != effectiveHeight || chatArea.getHeight() != effectiveBodyHeight;
+		final boolean hostChanged = slot.getWidth() != hostWidth || slot.getHeight() != hostHeight;
+		final boolean positionChanged = universe.getRelativeX() != effectiveX || universe.getRelativeY() != effectiveY;
+		final boolean widthChanged = universe.getWidth() != effectiveWidth || chatArea.getWidth() != effectiveWidth;
+		final boolean heightChanged = universe.getHeight() != effectiveHeight || chatArea.getHeight() != effectiveBodyHeight;
 		final boolean controlsChanged = !controlsLayout.matches(effectiveWidth);
 
-		if (widthChanged || heightChanged || controlsChanged) {
-			applyGeometry(
-					slot, universe, chatArea, effectiveWidth, effectiveHeight, effectiveBodyHeight, controlsChanged);
+		if (hostChanged || positionChanged || widthChanged || heightChanged || controlsChanged) {
+			applyGeometry(slot, universe, chatArea, hostWidth, hostHeight, effectiveX, effectiveY,
+					effectiveWidth, effectiveHeight, effectiveBodyHeight, controlsChanged);
 		}
 
 		final ChatboxBackgroundService.Result backgroundResult =
@@ -274,7 +662,7 @@ public final class ChatboxResizeService {
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
 
-		syncChatPresentation(backgroundService.isOpaque() && effective.isForegroundOverlap());
+		syncChatPresentation();
 
 		resizedLayoutApplied = true;
 
@@ -283,40 +671,46 @@ public final class ChatboxResizeService {
 		return new ResizeResult(true, widthChanged, heightChanged);
 	}
 
-	private void applyGeometry(
-			Widget slot,
-			Widget universe,
-			Widget chatArea,
-			int width,
-			int height,
-			int bodyHeight,
-			boolean controlsChanged) {
-		if (slot.getWidth() != width || slot.getHeight() != height) {
-			slot.setSize(width, height);
+	private void applyGeometry(Widget slot, Widget universe, Widget chatArea, int hostWidth, int hostHeight, int effectiveX, int effectiveY,
+			int effectiveWidth, int effectiveHeight, int bodyHeight, boolean controlsChanged) {
+		/*
+		 * Keep the movable host at desired bounds and place the effective chatbox inside it.
+		 */
+		if (slot.getWidth() != hostWidth || slot.getHeight() != hostHeight) {
+			slot.setSize(hostWidth, hostHeight);
 			recordMutation();
 
 			slot.revalidate();
 			recordRevalidate();
 		}
 
-		if (universe.getWidth() != width || universe.getHeight() != height) {
-			universe.setSize(width, height, WidgetSizeMode.ABSOLUTE, WidgetSizeMode.ABSOLUTE);
-			universe.setForcedPosition(0, 0);
+		boolean universeChanged = false;
+		if (universe.getWidth() != effectiveWidth || universe.getHeight() != effectiveHeight) {
+			universe.setSize(effectiveWidth, effectiveHeight, WidgetSizeMode.ABSOLUTE, WidgetSizeMode.ABSOLUTE);
 			recordMutation();
+			universeChanged = true;
+		}
 
+		if (universe.getRelativeX() != effectiveX || universe.getRelativeY() != effectiveY) {
+			universe.setForcedPosition(effectiveX, effectiveY);
+			recordMutation();
+			universeChanged = true;
+		}
+
+		if (universeChanged) {
 			universe.revalidate();
 			recordRevalidate();
 		}
 
-		final int bodyMargin = Math.max(0, height - bodyHeight);
-		if (chatArea.getOriginalWidth() != width
+		final int bodyMargin = Math.max(0, effectiveHeight - bodyHeight);
+		if (chatArea.getOriginalWidth() != effectiveWidth
 				|| chatArea.getOriginalHeight() != bodyMargin || chatArea.getHeightMode() != WidgetSizeMode.MINUS) {
-			chatArea.setSize(width, bodyMargin, chatArea.getWidthMode(), WidgetSizeMode.MINUS);
+			chatArea.setSize(effectiveWidth, bodyMargin, chatArea.getWidthMode(), WidgetSizeMode.MINUS);
 			recordMutation();
 		}
 
 		if (controlsChanged) {
-			recordMutations(controlsLayout.apply(width));
+			recordMutations(controlsLayout.apply(effectiveWidth));
 		}
 
 		recordRevalidates(ChatboxWidgets.revalidateChildren(universe));
@@ -358,26 +752,86 @@ public final class ChatboxResizeService {
 			restoreScrollBaseline(baseline, true);
 
 			/*
-			 * Defer reconstruction until the render boundary.
+			 * Queue retained-chat reconstruction for the render boundary.
 			 */
-			liveWidthRefreshPending |= widthChanged;
-			liveHeightRefreshPending |= heightChanged;
+			widthRefreshPending |= widthChanged;
+			heightRefreshPending |= heightChanged;
+		}
+	}
+
+	/*
+	 * Reconciles owned Modern side-row and chatbox geometry before rendering.
+	 */
+	public void reconcileBeforeRender(int width, int height) {
+		if (getLayout() != ChatboxLayout.RESIZABLE_MODERN) {
+			clearCanvasResize();
+			return;
+		}
+
+		if (canvasResizePending) {
+			final int canvasWidth = Math.max(0, client.getCanvasWidth());
+			final int canvasHeight = Math.max(0, client.getCanvasHeight());
+			if (canvasWidth == observedCanvasWidth && canvasHeight == observedCanvasHeight) {
+				resizeStableSamples++;
+			} else {
+				observedCanvasWidth = canvasWidth;
+				observedCanvasHeight = canvasHeight;
+				resizeStableSamples = 1;
+
+				final SideContainerLayout.Result translated = sideContainerLayout.onCanvasSizeChanged();
+				recordMutations(translated.getMutations());
+				recordRevalidates(translated.getRevalidates());
+			}
+
+			if (resizeStableSamples >= RESIZE_STABLE_SAMPLES) {
+				sideContainerLayout.endCanvasResize();
+				chatboxBoundsTracker.reset();
+
+				final ResizeResult resizeResult = applySize(width, height);
+				if (resizeResult.isApplied()) {
+					clearCanvasResize();
+					widthRefreshPending |= resizeResult.isWidthChanged();
+					heightRefreshPending |= resizeResult.isHeightChanged();
+				} else {
+					final SideContainerLayout.Result held = sideContainerLayout.onCanvasSizeChanged();
+					recordMutations(held.getMutations());
+					recordRevalidates(held.getRevalidates());
+				}
+			}
+		}
+
+		final SideContainerLayout.Result sideResult = sideContainerLayout.reconcileBeforeRender();
+		recordMutations(sideResult.getMutations());
+		recordRevalidates(sideResult.getRevalidates());
+
+		if (sideResult.getMutations() <= 0 && sideResult.getRevalidates() <= 0) {
+			return;
+		}
+
+		final ResizeResult result = applySizeInternal(width, height, false, sideResult.getInterfaceOverrides());
+		if (result.isApplied()) {
+			widthRefreshPending |= result.isWidthChanged();
+			heightRefreshPending |= result.isHeightChanged();
 		}
 	}
 
 	public LiveRefresh consumeLiveRefresh() {
-		if (liveDepth != 0 || !liveWidthRefreshPending && !liveHeightRefreshPending) {
+		if (liveDepth != 0 || !widthRefreshPending && !heightRefreshPending) {
 			return null;
 		}
 
-		final LiveRefresh refresh = new LiveRefresh(liveWidthRefreshPending, liveHeightRefreshPending);
+		final LiveRefresh refresh = new LiveRefresh(widthRefreshPending, heightRefreshPending);
 
-		liveWidthRefreshPending = false;
-		liveHeightRefreshPending = false;
+		widthRefreshPending = false;
+		heightRefreshPending = false;
 		return refresh;
 	}
 
 	public ScrollBaseline captureScrollBaseline() {
+		if (!isResizableLayout(getLayout())) {
+			return null;
+		}
+
 		final Widget scrollArea = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
 		if (scrollArea == null) {
 			return null;
@@ -408,7 +862,7 @@ public final class ChatboxResizeService {
 	}
 
 	private void restoreScrollBaseline(ScrollBaseline baseline, boolean reanchor) {
-		if (baseline == null) {
+		if (baseline == null || !isResizableLayout(getLayout())) {
 			return;
 		}
 
@@ -483,95 +937,107 @@ public final class ChatboxResizeService {
 	 * PRESENTATION
 	 * ================================================================
 	 */
-	private void syncChatPresentation(boolean foregroundSuppression) {
-		rememberVisibleChatView();
-
-		if (foregroundSuppression != foregroundSuppressionActive) {
-			foregroundSuppressionActive = foregroundSuppression;
-			foregroundSuppressionOverridden = false;
-		}
+	private void syncChatPresentation() {
+		rememberVisibleView();
 
 		/*
-		 * Defer presentation sync during native chat-control processing.
+		 * Preserve the native chat-control transition until the click completes.
 		 */
-		if (chatControlClickPending) {
-			syncChatAreaVisibility();
+		if (controlClickPending) {
+			syncChatVisibility();
 			return;
 		}
 
-		if (isSuppressionRequested()) {
-			hideNativeChatView();
+		if (manualSuppressionActive) {
+			hideNativeView();
 			return;
 		}
 
-		restoreOwnedChatView();
-		syncChatAreaVisibility();
+		restoreOwnedView();
+		syncChatVisibility();
 	}
 
 	public void setChatboxButtonsHidden(boolean hidden) {
 		chatboxButtonsHidden = hidden;
+		if (!isResizableLayout(getLayout())) {
+			return;
+		}
+
 		recordMutations(controlsLayout.syncHidden(hidden));
 	}
 
 	public void toggleChatPresentation() {
-		if (isChatViewHidden()) {
+		if (!isResizableLayout(getLayout())) {
+			return;
+		}
+
+		if (isChatHidden()) {
 			showChatPresentation();
 			return;
 		}
 
-		rememberVisibleChatView();
+		rememberVisibleView();
 
 		manualSuppressionActive = true;
-		hideNativeChatView();
+		hideNativeView();
 	}
 
 	public void showChatPresentation() {
 		manualSuppressionActive = false;
-
-		if (foregroundSuppressionActive) {
-			foregroundSuppressionOverridden = true;
-		}
-
-		if (!isChatViewHidden()) {
-			suppressionOwnsHiddenView = false;
-			rememberVisibleChatView();
-			syncChatAreaVisibility();
+		if (!isResizableLayout(getLayout())) {
+			ownsHiddenView = false;
 			return;
 		}
 
-		suppressionOwnsHiddenView = false;
-		setNativeChatView(lastVisibleChatView);
+		if (!isChatHidden()) {
+			ownsHiddenView = false;
+			rememberVisibleView();
+			syncChatVisibility();
+			return;
+		}
+
+		ownsHiddenView = false;
+		setNativeView(lastChatView);
 	}
 
 	public boolean onChatControlClicked(Widget widget) {
-		if (findChatControl(widget) == -1) {
+		if (!isResizableLayout(getLayout()) || findChatControl(widget) == -1) {
 			return false;
 		}
 
-		chatControlClickPending = true;
+		controlClickPending = true;
 		return true;
 	}
 
 	public void finishChatControlClick() {
-		if (!chatControlClickPending) {
+		if (!isResizableLayout(getLayout())) {
+			controlClickPending = false;
+			manualSuppressionActive = false;
+			ownsHiddenView = false;
 			return;
 		}
 
-		chatControlClickPending = false;
+		if (!controlClickPending) {
+			return;
+		}
+
+		controlClickPending = false;
 		manualSuppressionActive = false;
-		suppressionOwnsHiddenView = false;
+		ownsHiddenView = false;
 
-		if (foregroundSuppressionActive) {
-			foregroundSuppressionOverridden = !isChatViewHidden();
+		if (getLayout() == ChatboxLayout.RESIZABLE_MODERN) {
+			final SideContainerLayout.Result sideResult = sideContainerLayout.reassertOwnedLayout();
+			recordMutations(sideResult.getMutations());
+			recordRevalidates(sideResult.getRevalidates());
 		}
 
-		rememberVisibleChatView();
+		rememberVisibleView();
 
-		if (!isChatViewHidden()) {
-			rememberVisibleChatGraphic();
+		if (!isChatHidden()) {
+			rememberVisibleGraphic();
 		}
 
-		syncChatAreaVisibility();
+		syncChatVisibility();
 	}
 
 	private int findChatControl(Widget widget) {
@@ -588,36 +1054,36 @@ public final class ChatboxResizeService {
 		return -1;
 	}
 
-	private void hideNativeChatView() {
+	private void hideNativeView() {
 		final int chatView = client.getVarcIntValue(VarClientID.CHAT_VIEW);
 		if (chatView == CHAT_VIEW_HIDDEN) {
-			syncChatAreaVisibility();
+			syncChatVisibility();
 			return;
 		}
 
-		lastVisibleChatView = chatView;
-		suppressionOwnsHiddenView = true;
+		lastChatView = chatView;
+		ownsHiddenView = true;
 
-		setNativeChatView(CHAT_VIEW_HIDDEN);
+		setNativeView(CHAT_VIEW_HIDDEN);
 	}
 
-	private void restoreOwnedChatView() {
-		if (!suppressionOwnsHiddenView) {
+	private void restoreOwnedView() {
+		if (!ownsHiddenView) {
 			return;
 		}
 
-		suppressionOwnsHiddenView = false;
-		setNativeChatView(lastVisibleChatView);
+		ownsHiddenView = false;
+		setNativeView(lastChatView);
 	}
 
-	private void rememberVisibleChatView() {
+	private void rememberVisibleView() {
 		final int chatView = client.getVarcIntValue(VarClientID.CHAT_VIEW);
 		if (chatView != CHAT_VIEW_HIDDEN) {
-			lastVisibleChatView = chatView;
+			lastChatView = chatView;
 		}
 	}
 
-	private void rememberVisibleChatGraphic() {
+	private void rememberVisibleGraphic() {
 		for (int graphicId : CHAT_CONTROL_GRAPHIC_IDS) {
 			final Widget graphic = client.getWidget(graphicId);
 			if (graphic == null) {
@@ -626,18 +1092,18 @@ public final class ChatboxResizeService {
 
 			final int spriteId = graphic.getSpriteId();
 			if (spriteId == SpriteID.ChatTabButton.SELECTED || spriteId == SpriteID.ChatTabButton.SELECTED_HOVERED) {
-				lastVisibleChatGraphic = graphicId;
+				lastChatGraphic = graphicId;
 				return;
 			}
 		}
 	}
 
-	private void syncStoredChatGraphic(boolean selected) {
-		if (lastVisibleChatGraphic == -1) {
+	private void syncStoredGraphic(boolean selected) {
+		if (lastChatGraphic == -1) {
 			return;
 		}
 
-		final Widget graphic = client.getWidget(lastVisibleChatGraphic);
+		final Widget graphic = client.getWidget(lastChatGraphic);
 		if (graphic == null) {
 			return;
 		}
@@ -663,19 +1129,19 @@ public final class ChatboxResizeService {
 		recordMutation();
 	}
 
-	boolean isChatViewHidden() {
+	boolean isChatHidden() {
 		return client.getVarcIntValue(VarClientID.CHAT_VIEW) == CHAT_VIEW_HIDDEN;
 	}
 
-	private void setNativeChatView(int chatView) {
+	private void setNativeView(int chatView) {
 		final int currentChatView = client.getVarcIntValue(VarClientID.CHAT_VIEW);
 		if (currentChatView == chatView) {
-			syncChatAreaVisibility();
+			syncChatVisibility();
 			return;
 		}
 
 		if (chatView == CHAT_VIEW_HIDDEN) {
-			rememberVisibleChatGraphic();
+			rememberVisibleGraphic();
 		}
 
 		client.setVarcIntValue(VarClientID.CHAT_VIEW, chatView);
@@ -686,15 +1152,15 @@ public final class ChatboxResizeService {
 
 		client.refreshChat();
 
-		syncChatAreaVisibility();
-		syncStoredChatGraphic(chatView != CHAT_VIEW_HIDDEN);
+		syncChatVisibility();
+		syncStoredGraphic(chatView != CHAT_VIEW_HIDDEN);
 	}
 
-	private void syncChatAreaVisibility() {
-		setChatAreaHidden(isChatViewHidden());
+	private void syncChatVisibility() {
+		setChatHidden(isChatHidden());
 	}
 
-	private void setChatAreaHidden(boolean hidden) {
+	private void setChatHidden(boolean hidden) {
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
 		if (chatArea == null || chatArea.isSelfHidden() == hidden) {
 			return;
@@ -704,18 +1170,12 @@ public final class ChatboxResizeService {
 		recordMutation();
 	}
 
-	private boolean isSuppressionRequested() {
-		return manualSuppressionActive || foregroundSuppressionActive && !foregroundSuppressionOverridden;
-	}
-
 	private void resetChatPresentation() {
-		chatControlClickPending = false;
+		controlClickPending = false;
 		manualSuppressionActive = false;
-		foregroundSuppressionActive = false;
-		foregroundSuppressionOverridden = false;
 
-		restoreOwnedChatView();
-		syncChatAreaVisibility();
+		restoreOwnedView();
+		syncChatVisibility();
 	}
 
 	/*
@@ -723,18 +1183,57 @@ public final class ChatboxResizeService {
 	 * RESTORATION
 	 * ================================================================
 	 */
+	private boolean restoreSharedGeometry() {
+		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
+		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+		if (universe == null || chatArea == null) {
+			return false;
+		}
+
+		final boolean wasApplied = resizedLayoutApplied;
+
+		/*
+		 * Release resizable ownership before restoring native presentation.
+		 */
+		resizedLayoutApplied = false;
+
+		resetChatPresentation();
+		recordMutations(controlsLayout.restoreHidden());
+
+		restoreNativeUniverse(universe);
+
+		chatArea.setSize(ChatboxGeometry.NATIVE_WIDTH, ChatboxGeometry.NATIVE_TAB_HEIGHT, chatArea.getWidthMode(), WidgetSizeMode.MINUS);
+		recordMutation();
+
+		recordMutations(controlsLayout.restoreNative());
+		recordRevalidates(ChatboxWidgets.revalidateChildren(universe));
+
+		final ChatboxBackgroundService.Result backgroundResult = backgroundService.restore(chatArea);
+
+		recordMutations(backgroundResult.getMutations());
+		recordRevalidates(backgroundResult.getRevalidates());
+
+		if (wasApplied && performanceMetrics != null) {
+			performanceMetrics.recordResizeRestore();
+		}
+
+		return true;
+	}
+
 	public void restoreNativeSize() {
+		final ChatboxLayout layout = getLayout();
+		if (!isResizableLayout(layout)) {
+			handleInactiveLayout(layout);
+			return;
+		}
+
+		geometryState = null;
+		chatboxBoundsTracker.reset();
+		chatboxPlacement.reset();
 		resetChatPresentation();
 		recordMutations(controlsLayout.restoreHidden());
 
 		final boolean wasApplied = resizedLayoutApplied;
-		final ChatboxLayout layout = getLayout();
-
-		if (layout == ChatboxLayout.FIXED || layout == ChatboxLayout.UNKNOWN) {
-			sideContainerLayout.reset();
-			resizedLayoutApplied = false;
-			return;
-		}
 
 		if (layout == ChatboxLayout.RESIZABLE_MODERN) {
 			final SideContainerLayout.Result sideResult = sideContainerLayout.restoreNative();
@@ -763,11 +1262,7 @@ public final class ChatboxResizeService {
 
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
 		if (chatArea != null) {
-			chatArea.setSize(
-					ChatboxGeometry.NATIVE_WIDTH,
-					ChatboxGeometry.NATIVE_TAB_HEIGHT,
-					chatArea.getWidthMode(),
-					WidgetSizeMode.MINUS);
+			chatArea.setSize(ChatboxGeometry.NATIVE_WIDTH, ChatboxGeometry.NATIVE_TAB_HEIGHT, chatArea.getWidthMode(), WidgetSizeMode.MINUS);
 			recordMutation();
 		}
 
@@ -851,6 +1346,25 @@ public final class ChatboxResizeService {
 		}
 	}
 
+	/**
+	 * ================================================================
+	 * STATE TYPES
+	 * ================================================================
+	 */
+	private static final class GeometryState {
+		private final int configuredWidth;
+		private final int configuredHeight;
+		private final Rectangle desiredBounds;
+		private final Rectangle effectiveBounds;
+
+		private GeometryState(int configuredWidth, int configuredHeight, Rectangle desiredBounds, Rectangle effectiveBounds) {
+			this.configuredWidth = configuredWidth;
+			this.configuredHeight = configuredHeight;
+			this.desiredBounds = new Rectangle(desiredBounds);
+			this.effectiveBounds = new Rectangle(effectiveBounds);
+		}
+	}
+
 	private enum ScrollPosition {
 		TOP,
 		BOTTOM,
@@ -886,8 +1400,7 @@ public final class ChatboxResizeService {
 	}
 
 	public static final class ResizeResult {
-		private static final ResizeResult NOT_APPLIED =
-				new ResizeResult(false, false, false);
+		private static final ResizeResult NOT_APPLIED = new ResizeResult(false, false, false);
 
 		private final boolean applied;
 		private final boolean widthChanged;
