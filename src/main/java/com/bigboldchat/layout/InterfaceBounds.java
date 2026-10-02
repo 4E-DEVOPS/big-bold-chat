@@ -11,45 +11,71 @@ import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetType;
 
 /**
- * Snapshots visible top-level interface rectangles that either constrain
- * plugin-managed geometry or occlude the chatbox as foreground content.
+ * Snapshots visible interface geometry used by chatbox and side-row collision handling.
  */
-final class InterfaceBounds {
+public final class InterfaceBounds {
 	private final Rectangle canvas;
 	private final List<Rectangle> obstacles;
+	private final List<Obstacle> identifiedObstacles;
 	private final List<Rectangle> foregrounds;
 
-	private InterfaceBounds(Rectangle canvas, List<Rectangle> obstacles, List<Rectangle> foregrounds) {
+	private InterfaceBounds(Rectangle canvas, List<Rectangle> obstacles, List<Obstacle> identifiedObstacles, List<Rectangle> foregrounds) {
 		this.canvas = canvas;
 		this.obstacles = Collections.unmodifiableList(obstacles);
+		this.identifiedObstacles = Collections.unmodifiableList(identifiedObstacles);
 		this.foregrounds = Collections.unmodifiableList(foregrounds);
 	}
 
+	/**
+	 * ================================================================
+	 * CAPTURE
+	 * ================================================================
+	 */
 	static InterfaceBounds capture(Client client) {
-		final Rectangle canvas = new Rectangle(
-				0, 0, Math.max(0, client.getCanvasWidth()), Math.max(0, client.getCanvasHeight()));
-		final List<Rectangle> obstacles = new ArrayList<>(6);
+		return capture(client, null);
+	}
+
+	static InterfaceBounds capture(Client client, Overrides overrides) {
+		final Rectangle canvas = new Rectangle(0, 0, Math.max(0, client.getCanvasWidth()), Math.max(0, client.getCanvasHeight()));
+		final List<Rectangle> obstacles = new ArrayList<>(8);
+		final List<Obstacle> identifiedObstacles = new ArrayList<>(8);
 		final List<Rectangle> foregrounds = new ArrayList<>(2);
 
 		final int topLevel = client.getTopLevelInterfaceId();
 		if (topLevel == InterfaceID.TOPLEVEL_OSRS_STRETCH) {
-			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelOsrsStretch.SIDE_MENU));
-			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelOsrsStretch.MAP_CONTAINER));
-			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelOsrsStretch.ORBS));
-			addMounted(client, foregrounds, canvas, InterfaceID.ToplevelOsrsStretch.MAINMODAL);
-			addMounted(client, foregrounds, canvas, InterfaceID.ToplevelOsrsStretch.FLOATER);
+			addObstacle(obstacles, identifiedObstacles, ObstacleKey.CLASSIC_SIDE_MENU, canvas,
+					client.getWidget(InterfaceID.ToplevelOsrsStretch.SIDE_MENU));
+			addObstacle(obstacles, identifiedObstacles, ObstacleKey.CLASSIC_MAP, canvas,
+					client.getWidget(InterfaceID.ToplevelOsrsStretch.MAP_CONTAINER));
+			addObstacle(obstacles, identifiedObstacles, ObstacleKey.CLASSIC_ORBS, canvas,
+					client.getWidget(InterfaceID.ToplevelOsrsStretch.ORBS));
+			addMountedObstacle(client, identifiedObstacles, foregrounds, ObstacleKey.CLASSIC_MAINMODAL, canvas,
+					InterfaceID.ToplevelOsrsStretch.MAINMODAL);
+			addMountedObstacle(client, identifiedObstacles, foregrounds, ObstacleKey.CLASSIC_FLOATER, canvas,
+					InterfaceID.ToplevelOsrsStretch.FLOATER);
 		} else if (topLevel == InterfaceID.TOPLEVEL_PRE_EOC) {
-			addLive(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_BACKGROUND));
-			addLive(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_STATIC_LAYER));
-			addLive(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_MOVABLE_LAYER));
-			addLive(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_CONTAINER));
-			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.MAP_CONTAINER));
-			add(obstacles, canvas, client.getWidget(InterfaceID.ToplevelPreEoc.ORBS));
-			addMounted(client, foregrounds, canvas, InterfaceID.ToplevelPreEoc.MAINMODAL);
-			addMounted(client, foregrounds, canvas, InterfaceID.ToplevelPreEoc.FLOATER);
+			addObstacle(obstacles, identifiedObstacles, ObstacleKey.MODERN_SIDE_BACKGROUND, canvas,
+					client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_BACKGROUND));
+			addObstacle(obstacles, identifiedObstacles, ObstacleKey.MODERN_SIDE_STATIC, canvas,
+					client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_STATIC_LAYER),
+					overrides != null ? overrides.modernSideStatic : null);
+			addObstacle(obstacles, identifiedObstacles, ObstacleKey.MODERN_SIDE_MOVABLE, canvas,
+					client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_MOVABLE_LAYER),
+					overrides != null ? overrides.modernSideMovable : null);
+			addObstacle(obstacles, identifiedObstacles, ObstacleKey.MODERN_SIDE_CONTAINER, canvas,
+					client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_CONTAINER),
+					overrides != null ? overrides.modernSideContainer : null);
+			addObstacle(obstacles, identifiedObstacles, ObstacleKey.MODERN_MAP, canvas,
+					client.getWidget(InterfaceID.ToplevelPreEoc.MAP_CONTAINER));
+			addObstacle(obstacles, identifiedObstacles, ObstacleKey.MODERN_ORBS, canvas,
+					client.getWidget(InterfaceID.ToplevelPreEoc.ORBS));
+			addMountedObstacle(client, identifiedObstacles, foregrounds, ObstacleKey.MODERN_MAINMODAL, canvas,
+					InterfaceID.ToplevelPreEoc.MAINMODAL);
+			addMountedObstacle(client, identifiedObstacles, foregrounds, ObstacleKey.MODERN_FLOATER, canvas,
+					InterfaceID.ToplevelPreEoc.FLOATER);
 		}
 
-		return new InterfaceBounds(canvas, obstacles, foregrounds);
+		return new InterfaceBounds(canvas, obstacles, identifiedObstacles, foregrounds);
 	}
 
 	Rectangle getCanvas() {
@@ -58,6 +84,10 @@ final class InterfaceBounds {
 
 	List<Rectangle> getObstacles() {
 		return obstacles;
+	}
+
+	List<Obstacle> getIdentifiedObstacles() {
+		return identifiedObstacles;
 	}
 
 	boolean intersectsForeground(Rectangle bounds) {
@@ -74,23 +104,65 @@ final class InterfaceBounds {
 		return false;
 	}
 
-	static Rectangle liveBounds(Widget widget) {
-		if (widget == null || widget.isHidden() || widget.getWidth() <= 0 || widget.getHeight() <= 0) {
+	/**
+	 * ================================================================
+	 * GEOMETRY HELPERS
+	 * ================================================================
+	 */
+	public static long geometryFingerprint(Client client) {
+		if (client == null) {
+			return 0L;
+		}
+
+		final InterfaceBounds snapshot = capture(client);
+		long hash = 17L;
+		hash = mix(hash, client.getTopLevelInterfaceId());
+		hash = mix(hash, snapshot.canvas);
+
+		for (Obstacle obstacle : snapshot.identifiedObstacles) {
+			hash = mix(hash, obstacle.key.ordinal());
+			hash = mix(hash, obstacle.bounds);
+		}
+
+		return hash;
+	}
+
+	private static long mix(long hash, Rectangle bounds) {
+		if (bounds == null) {
+			return mix(hash, 0);
+		}
+
+		hash = mix(hash, bounds.x);
+		hash = mix(hash, bounds.y);
+		hash = mix(hash, bounds.width);
+		return mix(hash, bounds.height);
+	}
+
+	private static long mix(long hash, int value) {
+		return hash * 31L + value;
+	}
+
+	/*
+	 * Returns rendered canvas-space widget bounds.
+	 */
+	public static Rectangle liveBounds(Widget widget) {
+		if (widget == null || widget.isHidden()) {
 			return null;
 		}
 
-		int x = widget.getRelativeX();
-		int y = widget.getRelativeY();
-		for (Widget parent = widget.getParent(); parent != null; parent = parent.getParent()) {
-			x += parent.getRelativeX();
-			y += parent.getRelativeY();
-		}
-
-		return new Rectangle(x, y, widget.getWidth(), widget.getHeight());
+		final Rectangle bounds = widget.getBounds();
+		return bounds != null && bounds.width > 0 && bounds.height > 0
+				? new Rectangle(bounds)
+				: null;
 	}
 
-	private static void addMounted(
-			Client client, List<Rectangle> foregrounds, Rectangle canvas, int componentId) {
+	/**
+	 * ================================================================
+	 * OBSTACLE COLLECTION
+	 * ================================================================
+	 */
+	private static void addMountedObstacle(Client client, List<Obstacle> identifiedObstacles,
+			List<Rectangle> foregrounds, ObstacleKey key, Rectangle canvas, int componentId) {
 		if (client.getComponentTable() == null || client.getComponentTable().get(componentId) == null) {
 			return;
 		}
@@ -101,7 +173,9 @@ final class InterfaceBounds {
 			return;
 		}
 
-		foregrounds.add(bounds);
+		final Rectangle foreground = new Rectangle(bounds);
+		foregrounds.add(foreground);
+		identifiedObstacles.add(new Obstacle(key, foreground));
 	}
 
 	private static Rectangle mountedContentBounds(Widget mount, Rectangle canvas) {
@@ -174,25 +248,77 @@ final class InterfaceBounds {
 		return first;
 	}
 
-	private static void addLive(List<Rectangle> obstacles, Rectangle canvas, Widget widget) {
-		final Rectangle bounds = liveBounds(widget);
+	private static void addObstacle(List<Rectangle> obstacles, List<Obstacle> identifiedObstacles,
+			ObstacleKey key, Rectangle canvas, Widget widget) {
+		addObstacle(obstacles, identifiedObstacles, key, canvas, widget, null);
+	}
+
+	private static void addObstacle(List<Rectangle> obstacles, List<Obstacle> identifiedObstacles, ObstacleKey key,
+			Rectangle canvas, Widget widget, Rectangle overrideBounds) {
+		final Rectangle bounds = overrideBounds != null
+				? new Rectangle(overrideBounds)
+				: liveBounds(widget);
 		if (bounds == null || !bounds.intersects(canvas)) {
 			return;
 		}
 
-		obstacles.add(bounds);
+		final Rectangle captured = new Rectangle(bounds);
+		obstacles.add(captured);
+		identifiedObstacles.add(new Obstacle(key, captured));
 	}
 
-	private static void add(List<Rectangle> obstacles, Rectangle canvas, Widget widget) {
-		if (widget == null || widget.isHidden()) {
-			return;
+	/**
+	 * ================================================================
+	 * STATE TYPES
+	 * ================================================================
+	 */
+	public static final class Overrides {
+		private final Rectangle modernSideStatic;
+		private final Rectangle modernSideMovable;
+		private final Rectangle modernSideContainer;
+
+		public Overrides(Rectangle modernSideStatic, Rectangle modernSideMovable, Rectangle modernSideContainer) {
+			this.modernSideStatic = copy(modernSideStatic);
+			this.modernSideMovable = copy(modernSideMovable);
+			this.modernSideContainer = copy(modernSideContainer);
 		}
 
-		final Rectangle bounds = widget.getBounds();
-		if (bounds == null || bounds.width <= 0 || bounds.height <= 0 || !bounds.intersects(canvas)) {
-			return;
+		private static Rectangle copy(Rectangle bounds) {
+			return bounds != null ? new Rectangle(bounds) : null;
+		}
+	}
+
+	enum ObstacleKey {
+		CLASSIC_SIDE_MENU,
+		CLASSIC_MAP,
+		CLASSIC_ORBS,
+		CLASSIC_MAINMODAL,
+		CLASSIC_FLOATER,
+		MODERN_SIDE_BACKGROUND,
+		MODERN_SIDE_STATIC,
+		MODERN_SIDE_MOVABLE,
+		MODERN_SIDE_CONTAINER,
+		MODERN_MAP,
+		MODERN_ORBS,
+		MODERN_MAINMODAL,
+		MODERN_FLOATER
+	}
+
+	static final class Obstacle {
+		private final ObstacleKey key;
+		private final Rectangle bounds;
+
+		private Obstacle(ObstacleKey key, Rectangle bounds) {
+			this.key = key;
+			this.bounds = new Rectangle(bounds);
 		}
 
-		obstacles.add(new Rectangle(bounds));
+		ObstacleKey getKey() {
+			return key;
+		}
+
+		Rectangle getBounds() {
+			return new Rectangle(bounds);
+		}
 	}
 }
