@@ -21,6 +21,7 @@ public final class SideContainerLayout {
 	private static final int MAX_ONE_ROW_OVERLAP = 37;
 	private static final int INVENTORY_EDGE_TOLERANCE = 5;
 	private static final int INVENTORY_HORIZONTAL_TOLERANCE = 5;
+	private static final int CANVAS_EDGE_TOLERANCE = 5;
 
 	private final Client client;
 	private final OverlayManager overlayManager;
@@ -221,39 +222,6 @@ public final class SideContainerLayout {
 	}
 
 	/*
-	 * Aligns a newly revealed inventory container to its established overlay position
-	 * before collision relayout observes transient native geometry.
-	 */
-	public Result reconcileInventoryReveal() {
-		if (gameStateSuspended || !isModernLayout() || overlayManager == null) {
-			return Result.NONE;
-		}
-
-		final Widgets widgets = getWidgets();
-		if (widgets == null || widgets.container.isSelfHidden()) {
-			return Result.NONE;
-		}
-
-		final Overlay overlay = findOverlay(INVENTORY_OVERLAY);
-		if (overlay == null || overlay.getPreferredLocation() == null && overlay.getPreferredPosition() == null) {
-			return Result.NONE;
-		}
-
-		final Rectangle overlayBounds = overlay.getBounds();
-		if (overlayBounds == null || overlayBounds.x == -1 && overlayBounds.y == -1 || overlayBounds.width != 0 || overlayBounds.height != 0) {
-			return Result.NONE;
-		}
-
-		if (!forceWidgetPosition(widgets.container, overlayBounds.x, overlayBounds.y)) {
-			return Result.NONE;
-		}
-
-		inventoryForcedPosition = true;
-		widgets.container.revalidate();
-		return new Result(1, 1);
-	}
-
-	/*
 	 * Reattaches the inventory to the currently owned row layout after an overlay reset.
 	 */
 	public Result reconcileInventoryReset() {
@@ -340,6 +308,39 @@ public final class SideContainerLayout {
 	 */
 	public void endCanvasResize() {
 		canvasResizeInProgress = false;
+	}
+
+	/*
+	 * Aligns a newly revealed inventory container to its established overlay position
+	 * before collision relayout observes transient native geometry.
+	 */
+	public Result reconcileInventoryReveal() {
+		if (gameStateSuspended || !isModernLayout() || overlayManager == null) {
+			return Result.NONE;
+		}
+
+		final Widgets widgets = getWidgets();
+		if (widgets == null || widgets.container.isSelfHidden()) {
+			return Result.NONE;
+		}
+
+		final Overlay overlay = findOverlay(INVENTORY_OVERLAY);
+		if (overlay == null || overlay.getPreferredLocation() == null && overlay.getPreferredPosition() == null) {
+			return Result.NONE;
+		}
+
+		final Rectangle overlayBounds = overlay.getBounds();
+		if (overlayBounds == null || overlayBounds.x == -1 && overlayBounds.y == -1 || overlayBounds.width != 0 || overlayBounds.height != 0) {
+			return Result.NONE;
+		}
+
+		if (!forceWidgetPosition(widgets.container, overlayBounds.x, overlayBounds.y)) {
+			return Result.NONE;
+		}
+
+		inventoryForcedPosition = true;
+		widgets.container.revalidate();
+		return new Result(1, 1);
 	}
 
 	/**
@@ -765,8 +766,24 @@ public final class SideContainerLayout {
 			return false;
 		}
 
-		final int deltaX = canvasWidth - rowCanvasWidth;
-		final int deltaY = canvasHeight - rowCanvasHeight;
+		final int canvasDeltaX = canvasWidth - rowCanvasWidth;
+		final int canvasDeltaY = canvasHeight - rowCanvasHeight;
+		if (canvasDeltaX == 0 && canvasDeltaY == 0) {
+			return false;
+		}
+
+		/*
+		 * Resolves canvas growth caused by the Swing side panel.
+		 */
+		final int rowRight = Math.max(staticRowBounds.x + staticRowBounds.width, movableRowBounds.x + movableRowBounds.width);
+		final int rowBottom = Math.max(staticRowBounds.y + staticRowBounds.height, movableRowBounds.y + movableRowBounds.height);
+		final boolean rightAnchored = Math.abs(rowCanvasWidth - rowRight) <= CANVAS_EDGE_TOLERANCE;
+		final boolean bottomAnchored = Math.abs(rowCanvasHeight - rowBottom) <= CANVAS_EDGE_TOLERANCE;
+		final int deltaX = rightAnchored ? canvasDeltaX : 0;
+		final int deltaY = bottomAnchored ? canvasDeltaY : 0;
+
+		rowCanvasWidth = canvasWidth;
+		rowCanvasHeight = canvasHeight;
 		if (deltaX == 0 && deltaY == 0) {
 			return false;
 		}
@@ -780,9 +797,6 @@ public final class SideContainerLayout {
 		translateOverlayState(staticOverlayState, deltaX, deltaY);
 		translateOverlayState(movableOverlayState, deltaX, deltaY);
 		translateOverlayState(inventoryOverlayState, deltaX, deltaY);
-
-		rowCanvasWidth = canvasWidth;
-		rowCanvasHeight = canvasHeight;
 		return true;
 	}
 

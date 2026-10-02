@@ -36,13 +36,13 @@ public final class ChatboxResizeService {
 	 * Native chat visibility lifecycle.
 	 */
 	static final int CHAT_VISIBILITY = 923;
-	private static final int SIDE_CONTAINER_UPDATE = 9336;
 
 	/*
 	 * Native chat and top-level relayout helpers.
 	 */
 	private static final int CHAT_ONCHATTRANSMIT = 663;
 	private static final int TOPLEVEL_RELAYOUT = 1972;
+	private static final int SIDE_CONTAINER_UPDATE = 9336;
 	private static final String RUNELITE_CONFIG_GROUP = "runelite";
 	private static final String INVENTORY_LOCATION_KEY = "RESIZABLE_VIEWPORT_BOTTOM_LINE_INVENTORY_PARENT_preferredLocation";
 
@@ -412,14 +412,14 @@ public final class ChatboxResizeService {
 
 		final int scriptId = event.getScriptId();
 
+		if (scriptId == ScriptID.MESSAGE_LAYER_OPEN || scriptId == CHAT_VISIBILITY && !controlClickPending && !nativeRefreshActive) {
+			beginNativeReveal();
+		}
+
 		if (scriptId == SIDE_CONTAINER_UPDATE && layout == ChatboxLayout.RESIZABLE_MODERN) {
 			final SideContainerLayout.Result sideResult = sideContainerLayout.reconcileInventoryReveal();
 			recordMutations(sideResult.getMutations());
 			recordRevalidates(sideResult.getRevalidates());
-		}
-
-		if (scriptId == ScriptID.MESSAGE_LAYER_OPEN || scriptId == CHAT_VISIBILITY && !controlClickPending && !nativeRefreshActive) {
-			beginNativeReveal();
 		}
 
 		/*
