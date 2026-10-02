@@ -1,5 +1,6 @@
 package com.bigboldchat.debug;
 
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -21,6 +22,9 @@ import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.ui.overlay.Overlay;
+import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.ui.overlay.OverlayPosition;
 
 /**
  * Observer-only diagnostics for Modern side-container layout and collisions.
@@ -28,21 +32,35 @@ import net.runelite.api.widgets.Widget;
 @Slf4j
 public final class SideContainerDiagnostics {
 	private static final String COMMAND = "debug-inventory";
+	private static final String STATIC_TABS_OVERLAY = "RESIZABLE_VIEWPORT_BOTTOM_LINE_TABS1";
+	private static final String MOVABLE_TABS_OVERLAY = "RESIZABLE_VIEWPORT_BOTTOM_LINE_TABS2";
+	private static final String INVENTORY_OVERLAY = "RESIZABLE_VIEWPORT_BOTTOM_LINE_INVENTORY_PARENT";
 	private static final int INT_STACK_TAIL_SIZE = 16;
 	private static final int MAX_LOGGED_STRING_LENGTH = 200;
 
 	private final Client client;
 	private final Configurations config;
+	private final OverlayManager overlayManager;
 	private final Deque<TraceFrame> traceFrames = new ArrayDeque<>();
 
 	private boolean armed;
 	private CollisionState collisionState;
 
 	public SideContainerDiagnostics(Client client, Configurations config) {
-		this.client = client;
-		this.config = config;
+		this(client, config, null);
 	}
 
+	public SideContainerDiagnostics(Client client, Configurations config, OverlayManager overlayManager) {
+		this.client = client;
+		this.config = config;
+		this.overlayManager = overlayManager;
+	}
+
+	/**
+	 * ================================================================
+	 * EVENT ROUTING
+	 * ================================================================
+	 */
 	public synchronized boolean onCommandExecuted(CommandExecuted event) {
 		if (event == null || !COMMAND.equalsIgnoreCase(event.getCommand())) {
 			return false;
@@ -52,10 +70,7 @@ public final class SideContainerDiagnostics {
 		traceFrames.clear();
 		collisionState = null;
 
-		log.debug(
-				"[Chat XL][Side Container Diagnostic] {}", armed
-						? "ARMED"
-						: "DISARMED");
+		log.debug("[Chat XL][Side Container Diagnostic] {}", armed ? "ARMED" : "DISARMED");
 
 		return true;
 	}
@@ -75,12 +90,11 @@ public final class SideContainerDiagnostics {
 		}
 
 		final TraceFrame frame = new TraceFrame();
-
 		frame.scriptId = event.getScriptId();
 		frame.depth = traceFrames.size() + 1;
 		frame.checkpoint = current;
-		frame.intTailBefore = traceIntStackTail();
-		frame.stringsBefore = traceObjectStackStrings();
+		frame.intTailBefore = traceIntTail();
+		frame.stringsBefore = traceStackStrings();
 		frame.arguments = traceScriptArguments(event);
 
 		traceFrames.push(frame);
@@ -130,6 +144,11 @@ public final class SideContainerDiagnostics {
 		armed = false;
 	}
 
+	/**
+	 * ================================================================
+	 * SNAPSHOT COMPARISON
+	 * ================================================================
+	 */
 	private void logChanges(TraceFrame frame, Snapshot current, String phase, int nextScriptId) {
 		if (frame == null || frame.checkpoint == null || current == null) {
 			return;
@@ -154,9 +173,7 @@ public final class SideContainerDiagnostics {
 				phase,
 				frame.depth,
 				frame.scriptId,
-				nextScriptId >= 0
-						? Integer.toString(nextScriptId)
-						: "-",
+				nextScriptId >= 0 ? Integer.toString(nextScriptId) : "-",
 				frame.checkpoint.topLevel,
 				current.topLevel,
 				frame.arguments,
@@ -164,14 +181,9 @@ public final class SideContainerDiagnostics {
 				frame.stringsBefore);
 
 		for (String change : changes) {
-			log.debug(
-					"[Chat XL][Side Container Diagnostic]"
-							+ " CHANGE"
-							+ " | scriptId={}"
-							+ " | {}",
-					frame.scriptId,
-					change);
+			log.debug("[Chat XL][Side Container Diagnostic] CHANGE | scriptId={} | {}", frame.scriptId, change);
 		}
+
 	}
 
 	private List<String> compare(Snapshot before, Snapshot after) {
@@ -185,7 +197,6 @@ public final class SideContainerDiagnostics {
 		}
 
 		final Set<String> labels = new LinkedHashSet<>();
-
 		labels.addAll(before.widgets.keySet());
 		labels.addAll(after.widgets.keySet());
 
@@ -198,11 +209,25 @@ public final class SideContainerDiagnostics {
 			}
 		}
 
+		final Set<String> overlayLabels = new LinkedHashSet<>();
+		overlayLabels.addAll(before.overlays.keySet());
+		overlayLabels.addAll(after.overlays.keySet());
+
+		for (String label : overlayLabels) {
+			final OverlayState beforeState = before.overlays.get(label);
+			final OverlayState afterState = after.overlays.get(label);
+			final String difference = OverlayState.describeDifference(label, beforeState, afterState);
+			if (difference != null) {
+				changes.add(difference);
+			}
+		}
+
 		return changes;
 	}
 
 	private Snapshot snapshot() {
 		final Map<String, WidgetState> widgets = new LinkedHashMap<>();
+		final Map<String, OverlayState> overlays = new LinkedHashMap<>();
 
 		final Widget background = client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_BACKGROUND);
 		final Widget staticLayer = client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_STATIC_LAYER);
@@ -217,8 +242,32 @@ public final class SideContainerDiagnostics {
 		putWidget(widgets, "ORBS", client.getWidget(InterfaceID.ToplevelPreEoc.ORBS));
 		putChildren(widgets, "SIDE_STATIC", staticLayer);
 		putChildren(widgets, "SIDE_MOVABLE", movableLayer);
+		putOverlay(overlays, "TABS1_OVERLAY", findOverlay(STATIC_TABS_OVERLAY));
+		putOverlay(overlays, "TABS2_OVERLAY", findOverlay(MOVABLE_TABS_OVERLAY));
+		putOverlay(overlays, "INVENTORY_OVERLAY", findOverlay(INVENTORY_OVERLAY));
 
-		return new Snapshot(client.getTopLevelInterfaceId(), widgets);
+		return new Snapshot(client.getTopLevelInterfaceId(), widgets, overlays);
+	}
+
+	private void putOverlay(Map<String, OverlayState> overlays, String label, Overlay overlay) {
+		overlays.put(label, new OverlayState(overlay));
+	}
+
+	private Overlay findOverlay(String name) {
+		if (overlayManager == null) {
+			return null;
+		}
+
+		final Overlay[] match = new Overlay[1];
+		overlayManager.anyMatch(overlay -> {
+			if (name.equals(overlay.getName())) {
+				match[0] = overlay;
+				return true;
+			}
+
+			return false;
+		});
+		return match[0];
 	}
 
 	private static void putWidget(Map<String, WidgetState> widgets, String label, Widget widget) {
@@ -245,6 +294,11 @@ public final class SideContainerDiagnostics {
 		}
 	}
 
+	/**
+	 * ================================================================
+	 * COLLISION DIAGNOSTICS
+	 * ================================================================
+	 */
 	private void logCollision(int scriptId) {
 		final CollisionState current = CollisionState.capture(client, config);
 		if (current == null || current.sameAs(collisionState)) {
@@ -265,11 +319,17 @@ public final class SideContainerDiagnostics {
 						+ " | movableChildren={}"
 						+ " | background={}"
 						+ " | container={}"
+						+ " | map={}"
+						+ " | orbs={}"
+						+ " | mapTabs={}"
+						+ " | orbsTabs={}"
 						+ " | desired={}"
 						+ " | staticBounds={}"
 						+ " | movableBounds={}"
 						+ " | backgroundBounds={}"
-						+ " | containerBounds={}",
+						+ " | containerBounds={}"
+						+ " | mapBounds={}"
+						+ " | orbsBounds={}",
 				scriptId,
 				current.configuredWidth,
 				current.buttonLayers,
@@ -279,13 +339,24 @@ public final class SideContainerDiagnostics {
 				current.movableChildHits,
 				current.backgroundHit,
 				current.containerHit,
+				current.mapHit,
+				current.orbsHit,
+				current.mapTabsHit,
+				current.orbsTabsHit,
 				describeBounds(current.desired),
 				describeBounds(current.staticBounds),
 				describeBounds(current.movableBounds),
 				describeBounds(current.backgroundBounds),
-				describeBounds(current.containerBounds));
+				describeBounds(current.containerBounds),
+				describeBounds(current.mapBounds),
+				describeBounds(current.orbsBounds));
 	}
 
+	/**
+	 * ================================================================
+	 * SCRIPT TRACE
+	 * ================================================================
+	 */
 	private String traceScriptArguments(ScriptPreFired event) {
 		if (event == null || event.getScriptEvent() == null || event.getScriptEvent().getArguments() == null) {
 			return "[]";
@@ -317,7 +388,7 @@ public final class SideContainerDiagnostics {
 		return values.toString();
 	}
 
-	private String traceIntStackTail() {
+	private String traceIntTail() {
 		final int[] stack = client.getIntStack();
 		final int size = client.getIntStackSize();
 		if (stack == null || size <= 0 || size > stack.length) {
@@ -325,11 +396,10 @@ public final class SideContainerDiagnostics {
 		}
 
 		final int start = Math.max(0, size - INT_STACK_TAIL_SIZE);
-
 		return Arrays.toString(Arrays.copyOfRange(stack, start, size));
 	}
 
-	private String traceObjectStackStrings() {
+	private String traceStackStrings() {
 		final Object[] stack = client.getObjectStack();
 		final int size = client.getObjectStackSize();
 		if (stack == null || size <= 0 || size > stack.length) {
@@ -337,7 +407,6 @@ public final class SideContainerDiagnostics {
 		}
 
 		final List<String> strings = new ArrayList<>();
-
 		for (int i = 0; i < size; i++) {
 			final Object value = stack[i];
 			if (!(value instanceof String)) {
@@ -346,10 +415,7 @@ public final class SideContainerDiagnostics {
 
 			String text = (String) value;
 
-			text = text
-					.replace("\r\n", "\\n")
-					.replace('\r', '\n')
-					.replace("\n", "\\n");
+			text = text.replace("\r\n", "\\n").replace('\r', '\n').replace("\n", "\\n");
 
 			if (text.length() > MAX_LOGGED_STRING_LENGTH) {
 				text = text.substring(0, MAX_LOGGED_STRING_LENGTH) + "...";
@@ -366,13 +432,14 @@ public final class SideContainerDiagnostics {
 			return "-";
 		}
 
-		return "[x=" + bounds.x
-				+ ", y=" + bounds.y
-				+ ", width=" + bounds.width
-				+ ", height=" + bounds.height
-				+ "]";
+		return "[x=" + bounds.x + ", y=" + bounds.y + ", width=" + bounds.width + ", height=" + bounds.height + "]";
 	}
 
+	/**
+	 * ================================================================
+	 * STATE TYPES
+	 * ================================================================
+	 */
 	private static final class CollisionState {
 		private final int configuredWidth;
 		private final Rectangle desired;
@@ -380,46 +447,46 @@ public final class SideContainerDiagnostics {
 		private final Rectangle staticBounds;
 		private final Rectangle movableBounds;
 		private final Rectangle containerBounds;
+		private final Rectangle mapBounds;
+		private final Rectangle orbsBounds;
 		private final boolean backgroundHit;
 		private final boolean staticLayerHit;
 		private final boolean movableLayerHit;
 		private final boolean containerHit;
+		private final boolean mapHit;
+		private final boolean orbsHit;
+		private final boolean mapTabsHit;
+		private final boolean orbsTabsHit;
 		private final int staticChildHits;
 		private final int movableChildHits;
 		private final int buttonLayers;
 
-		private CollisionState(
-				int configuredWidth,
-				Rectangle desired,
-				Rectangle backgroundBounds,
-				Rectangle staticBounds,
-				Rectangle movableBounds,
-				Rectangle containerBounds,
-				int staticChildHits,
-				int movableChildHits) {
+		private CollisionState(int configuredWidth, Rectangle desired, Rectangle backgroundBounds, Rectangle staticBounds, Rectangle movableBounds,
+				Rectangle containerBounds, Rectangle mapBounds, Rectangle orbsBounds, int staticChildHits, int movableChildHits) {
 			this.configuredWidth = configuredWidth;
 			this.desired = desired;
 			this.backgroundBounds = backgroundBounds;
 			this.staticBounds = staticBounds;
 			this.movableBounds = movableBounds;
 			this.containerBounds = containerBounds;
+			this.mapBounds = mapBounds;
+			this.orbsBounds = orbsBounds;
 			this.backgroundHit = intersects(desired, backgroundBounds);
 			this.staticLayerHit = intersects(desired, staticBounds);
 			this.movableLayerHit = intersects(desired, movableBounds);
 			this.containerHit = intersects(desired, containerBounds);
+			this.mapHit = intersects(desired, mapBounds);
+			this.orbsHit = intersects(desired, orbsBounds);
+			final Rectangle stripBounds = union(staticBounds, movableBounds);
+			this.mapTabsHit = intersects(stripBounds, mapBounds);
+			this.orbsTabsHit = intersects(stripBounds, orbsBounds);
 			this.staticChildHits = staticChildHits;
 			this.movableChildHits = movableChildHits;
-			this.buttonLayers = (staticChildHits > 0
-					? 1
-					: 0) + (movableChildHits > 0
-					? 1
-					: 0);
+			this.buttonLayers = (staticChildHits > 0 ? 1 : 0) + (movableChildHits > 0 ? 1 : 0);
 		}
 
 		private static CollisionState capture(Client client, Configurations config) {
-			if (client == null
-					|| config == null
-					|| client.getTopLevelInterfaceId() != InterfaceID.TOPLEVEL_PRE_EOC) {
+			if (client == null || config == null || client.getTopLevelInterfaceId() != InterfaceID.TOPLEVEL_PRE_EOC) {
 				return null;
 			}
 
@@ -430,13 +497,14 @@ public final class SideContainerDiagnostics {
 			}
 
 			final int configuredWidth = config.chatboxWidth();
-			final Rectangle desired = new Rectangle(
-					slotBounds.x, slotBounds.y, Math.max(0, configuredWidth), slotBounds.height);
+			final Rectangle desired = new Rectangle(slotBounds.x, slotBounds.y, Math.max(0, configuredWidth), slotBounds.height);
 
 			final Widget background = client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_BACKGROUND);
 			final Widget staticLayer = client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_STATIC_LAYER);
 			final Widget movableLayer = client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_MOVABLE_LAYER);
 			final Widget container = client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_CONTAINER);
+			final Widget map = client.getWidget(InterfaceID.ToplevelPreEoc.MAP_CONTAINER);
+			final Widget orbs = client.getWidget(InterfaceID.ToplevelPreEoc.ORBS);
 
 			return new CollisionState(
 					configuredWidth,
@@ -445,19 +513,17 @@ public final class SideContainerDiagnostics {
 					visibleBounds(staticLayer),
 					visibleBounds(movableLayer),
 					visibleBounds(container),
+					visibleBounds(map),
+					visibleBounds(orbs),
 					countChildHits(desired, staticLayer),
 					countChildHits(desired, movableLayer));
 		}
 
 		private boolean sameAs(CollisionState other) {
-			return other != null
-					&& configuredWidth == other.configuredWidth
-					&& backgroundHit == other.backgroundHit
-					&& staticLayerHit == other.staticLayerHit
-					&& movableLayerHit == other.movableLayerHit
-					&& containerHit == other.containerHit
-					&& staticChildHits == other.staticChildHits
-					&& movableChildHits == other.movableChildHits;
+			return other != null && configuredWidth == other.configuredWidth && backgroundHit == other.backgroundHit
+					&& staticLayerHit == other.staticLayerHit && movableLayerHit == other.movableLayerHit && containerHit == other.containerHit
+					&& mapHit == other.mapHit && orbsHit == other.orbsHit && mapTabsHit == other.mapTabsHit && orbsTabsHit == other.orbsTabsHit
+					&& staticChildHits == other.staticChildHits && movableChildHits == other.movableChildHits;
 		}
 
 		private static Rectangle visibleBounds(Widget widget) {
@@ -466,9 +532,7 @@ public final class SideContainerDiagnostics {
 			}
 
 			final Rectangle bounds = widget.getBounds();
-			return bounds != null && bounds.width > 0 && bounds.height > 0
-					? new Rectangle(bounds)
-					: null;
+			return bounds != null && bounds.width > 0 && bounds.height > 0 ? new Rectangle(bounds) : null;
 		}
 
 		private static int countChildHits(Rectangle desired, Widget parent) {
@@ -476,8 +540,7 @@ public final class SideContainerDiagnostics {
 				return 0;
 			}
 
-			return countChildHits(desired, parent.getStaticChildren())
-					+ countChildHits(desired, parent.getDynamicChildren())
+			return countChildHits(desired, parent.getStaticChildren()) + countChildHits(desired, parent.getDynamicChildren())
 					+ countChildHits(desired, parent.getNestedChildren());
 		}
 
@@ -510,10 +573,12 @@ public final class SideContainerDiagnostics {
 	private static final class Snapshot {
 		private final int topLevel;
 		private final Map<String, WidgetState> widgets;
+		private final Map<String, OverlayState> overlays;
 
-		private Snapshot(int topLevel, Map<String, WidgetState> widgets) {
+		private Snapshot(int topLevel, Map<String, WidgetState> widgets, Map<String, OverlayState> overlays) {
 			this.topLevel = topLevel;
 			this.widgets = widgets;
+			this.overlays = overlays;
 		}
 	}
 
@@ -528,6 +593,8 @@ public final class SideContainerDiagnostics {
 		private final int relativeY;
 		private final int width;
 		private final int height;
+		private final int boundsX;
+		private final int boundsY;
 		private final boolean hidden;
 		private final int staticChildren;
 		private final int dynamicChildren;
@@ -545,6 +612,8 @@ public final class SideContainerDiagnostics {
 				relativeY = 0;
 				width = 0;
 				height = 0;
+				boundsX = 0;
+				boundsY = 0;
 				hidden = true;
 				staticChildren = 0;
 				dynamicChildren = 0;
@@ -562,6 +631,9 @@ public final class SideContainerDiagnostics {
 			relativeY = widget.getRelativeY();
 			width = widget.getWidth();
 			height = widget.getHeight();
+			final Rectangle bounds = widget.getBounds();
+			boundsX = bounds != null ? bounds.x : 0;
+			boundsY = bounds != null ? bounds.y : 0;
 			hidden = widget.isHidden();
 			staticChildren = childCount(widget.getStaticChildren());
 			dynamicChildren = childCount(widget.getDynamicChildren());
@@ -593,14 +665,14 @@ public final class SideContainerDiagnostics {
 			appendDifference(difference, "relativeY", before.relativeY, after.relativeY);
 			appendDifference(difference, "width", before.width, after.width);
 			appendDifference(difference, "height", before.height, after.height);
+			appendDifference(difference, "boundsX", before.boundsX, after.boundsX);
+			appendDifference(difference, "boundsY", before.boundsY, after.boundsY);
 			appendDifference(difference, "hidden", before.hidden, after.hidden);
 			appendDifference(difference, "staticChildren", before.staticChildren, after.staticChildren);
 			appendDifference(difference, "dynamicChildren", before.dynamicChildren, after.dynamicChildren);
 			appendDifference(difference, "nestedChildren", before.nestedChildren, after.nestedChildren);
 
-			return difference.length() == 0
-					? null
-					: "component=" + label + " | " + difference;
+			return difference.length() == 0 ? null : "component=" + label + " | " + difference;
 		}
 
 		private String describe() {
@@ -608,33 +680,12 @@ public final class SideContainerDiagnostics {
 				return "MISSING";
 			}
 
-			return "identity="
-					+ identity
-					+ ", original=["
-					+ originalX
-					+ ","
-					+ originalY
-					+ ","
-					+ originalWidth
-					+ "x"
-					+ originalHeight
-					+ "]"
-					+ ", relative=["
-					+ relativeX
-					+ ","
-					+ relativeY
-					+ "]"
-					+ ", calculated=["
-					+ width
-					+ "x"
-					+ height
-					+ "]";
+			return "identity=" + identity + ", original=[" + originalX + "," + originalY + "," + originalWidth + "x" + originalHeight + "]"
+					+ ", relative=[" + relativeX + "," + relativeY + "], calculated=[" + width + "x" + height + "]";
 		}
 
 		private static int childCount(Widget[] children) {
-			return children != null
-					? children.length
-					: 0;
+			return children != null ? children.length : 0;
 		}
 
 		private static void appendDifference(StringBuilder builder, String name, int before, int after) {
@@ -662,7 +713,100 @@ public final class SideContainerDiagnostics {
 		}
 	}
 
+	private static final class OverlayState {
+		private final boolean present;
+		private final Integer preferredX;
+		private final Integer preferredY;
+		private final OverlayPosition preferredPosition;
+		private final int boundsX;
+		private final int boundsY;
+		private final int width;
+		private final int height;
+
+		private OverlayState(Overlay overlay) {
+			if (overlay == null) {
+				present = false;
+				preferredX = null;
+				preferredY = null;
+				preferredPosition = null;
+				boundsX = 0;
+				boundsY = 0;
+				width = 0;
+				height = 0;
+				return;
+			}
+
+			present = true;
+			final Point preferredLocation = overlay.getPreferredLocation();
+			preferredX = preferredLocation != null ? preferredLocation.x : null;
+			preferredY = preferredLocation != null ? preferredLocation.y : null;
+			preferredPosition = overlay.getPreferredPosition();
+			final Rectangle bounds = overlay.getBounds();
+			boundsX = bounds != null ? bounds.x : 0;
+			boundsY = bounds != null ? bounds.y : 0;
+			width = bounds != null ? bounds.width : 0;
+			height = bounds != null ? bounds.height : 0;
+		}
+
+		private static String describeDifference(String label, OverlayState before, OverlayState after) {
+			if (before == null && after == null) {
+				return null;
+			}
+
+			if (before == null || after == null) {
+				return "overlay=" + label + " | state=" + (before == null ? "MISSING" : before.describe()) + "->"
+						+ (after == null ? "MISSING" : after.describe());
+			}
+
+			final StringBuilder difference = new StringBuilder();
+			appendDifference(difference, "present", before.present, after.present);
+			appendDifference(difference, "preferredX", before.preferredX, after.preferredX);
+			appendDifference(difference, "preferredY", before.preferredY, after.preferredY);
+			appendDifference(difference, "preferredPosition", String.valueOf(before.preferredPosition), String.valueOf(after.preferredPosition));
+			appendDifference(difference, "boundsX", before.boundsX, after.boundsX);
+			appendDifference(difference, "boundsY", before.boundsY, after.boundsY);
+			appendDifference(difference, "width", before.width, after.width);
+			appendDifference(difference, "height", before.height, after.height);
+
+			return difference.length() == 0 ? null : "overlay=" + label + " | " + difference;
+		}
+
+		private String describe() {
+			return "present=" + present + ", preferred=[" + preferredX + "," + preferredY + "], position=" + preferredPosition
+					+ ", bounds=[" + boundsX + "," + boundsY + "," + width + "x" + height + "]";
+		}
+
+		private static void appendDifference(StringBuilder builder, String name, Object before, Object after) {
+			if (before == after || before != null && before.equals(after)) {
+				return;
+			}
+
+			appendSeparator(builder);
+			builder.append(name).append('=').append(before).append("->").append(after);
+		}
+
+		private static void appendSeparator(StringBuilder builder) {
+			if (builder.length() > 0) {
+				builder.append(", ");
+			}
+		}
+	}
+
+	private static Rectangle union(Rectangle first, Rectangle second) {
+		if (first == null) {
+			return second != null ? new Rectangle(second) : null;
+		}
+
+		final Rectangle union = new Rectangle(first);
+		if (second != null) {
+			union.add(second);
+		}
+
+		return union;
+	}
+
 	private static boolean intersects(Rectangle first, Rectangle second) {
 		return first != null && second != null && first.intersects(second);
 	}
 }
+
