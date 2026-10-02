@@ -98,14 +98,13 @@ public class ChatXL extends Plugin {
 	@Override
 	protected void startUp() {
 		performanceMetrics = debugManager.activate();
-		chatboxResizeService = new ChatboxResizeService(client, performanceMetrics);
+		chatboxResizeService = new ChatboxResizeService(client, configManager, overlayManager, performanceMetrics);
+		chatboxResizeService.onGameStateChanged(client.getGameState());
 		privateChatOverlay = new PrivateChatOverlay();
 		privateChatLayout = new PrivateChatLayout(client, config, configManager, privateChatOverlay);
 		overlayManager.add(privateChatOverlay);
-		chatRebuildCoordinator = new ChatRebuildCoordinator(
-				client, clientThread, config, chatboxResizeService, performanceMetrics);
-		chatboxHotkey = new ChatboxHotkey(
-				clientThread, config, chatboxResizeService, keyManager, this::clearChatHistory);
+		chatRebuildCoordinator = new ChatRebuildCoordinator(client, clientThread, config, chatboxResizeService, performanceMetrics);
+		chatboxHotkey = new ChatboxHotkey(clientThread, config, chatboxResizeService, keyManager, this::clearChatHistory);
 		chatboxHotkey.activate();
 		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
 		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);
@@ -217,7 +216,15 @@ public class ChatXL extends Plugin {
 	 */
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event) {
-		if (event == null || event.getGameState() != GameState.LOGGED_IN) {
+		if (event == null) {
+			return;
+		}
+
+		if (chatboxResizeService != null) {
+			chatboxResizeService.onGameStateChanged(event.getGameState());
+		}
+
+		if (event.getGameState() != GameState.LOGGED_IN) {
 			return;
 		}
 
@@ -237,6 +244,10 @@ public class ChatXL extends Plugin {
 	public void onCanvasSizeChanged(CanvasSizeChanged event) {
 		if (event == null) {
 			return;
+		}
+
+		if (chatboxResizeService != null) {
+			chatboxResizeService.onCanvasSizeChanged();
 		}
 
 		if (chatRebuildCoordinator != null) {
@@ -348,6 +359,15 @@ public class ChatXL extends Plugin {
 	public void onConfigChanged(ConfigChanged event) {
 		debugManager.onConfigChanged(event);
 
+		if (chatboxResizeService != null && chatboxResizeService.isInventoryOverlayReset(event)) {
+			chatboxResizeService.guardInventoryOverlayReset();
+			clientThread.invokeLater(() -> {
+				if (chatboxResizeService != null) {
+					chatboxResizeService.reconcileInventoryOverlayReset(config.chatboxWidth(), config.chatboxHeight());
+				}
+			});
+		}
+
 		if (privateChatLayout != null) {
 			privateChatLayout.onConfigChanged(event);
 		}
@@ -378,13 +398,13 @@ public class ChatXL extends Plugin {
 	 */
 	@Subscribe
 	public void onScriptPreFired(ScriptPreFired event) {
-		debugManager.onChatboxScriptPreFired(event);
+		debugManager.onChatboxPre(event);
 
 		if (chatboxResizeService != null) {
 			chatboxResizeService.onScriptPreFired(event, config.chatboxWidth(), config.chatboxHeight());
 		}
 
-		debugManager.onFontScriptPreFired(event);
+		debugManager.onFontPre(event);
 
 		if (fontLayoutService == null) {
 			return;
@@ -399,15 +419,13 @@ public class ChatXL extends Plugin {
 		fontLayoutService.onScriptPreFired(event);
 
 		if (metricsEnabled && event != null) {
-			performanceMetrics.recordPre(
-					event.getScriptId(),
-					System.nanoTime() - started);
+			performanceMetrics.recordPre(event.getScriptId(), System.nanoTime() - started);
 		}
 	}
 
 	@Subscribe
 	public void onScriptPostFired(ScriptPostFired event) {
-		debugManager.onChatboxScriptPostFired(event);
+		debugManager.onChatboxPost(event);
 
 		if (fontLayoutService != null) {
 			final boolean metricsEnabled = performanceMetrics != null && performanceMetrics.isEnabled();
@@ -419,9 +437,7 @@ public class ChatXL extends Plugin {
 			fontLayoutService.onScriptPostFired(event);
 
 			if (metricsEnabled && event != null) {
-				performanceMetrics.recordPost(
-						event.getScriptId(),
-						System.nanoTime() - started);
+				performanceMetrics.recordPost(event.getScriptId(), System.nanoTime() - started);
 			}
 		}
 
@@ -437,12 +453,21 @@ public class ChatXL extends Plugin {
 			privateChatLayout.onScriptPostFired(event);
 		}
 
-		debugManager.onFontScriptPostFired(event);
-		debugManager.reportPerformanceIfDue();
+		debugManager.onFontPost(event);
+		debugManager.reportPerformance();
 	}
 
+	/**
+	 * ================================================================
+	 * RENDER LIFECYCLE
+	 * ================================================================
+	 */
 	@Subscribe
 	public void onPostClientTick(PostClientTick event) {
+		if (chatboxResizeService != null) {
+			chatboxResizeService.reconcilePostLoginGeometry(config.chatboxWidth(), config.chatboxHeight());
+		}
+
 		if (privateChatLayout != null) {
 			privateChatLayout.reconcileAfterClientTick();
 		}
@@ -455,15 +480,15 @@ public class ChatXL extends Plugin {
 
 		if (privateChatLayout != null) {
 			/*
-			 * Resolve movable split-PM placement and effective width before the
-			 * render-boundary rebuild. rebuildpmbox and FontMeasurementService then
-			 * see the constrained host width during the same native reconstruction.
+			 * Resolve split-PM placement before retained chat geometry is refreshed.
 			 */
 			final PrivateChatLayout.Result privateResult = privateChatLayout.sync();
 			widthChanged |= privateResult.isWidthChanged();
 		}
 
 		if (chatboxResizeService != null) {
+			chatboxResizeService.reconcileBeforeRender(config.chatboxWidth(), config.chatboxHeight());
+
 			final ChatboxResizeService.LiveRefresh refresh = chatboxResizeService.consumeLiveRefresh();
 			if (refresh != null) {
 				widthChanged |= refresh.isWidthChanged();
@@ -473,9 +498,7 @@ public class ChatXL extends Plugin {
 
 		if (chatRebuildCoordinator != null && (widthChanged || heightChanged)) {
 			/*
-			 * Coalesce chatbox and split-PM width changes into one refreshChat().
-			 * The coordinator rebuilds retained presentation only and never feeds the
-			 * result back through the geometry commit path that previously flickered.
+			 * Coalesce chatbox and split-PM geometry changes into one retained-chat refresh.
 			 */
 			chatRebuildCoordinator.refreshLiveGeometry(widthChanged, heightChanged);
 		}
