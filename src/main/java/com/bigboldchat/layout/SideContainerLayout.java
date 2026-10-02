@@ -221,6 +221,39 @@ public final class SideContainerLayout {
 	}
 
 	/*
+	 * Aligns a newly revealed inventory container to its established overlay position
+	 * before collision relayout observes transient native geometry.
+	 */
+	public Result reconcileInventoryReveal() {
+		if (gameStateSuspended || !isModernLayout() || overlayManager == null) {
+			return Result.NONE;
+		}
+
+		final Widgets widgets = getWidgets();
+		if (widgets == null || widgets.container.isSelfHidden()) {
+			return Result.NONE;
+		}
+
+		final Overlay overlay = findOverlay(INVENTORY_OVERLAY);
+		if (overlay == null || overlay.getPreferredLocation() == null && overlay.getPreferredPosition() == null) {
+			return Result.NONE;
+		}
+
+		final Rectangle overlayBounds = overlay.getBounds();
+		if (overlayBounds == null || overlayBounds.x == -1 && overlayBounds.y == -1 || overlayBounds.width != 0 || overlayBounds.height != 0) {
+			return Result.NONE;
+		}
+
+		if (!forceWidgetPosition(widgets.container, overlayBounds.x, overlayBounds.y)) {
+			return Result.NONE;
+		}
+
+		inventoryForcedPosition = true;
+		widgets.container.revalidate();
+		return new Result(1, 1);
+	}
+
+	/*
 	 * Reattaches the inventory to the currently owned row layout after an overlay reset.
 	 */
 	public Result reconcileInventoryReset() {
