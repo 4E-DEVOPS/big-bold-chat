@@ -25,7 +25,7 @@ public final class UpdateMessages {
 			+ " Report any issues you find to Github.";
 	private static final String UNINSTALL_MESSAGE = "Thank you for using ChatXL!"
 			+ " Please submit a review/issue report on Github of your experience.";
-	private static final String UPDATE_MESSAGE = "Improved Split-PM positioning and resizing.";
+	private static final String UPDATE_MESSAGE = "Improved ChatXL’s integrated resizer with more reliable collision handling, better Modern tab-row behavior, cleaner inventory/tab interaction, and improved placement restoration across resizing and login.";
 
 	private final Client client;
 	private final ClientThread clientThread;
