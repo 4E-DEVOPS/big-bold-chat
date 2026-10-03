@@ -691,9 +691,7 @@ public final class FontLayoutService {
 	}
 
 	/*
-	 * Package-private test seams.
-	 *
-	 * These expose only the state required by FontLayoutServiceTest and keep
+	 * Exposes only the state required by FontLayoutServiceTest and keep
 	 * the test suite free of Java reflection. They do not alter runtime
 	 * behavior or lifecycle ownership.
 	 */

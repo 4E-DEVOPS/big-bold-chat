@@ -61,9 +61,7 @@ public final class PrivateChatLayout {
 	private boolean widthOverridden;
 
 	/*
-	 * Width rewrapping changes the visible PM block height. Collision tests must
-	 * not feed that newly-wrapped height straight back into the next width solve,
-	 * or the PM can alternate between colliding and not colliding every frame.
+	 * Width rewrapping changes the visible PM block height.
 	 */
 	private int stableCollisionHeight;
 	private int stableDesiredWidth;
@@ -342,9 +340,7 @@ public final class PrivateChatLayout {
 		widthOverrideInitialized = true;
 
 		/*
-		 * Older Phase-5 prototypes could leave splitPmWidth stored while it was
-		 * intended to inherit. Without the explicit marker introduced here, treat
-		 * that state as inherited and mirror the configured Chatbox Width.
+		 * Treat this state as inherited and mirror the configured Chatbox Width.
 		 */
 		if (storedOverride == null) {
 			setWidthOverridden(false);

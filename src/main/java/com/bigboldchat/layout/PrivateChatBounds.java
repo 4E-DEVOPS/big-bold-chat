@@ -29,15 +29,10 @@ final class PrivateChatBounds {
 		int effectiveWidth = constrain(desiredWidth, availableWidth);
 
 		/*
-		 * This prototype preserves the PM surface's left edge and constrains only
-		 * against interfaces to its right. Left-edge preservation is deliberate:
-		 * the general symmetric movable-geometry phase will add opposite-edge
-		 * ownership for left-side collisions without duplicating that solver here.
+		 * Preserves the PM surface's left edge and constrains only against interfaces to its right.
 		 */
 		for (Rectangle obstacle : interfaces.getObstacles()) {
-			if (!intersectsVertically(surfaceBounds, obstacle)
-					|| obstacle.x <= anchorX
-					|| obstacle.x >= anchorX + effectiveWidth) {
+			if (!intersectsVertically(surfaceBounds, obstacle) || obstacle.x <= anchorX || obstacle.x >= anchorX + effectiveWidth) {
 				continue;
 			}
 
