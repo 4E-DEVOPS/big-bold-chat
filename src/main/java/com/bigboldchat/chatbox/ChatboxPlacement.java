@@ -220,7 +220,7 @@ public final class ChatboxPlacement {
 	private State manualPlacement(Rectangle liveBounds, Rectangle canvas, String overlayName, String preferredLocation,
 			int configuredWidth, int configuredHeight) {
 		/*
-		 * Restore the first manual sample from RuneLite's saved origin-relative location, then follow the live host.
+		 * Restore the first manual sample from RuneLite's saved origin-relative location.
 		 */
 		if (manualBounds == null) {
 			final Rectangle restored = configuredManualBounds(
@@ -234,11 +234,22 @@ public final class ChatboxPlacement {
 		}
 
 		/*
+		 * Stable live geometry updates the saved manual location.
+		 */
+		if (liveBounds.width == manualBounds.width && liveBounds.height == manualBounds.height) {
+			manualBounds.setLocation(liveBounds.x, liveBounds.y);
+		}
+
+		if (manualBounds.width == configuredWidth && manualBounds.height == configuredHeight) {
+			return new State(manualBounds, true);
+		}
+
+		/*
 		 * Client-edge contact is authoritative for manual resizing. An attached
 		 * edge remains fixed while the opposite edge grows or shrinks; an axis
 		 * with no client-edge contact remains centered like a floating placement.
 		 */
-		final Rectangle resized = edgeAnchoredBounds(liveBounds, canvas, configuredWidth, configuredHeight);
+		final Rectangle resized = edgeAnchoredBounds(manualBounds, canvas, configuredWidth, configuredHeight);
 		manualBounds.setBounds(resized);
 
 		final boolean hostAnchorUpdate = resized.x != liveBounds.x || resized.y != liveBounds.y;
