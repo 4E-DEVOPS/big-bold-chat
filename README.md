@@ -190,12 +190,15 @@ ChatXL is intended for players who want:
 - Convenient chat controls without replacing RuneLite's normal interface behavior.
 - Better readability while keeping the game interface familiar.
 
-## Coming Soon
+## Roadmap
 
-<b>V2.7</b>: Additional resizable-interface integration and collision handling<br>
+<b>V2.6</b>: Separate chatbox font, dialogue/prompt font, and input font<br>
+<b>V2.6.5</b>: Further improve channel, name, and message wrapping for thin chatboxes<br>
+<b>V2.7</b>: Chatbox resizing UX handles and integration<br>
 <b>V2.8</b>: Resize UX polish<br>
 <b>V2.9</b>: Accessibility and player-facing improvements<br>
-<b>V3.0</b>: Further resizable interface integrations (Inventory, Minimap, et cetera)<br>
+<b>V3.0</b>: Resizable Fixed Mode<br>
+<b>V4.0</b>: Further resizable interface integrations (Inventory, Minimap, et cetera)<br>
 
 ---
 
