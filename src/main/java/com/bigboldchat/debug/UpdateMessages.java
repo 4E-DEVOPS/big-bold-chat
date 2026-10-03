@@ -25,7 +25,7 @@ public final class UpdateMessages {
 			+ " Report any issues you find to Github.";
 	private static final String UNINSTALL_MESSAGE = "Thank you for using ChatXL!"
 			+ " Please submit a review/issue report on Github of your experience.";
-	private static final String UPDATE_MESSAGE = "Implemented omni-directional collision handling (thanks to the issue report from <shad=ffffff>@Aulu-tech</shad>), better Modern tab-row behavior, cleaner inventory/tab interaction, improved placement restoration across resizing and login, and smarter chatbox visibility and native dialogue layout.";
+	private static final String UPDATE_MESSAGE = "Implemented independent Input Font support with per-font sizing and positioning, horizontal scrolling, and synced the scrollbar (thanks to the suggestion from <shad=ffffff>@g1iwnl</shad>). Dialogue and prompt font support is planned for the next update.";
 
 	private final Client client;
 	private final ClientThread clientThread;
