@@ -185,10 +185,8 @@ public final class DialoguePrompts {
 
 		final OptionSpacing preferred = optionSpacing(state, rows, false);
 		final OptionSpacing minimum = optionSpacing(state, rows, true);
-		final int rowHeight = optionRowsHeight(rows);
-		final int gapCount = Math.max(0, rows.size() - 1);
-		final int preferredHeight = rowHeight + preferred.top + preferred.bottom + gapCount * preferred.gap;
-		final int minimumHeight = rowHeight + minimum.top + minimum.bottom + gapCount * minimum.gap;
+		final int preferredHeight = optionRequiredHeight(state, rows, width, preferred);
+		final int minimumHeight = optionRequiredHeight(state, rows, width, minimum);
 		return new FitRequirement(true, minimumHeight, preferredHeight);
 	}
 
@@ -289,7 +287,7 @@ public final class DialoguePrompts {
 		final int inset = Math.max(0, (ChatboxGeometry.NATIVE_WIDTH - optionsState.rootGeometry.width) / 2);
 		final int width = Math.max(1, effectiveWidth - inset * 2);
 		final List<OptionRow> rows = collectOptionRows(optionsState, width);
-		final OptionLayout layout = optionLayout(optionsState, rows, effectiveBodyHeight);
+		final OptionLayout layout = optionLayout(optionsState, rows, width, effectiveBodyHeight);
 		final int x = Math.max(0, (effectiveWidth - width) / 2);
 		final int y = Math.max(0, (effectiveBodyHeight - layout.height) / 2);
 		final Position rootPosition = rootPosition(options, x, y, width, layout.height);
@@ -315,7 +313,7 @@ public final class DialoguePrompts {
 		return rows;
 	}
 
-	private static OptionLayout optionLayout(OptionsState state, List<OptionRow> rows, int availableHeight) {
+	private static OptionLayout optionLayout(OptionsState state, List<OptionRow> rows, int width, int availableHeight) {
 		if (rows.isEmpty()) {
 			return new OptionLayout(state.rootGeometry.height, 0, 0, MIN_OPTION_ROW_GAP);
 		}
@@ -323,10 +321,10 @@ public final class DialoguePrompts {
 		final OptionSpacing preferred = optionSpacing(state, rows, false);
 		final OptionSpacing minimum = optionSpacing(state, rows, true);
 		final OptionSpacing selected = availableHeight > 0
-				? compressOptionSpacing(preferred, minimum, rows.size(), availableHeight, rows)
+				? compressOptionSpacing(state, preferred, minimum, width, availableHeight, rows)
 				: preferred;
 
-		int y = selected.top;
+		int y = selected.top + optionTitleOffset(state, rows, width, selected.top);
 		for (int i = 0; i < rows.size(); i++) {
 			final OptionRow row = rows.get(i);
 			row.y = y;
@@ -353,16 +351,15 @@ public final class DialoguePrompts {
 				: new OptionSpacing(preferredTop, preferredBottom, preferredGap);
 	}
 
-	private static OptionSpacing compressOptionSpacing(OptionSpacing preferred, OptionSpacing minimum, int rowCount,
-			int availableHeight, List<OptionRow> rows) {
-		final int rowHeight = optionRowsHeight(rows);
-		final int gapCount = Math.max(0, rowCount - 1);
-		final int preferredHeight = rowHeight + preferred.top + preferred.bottom + gapCount * preferred.gap;
+	private static OptionSpacing compressOptionSpacing(OptionsState state, OptionSpacing preferred, OptionSpacing minimum,
+			int width, int availableHeight, List<OptionRow> rows) {
+		final int gapCount = Math.max(0, rows.size() - 1);
+		final int preferredHeight = optionRequiredHeight(state, rows, width, preferred);
 		if (preferredHeight <= availableHeight) {
 			return preferred;
 		}
 
-		final int minimumHeight = rowHeight + minimum.top + minimum.bottom + gapCount * minimum.gap;
+		final int minimumHeight = optionRequiredHeight(state, rows, width, minimum);
 		if (minimumHeight >= availableHeight) {
 			return minimum;
 		}
@@ -386,6 +383,62 @@ public final class DialoguePrompts {
 		bottom += bottomIncrease;
 
 		return new OptionSpacing(top, bottom, gap);
+	}
+
+	private static int optionRequiredHeight(OptionsState state, List<OptionRow> rows, int width, OptionSpacing spacing) {
+		final int gapCount = Math.max(0, rows.size() - 1);
+		final int titleOffset = optionTitleOffset(state, rows, width, spacing.top);
+		return optionRowsHeight(rows) + spacing.top + titleOffset + spacing.bottom + gapCount * spacing.gap;
+	}
+
+	private static int optionTitleOffset(OptionsState state, List<OptionRow> rows, int width, int titleY) {
+		if (rows.isEmpty()) {
+			return 0;
+		}
+
+		final List<GraphicLayout> graphics = collectOptionGraphics(state, width);
+		if (graphics.isEmpty() || optionGraphicsOverlap(graphics)) {
+			return 0;
+		}
+
+		int graphicBottom = 0;
+		for (GraphicLayout graphic : graphics) {
+			graphicBottom = Math.max(graphicBottom, graphic.baseline.geometry.y + graphic.baseline.geometry.height);
+		}
+
+		final OptionRow title = rows.get(0);
+		if (title.baseline.geometry.y >= graphicBottom) {
+			return 0;
+		}
+
+		final int textWidth = optionTextWidth(title.widget, title.text);
+		final int textX = Math.max(0, (width - textWidth) / 2);
+		final Rectangle textBounds = new Rectangle(textX, titleY, textWidth, title.height);
+		int overlapBottom = 0;
+		for (GraphicLayout graphic : graphics) {
+			final Geometry geometry = graphic.baseline.geometry;
+			final Rectangle graphicBounds = new Rectangle(graphic.x, geometry.y, geometry.width, geometry.height);
+			if (textBounds.intersects(graphicBounds)) {
+				overlapBottom = Math.max(overlapBottom, geometry.y + geometry.height);
+			}
+		}
+
+		return overlapBottom > 0
+				? Math.max(0, overlapBottom + MIN_OPTION_ROW_GAP - titleY)
+				: 0;
+	}
+
+	private static int optionTextWidth(Widget widget, String text) {
+		final FontTypeFace font = widget != null ? widget.getFont() : null;
+		if (font == null || text == null || text.isEmpty()) {
+			return 0;
+		}
+
+		int width = 0;
+		for (String line : text.split("<br>", -1)) {
+			width = Math.max(width, font.getTextWidth(line));
+		}
+		return width;
 	}
 
 	private static int preferredOptionGap(List<OptionRow> rows) {
@@ -412,6 +465,17 @@ public final class DialoguePrompts {
 	}
 
 	private static void applyOptionGraphics(OptionsState state, int width, MutableResult result) {
+		final List<GraphicLayout> graphics = collectOptionGraphics(state, width);
+		final boolean overlap = optionGraphicsOverlap(graphics);
+
+		for (GraphicLayout graphic : graphics) {
+			final Geometry geometry = graphic.baseline.geometry;
+			applyGeometry(graphic.widget, graphic.x, geometry.y, geometry.width, geometry.height, result);
+			applyHidden(graphic.widget, overlap || graphic.baseline.hidden, result);
+		}
+	}
+
+	private static List<GraphicLayout> collectOptionGraphics(OptionsState state, int width) {
 		final List<GraphicLayout> graphics = new ArrayList<>();
 		for (Map.Entry<Widget, WidgetState> entry : state.children.entrySet()) {
 			final Widget widget = entry.getKey();
@@ -423,24 +487,20 @@ public final class DialoguePrompts {
 			final Geometry geometry = baseline.geometry;
 			graphics.add(new GraphicLayout(widget, baseline, anchoredX(geometry, state.rootGeometry.width, width)));
 		}
+		return graphics;
+	}
 
-		boolean overlap = false;
-		for (int i = 0; i < graphics.size() && !overlap; i++) {
+	private static boolean optionGraphicsOverlap(List<GraphicLayout> graphics) {
+		for (int i = 0; i < graphics.size(); i++) {
 			for (int j = i + 1; j < graphics.size(); j++) {
 				final GraphicLayout a = graphics.get(i);
 				final GraphicLayout b = graphics.get(j);
 				if (a.x < b.x + b.baseline.geometry.width && b.x < a.x + a.baseline.geometry.width) {
-					overlap = true;
-					break;
+					return true;
 				}
 			}
 		}
-
-		for (GraphicLayout graphic : graphics) {
-			final Geometry geometry = graphic.baseline.geometry;
-			applyGeometry(graphic.widget, graphic.x, geometry.y, geometry.width, geometry.height, result);
-			applyHidden(graphic.widget, overlap || graphic.baseline.hidden, result);
-		}
+		return false;
 	}
 
 	private PortraitState applyPortrait(int effectiveWidth, int effectiveBodyHeight, boolean rightSide, PortraitState state,
@@ -972,7 +1032,14 @@ public final class DialoguePrompts {
 		restoreGeometry(state.content, state.contentGeometry, result);
 		restoreGeometry(state.name, state.nameGeometry, result);
 		restoreGeometry(state.continueWidget, state.continueGeometry, result);
-		applyTextGeometry(state.text, state.textGeometry.x, state.textGeometry.y, state.textGeometry.width, state.textGeometry.height, state.sourceText, result);
+		applyTextGeometry(
+				state.text,
+				state.textGeometry.x,
+				state.textGeometry.y,
+				state.textGeometry.width,
+				state.textGeometry.height,
+				state.sourceText,
+				result);
 		return null;
 	}
 
