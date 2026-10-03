@@ -52,6 +52,8 @@ public final class ChatboxResizeService {
 	 */
 	private static final int LOGIN_STABLE_SAMPLES = 3;
 	private static final int RESIZE_STABLE_SAMPLES = 2;
+	private static final int DIALOGUE_FIT_STEP = 4;
+	private static final int MAX_DIALOGUE_FIT_EXPANSION = 160;
 
 	private static final int[] CHAT_CONTROL_IDS = {
 			InterfaceID.Chatbox.CHAT_ALL,
@@ -95,6 +97,17 @@ public final class ChatboxResizeService {
 	private boolean heightRefreshPending;
 	private boolean loginGeometryPending;
 	private boolean canvasResizePending;
+	private boolean dialogueFitActive;
+	private boolean dialogueFitResolving;
+
+	private int dialogueFitConfiguredWidth = -1;
+	private int dialogueFitConfiguredHeight = -1;
+	private int dialogueFitRequestedWidth = -1;
+	private int dialogueFitRequestedHeight = -1;
+	private int dialogueFitRequirementWidth = -1;
+	private int dialogueFitMinimumBodyHeight = -1;
+	private int dialogueFitPreferredBodyHeight = -1;
+	private int dialogueFitFingerprint;
 
 	private int liveDepth;
 	private int sideLayoutDepth;
@@ -176,6 +189,8 @@ public final class ChatboxResizeService {
 		 * Clear transient collision and side-row state while preserving saved chatbox placement.
 		 */
 		geometryState = null;
+		clearDialogueFitState();
+		dialogueFitResolving = false;
 		chatboxBoundsTracker.reset();
 		resetDialoguePrompts();
 		nativeRevealActive = false;
@@ -310,6 +325,8 @@ public final class ChatboxResizeService {
 		}
 
 		geometryState = null;
+		clearDialogueFitState();
+		dialogueFitResolving = false;
 		chatboxBoundsTracker.reset();
 		resetDialoguePrompts();
 		sideContainerLayout.reset();
@@ -441,11 +458,10 @@ public final class ChatboxResizeService {
 			beginLiveScroll();
 
 			/*
-			 * Chat-control relayout uses committed geometry; other relayouts resolve live geometry.
+			 * Native 1972 reconstruction exposes transient host and child geometry.
+			 * Reapply the last committed ChatXL rectangle instead of resolving against it.
 			 */
-			final ResizeResult result = controlClickPending
-					? applyCommittedGeometry(width, height)
-					: applySize(width, height);
+			final ResizeResult result = applyCommittedGeometry(width, height);
 			if (result.isApplied()) {
 				liveWidthChanged |= result.isWidthChanged();
 				liveHeightChanged |= result.isHeightChanged();
@@ -635,7 +651,14 @@ public final class ChatboxResizeService {
 			return ResizeResult.NOT_APPLIED;
 		}
 
-		final ChatboxPlacement.State placement = chatboxPlacement.capture(slot, width, height);
+		if (dialogueFitActive
+				&& (width != dialogueFitConfiguredWidth || height != dialogueFitConfiguredHeight)) {
+			clearDialogueFitState();
+		}
+
+		final int requestedWidth = dialogueFitActive ? dialogueFitRequestedWidth : width;
+		final int requestedHeight = dialogueFitActive ? dialogueFitRequestedHeight : height;
+		final ChatboxPlacement.State placement = chatboxPlacement.capture(slot, requestedWidth, requestedHeight);
 		if (placement.requiresHostReposition()) {
 			/*
 			 * Correct a stale host remount offset once before collision solving.
@@ -1011,12 +1034,262 @@ public final class ChatboxResizeService {
 	private void syncDialoguePrompts(String trigger, int effectiveWidth, int effectiveBodyHeight) {
 		DialogueDiagnostics.beforeLayoutApply(client, trigger, effectiveWidth, effectiveBodyHeight);
 
-		final DialoguePrompts.Result result = dialoguePrompts.apply(effectiveWidth, effectiveBodyHeight);
+		DialoguePrompts.Result result = dialoguePrompts.apply(effectiveWidth, effectiveBodyHeight);
 		recordMutations(result.getMutations());
 		recordRevalidates(result.getRevalidates());
 
-		DialogueDiagnostics.afterLayoutApply(client, trigger, effectiveWidth, effectiveBodyHeight,
-				result.getMutations(), result.getRevalidates());
+		int finalWidth = effectiveWidth;
+		int finalBodyHeight = effectiveBodyHeight;
+		int mutations = result.getMutations();
+		int revalidates = result.getRevalidates();
+
+		if (!dialogueFitResolving && liveDepth == 0 && reconcileDialogueFit()) {
+			final GeometryState adjusted = geometryState;
+			if (adjusted != null) {
+				finalWidth = adjusted.effectiveBounds.width;
+				finalBodyHeight = ChatboxGeometry.bodyHeight(adjusted.effectiveBounds.height, chatboxButtonsHidden);
+
+				result = dialoguePrompts.apply(finalWidth, finalBodyHeight);
+				recordMutations(result.getMutations());
+				recordRevalidates(result.getRevalidates());
+				mutations += result.getMutations();
+				revalidates += result.getRevalidates();
+			}
+		}
+
+		DialogueDiagnostics.afterLayoutApply(client, trigger, finalWidth, finalBodyHeight, mutations, revalidates);
+	}
+
+	private boolean reconcileDialogueFit() {
+		final GeometryState current = geometryState;
+		if (current == null || loginGeometryPending || canvasResizePending || sideLayoutDepth > 0) {
+			return false;
+		}
+
+		final DialoguePrompts.FitRequirement currentRequirement =
+				dialoguePrompts.measureFit(current.effectiveBounds.width);
+		if (!currentRequirement.isActive()) {
+			return dialogueFitActive && restoreConfiguredDialogueGeometry(current);
+		}
+
+		final int currentFingerprint = dialoguePrompts.fitFingerprint();
+		final boolean contentChanged = dialogueFitActive && currentFingerprint != dialogueFitFingerprint;
+		final int currentBodyHeight =
+				ChatboxGeometry.bodyHeight(current.effectiveBounds.height, chatboxButtonsHidden);
+		if (!dialogueFitActive && currentRequirement.fitsMinimum(currentBodyHeight)) {
+			return false;
+		}
+
+		if (dialogueFitActive && !contentChanged && currentRequirement.fitsMinimum(currentBodyHeight)) {
+			dialogueFitRequirementWidth = current.effectiveBounds.width;
+			dialogueFitMinimumBodyHeight = currentRequirement.getMinimumBodyHeight();
+			dialogueFitPreferredBodyHeight = currentRequirement.getPreferredBodyHeight();
+			return false;
+		}
+
+		final DialogueFitCandidate candidate = findDialogueFitCandidate(current, !contentChanged);
+		if (candidate == null) {
+			return false;
+		}
+
+		final Rectangle desired = candidate.result.getDesiredBounds();
+		final Rectangle effective = candidate.result.getEffectiveBounds();
+		final DialoguePrompts.FitRequirement selectedRequirement = dialoguePrompts.measureFit(effective.width);
+		if (desired.equals(current.desiredBounds) && effective.equals(current.effectiveBounds)) {
+			updateDialogueFitState(current, candidate, selectedRequirement);
+			return false;
+		}
+
+		return applyDialogueFitCandidate(current, candidate);
+	}
+
+	private DialogueFitCandidate findDialogueFitCandidate(GeometryState current, boolean retainActiveFit) {
+		final ChatboxLayout layout = getLayout();
+		final Widget slot = getSlot(layout);
+		if (slot == null || !isResizableLayout(layout)) {
+			return null;
+		}
+
+		final int configuredWidth = current.configuredWidth;
+		final int configuredHeight = current.configuredHeight;
+		final int baseRequestedWidth = retainActiveFit && dialogueFitActive && dialogueFitRequestedWidth > 0
+				? Math.max(configuredWidth, dialogueFitRequestedWidth)
+				: configuredWidth;
+		final int baseRequestedHeight = retainActiveFit && dialogueFitActive && dialogueFitRequestedHeight > 0
+				? Math.max(configuredHeight, dialogueFitRequestedHeight)
+				: configuredHeight;
+		final DialogueFitCandidate base = resolveDialogueCandidate(slot, baseRequestedWidth, baseRequestedHeight,
+				configuredWidth, configuredHeight, configuredWidth, configuredHeight, null);
+		if (base == null) {
+			return null;
+		}
+
+		DialogueFitCandidate best = null;
+		final Rectangle baseEffective = base.result.getEffectiveBounds();
+		final boolean widthExpansionAllowed = baseEffective.width >= configuredWidth;
+		final boolean heightExpansionAllowed = baseEffective.height >= configuredHeight;
+		final int maxWidth = widthExpansionAllowed
+				? Math.max(baseRequestedWidth, configuredWidth + MAX_DIALOGUE_FIT_EXPANSION)
+				: baseRequestedWidth;
+		for (int requestedWidth = baseRequestedWidth; requestedWidth <= maxWidth; requestedWidth += DIALOGUE_FIT_STEP) {
+			final DialogueFitCandidate provisional = resolveDialogueCandidate(slot, requestedWidth, baseRequestedHeight,
+					configuredWidth, configuredHeight, baseRequestedWidth, baseRequestedHeight, baseEffective);
+			if (provisional == null) {
+				continue;
+			}
+
+			final int provisionalWidth = provisional.result.getEffectiveBounds().width;
+			final DialoguePrompts.FitRequirement requirement = dialoguePrompts.measureFit(provisionalWidth);
+			if (!requirement.isActive()) {
+				return base;
+			}
+
+			final int requiredSlotHeight = slotHeightForBody(requirement.getMinimumBodyHeight());
+			final int requestedHeight = Math.max(baseRequestedHeight, requiredSlotHeight);
+			if (requestedHeight > configuredHeight && !heightExpansionAllowed
+					|| requestedHeight > configuredHeight + MAX_DIALOGUE_FIT_EXPANSION) {
+				continue;
+			}
+
+			final DialogueFitCandidate candidate = resolveDialogueCandidate(slot, requestedWidth, requestedHeight,
+					configuredWidth, configuredHeight, baseRequestedWidth, baseRequestedHeight, baseEffective);
+			if (candidate == null) {
+				continue;
+			}
+
+			final Rectangle effective = candidate.result.getEffectiveBounds();
+			final int bodyHeight = ChatboxGeometry.bodyHeight(effective.height, chatboxButtonsHidden);
+			final DialoguePrompts.FitRequirement actual = dialoguePrompts.measureFit(effective.width);
+			if (!actual.isActive() || !actual.fitsMinimum(bodyHeight)) {
+				continue;
+			}
+
+			candidate.preferredDeficit = Math.max(0, actual.getPreferredBodyHeight() - bodyHeight);
+			candidate.score = Math.max(0, effective.width - baseEffective.width)
+					+ Math.max(0, effective.height - baseEffective.height);
+			if (best == null
+					|| candidate.score < best.score
+					|| candidate.score == best.score && candidate.preferredDeficit < best.preferredDeficit
+					|| candidate.score == best.score && candidate.preferredDeficit == best.preferredDeficit
+					&& candidate.requestedWidth < best.requestedWidth) {
+				best = candidate;
+			}
+
+			if (best != null && best.score == 0) {
+				break;
+			}
+		}
+
+		return best;
+	}
+
+	private DialogueFitCandidate resolveDialogueCandidate(Widget slot, int requestedWidth, int requestedHeight,
+			int configuredWidth, int configuredHeight, int baselineWidth, int baselineHeight, Rectangle baseEffective) {
+		final ChatboxPlacement.State placement = chatboxPlacement.capture(slot, requestedWidth, requestedHeight);
+		final ChatboxBounds.Result result = ChatboxBounds.resolve(
+				client, placement, chatboxButtonsHidden, new ChatboxBounds.Tracker(), null);
+		final Rectangle effective = result.getEffectiveBounds();
+		final int widthGrowth = Math.max(0, requestedWidth - baselineWidth);
+		final int heightGrowth = Math.max(0, requestedHeight - baselineHeight);
+		if (baseEffective != null) {
+			if (effective.width < baseEffective.width || effective.height < baseEffective.height) {
+				return null;
+			}
+			if (widthGrowth > 0 && effective.width < baseEffective.width + widthGrowth) {
+				return null;
+			}
+			if (heightGrowth > 0 && effective.height < baseEffective.height + heightGrowth) {
+				return null;
+			}
+		}
+
+		final boolean expanded = requestedWidth > configuredWidth || requestedHeight > configuredHeight;
+		return new DialogueFitCandidate(requestedWidth, requestedHeight, result, expanded);
+	}
+
+	private boolean applyDialogueFitCandidate(GeometryState current, DialogueFitCandidate candidate) {
+		final ChatboxLayout layout = getLayout();
+		final Widget slot = getSlot(layout);
+		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
+		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+		if (slot == null || universe == null || chatArea == null) {
+			return false;
+		}
+
+		final Rectangle desired = candidate.result.getDesiredBounds();
+		final Rectangle effective = candidate.result.getEffectiveBounds();
+		final DialoguePrompts.FitRequirement requirement = dialoguePrompts.measureFit(effective.width);
+		final int bodyHeight = ChatboxGeometry.bodyHeight(effective.height, chatboxButtonsHidden);
+		if (!requirement.isActive() || !requirement.fitsMinimum(bodyHeight)) {
+			return false;
+		}
+
+		final int effectiveX = Math.max(0, effective.x - desired.x);
+		final int effectiveY = Math.max(0, effective.y - desired.y);
+		final boolean controlsChanged = !controlsLayout.matches(effective.width);
+		final boolean widthChanged = universe.getWidth() != effective.width || chatArea.getWidth() != effective.width;
+		final boolean heightChanged = universe.getHeight() != effective.height || chatArea.getHeight() != bodyHeight;
+
+		geometryState = new GeometryState(current.configuredWidth, current.configuredHeight, desired, effective);
+		applyGeometry(slot, universe, chatArea, desired.width, desired.height, effectiveX, effectiveY,
+				effective.width, effective.height, bodyHeight, controlsChanged);
+
+		final ChatboxBackgroundService.Result backgroundResult =
+				backgroundService.apply(chatArea, effective.width, bodyHeight);
+		recordMutations(backgroundResult.getMutations());
+		recordRevalidates(backgroundResult.getRevalidates());
+		syncChatPresentation();
+
+		updateDialogueFitState(current, candidate, requirement);
+		widthRefreshPending |= widthChanged;
+		heightRefreshPending |= heightChanged;
+		return true;
+	}
+
+	private void updateDialogueFitState(GeometryState current, DialogueFitCandidate candidate,
+			DialoguePrompts.FitRequirement requirement) {
+		dialogueFitActive = candidate.expanded;
+		if (!dialogueFitActive) {
+			clearDialogueFitState();
+			return;
+		}
+
+		dialogueFitConfiguredWidth = current.configuredWidth;
+		dialogueFitConfiguredHeight = current.configuredHeight;
+		dialogueFitRequestedWidth = candidate.requestedWidth;
+		dialogueFitRequestedHeight = candidate.requestedHeight;
+		dialogueFitRequirementWidth = candidate.result.getEffectiveBounds().width;
+		dialogueFitMinimumBodyHeight = requirement.getMinimumBodyHeight();
+		dialogueFitPreferredBodyHeight = requirement.getPreferredBodyHeight();
+		dialogueFitFingerprint = dialoguePrompts.fitFingerprint();
+	}
+
+	private void clearDialogueFitState() {
+		dialogueFitActive = false;
+		dialogueFitConfiguredWidth = -1;
+		dialogueFitConfiguredHeight = -1;
+		dialogueFitRequestedWidth = -1;
+		dialogueFitRequestedHeight = -1;
+		dialogueFitRequirementWidth = -1;
+		dialogueFitMinimumBodyHeight = -1;
+		dialogueFitPreferredBodyHeight = -1;
+		dialogueFitFingerprint = 0;
+	}
+
+	private boolean restoreConfiguredDialogueGeometry(GeometryState current) {
+		dialogueFitResolving = true;
+		try {
+			final Rectangle previous = new Rectangle(current.effectiveBounds);
+			clearDialogueFitState();
+			final ResizeResult result = applySizeInternal(current.configuredWidth, current.configuredHeight, false, null);
+			return result.isApplied() && geometryState != null && !previous.equals(geometryState.effectiveBounds);
+		} finally {
+			dialogueFitResolving = false;
+		}
+	}
+
+	private int slotHeightForBody(int bodyHeight) {
+		return Math.max(1, bodyHeight + (chatboxButtonsHidden ? 0 : ChatboxGeometry.NATIVE_TAB_HEIGHT));
 	}
 
 	private void resetDialoguePrompts() {
@@ -1480,6 +1753,22 @@ public final class ChatboxResizeService {
 	 * STATE TYPES
 	 * ================================================================
 	 */
+	private static final class DialogueFitCandidate {
+		private final int requestedWidth;
+		private final int requestedHeight;
+		private final ChatboxBounds.Result result;
+		private final boolean expanded;
+		private int score = Integer.MAX_VALUE;
+		private int preferredDeficit = Integer.MAX_VALUE;
+
+		private DialogueFitCandidate(int requestedWidth, int requestedHeight, ChatboxBounds.Result result, boolean expanded) {
+			this.requestedWidth = requestedWidth;
+			this.requestedHeight = requestedHeight;
+			this.result = result;
+			this.expanded = expanded;
+		}
+	}
+
 	private static final class GeometryState {
 		private final int configuredWidth;
 		private final int configuredHeight;

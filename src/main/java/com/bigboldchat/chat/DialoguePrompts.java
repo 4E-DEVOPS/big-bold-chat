@@ -22,7 +22,12 @@ import net.runelite.api.widgets.WidgetType;
  */
 public final class DialoguePrompts {
 	private static final int MIN_SIDE_TEXT_WIDTH = 160;
-	private static final int OPTION_ROW_GAP = 4;
+	private static final int MIN_OPTION_ROW_GAP = 4;
+	private static final int MIN_DIALOGUE_GAP = 4;
+	private static final int MIN_CONTENT_PADDING = 4;
+	private static final int OPTION_OUTER_PADDING = 4;
+	private static final int OPTION_GLYPH_PADDING = 4;
+	private static final int OPTION_GAP_DIVISOR = 4;
 	private static final int DIALOGUE_LINE_GAP = 0;
 	private static final int STACK_PADDING = 10;
 	private static final int STACK_GAP = 12;
@@ -110,6 +115,163 @@ public final class DialoguePrompts {
 				|| isMounted(client.getWidget(InterfaceID.Objectbox.TEXT));
 	}
 
+	public int fitFingerprint() {
+		int fingerprint = 1;
+		if (optionsState != null && isMounted(optionsState.root)) {
+			fingerprint = 31 * fingerprint + 1;
+			final List<WidgetState> rows = new ArrayList<>(optionsState.children.values());
+			rows.sort(Comparator.comparingInt(row -> row.geometry.y));
+			for (WidgetState row : rows) {
+				fingerprint = 31 * fingerprint + normalizedHash(row.sourceText);
+			}
+		}
+		if (npcState != null && isMounted(npcState.root)) {
+			fingerprint = 31 * fingerprint + 2;
+			fingerprint = 31 * fingerprint + normalizedHash(npcState.sourceText);
+		}
+		if (playerState != null && isMounted(playerState.root)) {
+			fingerprint = 31 * fingerprint + 3;
+			fingerprint = 31 * fingerprint + normalizedHash(playerState.sourceText);
+		}
+		if (spriteState != null && isMounted(spriteState.root)) {
+			fingerprint = 31 * fingerprint + 4;
+			fingerprint = 31 * fingerprint + normalizedHash(spriteState.sourceText);
+		}
+		return fingerprint;
+	}
+
+	private static int normalizedHash(String text) {
+		final String normalized = normalizeDialogueText(text);
+		return normalized != null ? normalized.hashCode() : 0;
+	}
+
+	public FitRequirement measureFit(int effectiveWidth) {
+		if (effectiveWidth <= 0) {
+			return FitRequirement.NONE;
+		}
+
+		FitRequirement requirement = FitRequirement.NONE;
+
+		if (optionsState != null && isMounted(optionsState.root)) {
+			optionsState.captureChildren(optionsState.root.getDynamicChildren());
+			requirement = requirement.combine(optionFitRequirement(optionsState, effectiveWidth));
+		}
+
+		if (npcState != null && isMounted(npcState.root)) {
+			npcState.captureText();
+			requirement = requirement.combine(portraitFitRequirement(npcState, effectiveWidth));
+		}
+
+		if (playerState != null && isMounted(playerState.root)) {
+			playerState.captureText();
+			requirement = requirement.combine(portraitFitRequirement(playerState, effectiveWidth));
+		}
+
+		if (spriteState != null && isMounted(spriteState.root)) {
+			spriteState.captureText();
+			requirement = requirement.combine(spriteFitRequirement(spriteState, effectiveWidth));
+		}
+
+		return requirement;
+	}
+
+	private static FitRequirement optionFitRequirement(OptionsState state, int effectiveWidth) {
+		final int inset = Math.max(0, (ChatboxGeometry.NATIVE_WIDTH - state.rootGeometry.width) / 2);
+		final int width = Math.max(1, effectiveWidth - inset * 2);
+		final List<OptionRow> rows = collectOptionRows(state, width);
+		if (rows.isEmpty()) {
+			return FitRequirement.NONE;
+		}
+
+		final OptionSpacing preferred = optionSpacing(state, rows, false);
+		final OptionSpacing minimum = optionSpacing(state, rows, true);
+		final int rowHeight = optionRowsHeight(rows);
+		final int gapCount = Math.max(0, rows.size() - 1);
+		final int preferredHeight = rowHeight + preferred.top + preferred.bottom + gapCount * preferred.gap;
+		final int minimumHeight = rowHeight + minimum.top + minimum.bottom + gapCount * minimum.gap;
+		return new FitRequirement(true, minimumHeight, preferredHeight);
+	}
+
+	private static FitRequirement portraitFitRequirement(PortraitState state, int effectiveWidth) {
+		if (!state.isComplete()) {
+			return FitRequirement.NONE;
+		}
+
+		final int horizontalInset = Math.max(0, ChatboxGeometry.NATIVE_WIDTH - state.rootGeometry.width);
+		final int verticalInset = Math.max(0, ChatboxGeometry.NATIVE_BODY_HEIGHT - state.rootGeometry.height);
+		final int width = Math.max(1, effectiveWidth - horizontalInset);
+		final int safeWidth = fittedWidth(state.safeGeometry, state.rootGeometry.width, width);
+		final int contentWidth = fittedWidth(state.contentGeometry, state.safeGeometry.width, safeWidth);
+		final int sideTextWidth = fittedWidth(state.textGeometry, state.contentGeometry.width, contentWidth);
+		final int contentPadding = Math.min(STACK_PADDING, Math.max(0, (safeWidth - 1) / 2));
+		final int fullTextWidth = Math.max(1, safeWidth - contentPadding * 2);
+		final int preferredGap = dialogueSectionGap(state.name, state.text, state.continueWidget);
+		final int safeTop = Math.max(MIN_CONTENT_PADDING, state.safeGeometry.y);
+		final int safeBottom = Math.max(MIN_CONTENT_PADDING,
+				state.rootGeometry.height - state.safeGeometry.y - state.safeGeometry.height);
+
+		/*
+		 * Readable text is the minimum presentation. A portrait is optional and must
+		 * never force temporary chatbox growth when the full-width text fits without it.
+		 */
+		final int minimumContent = portraitContentRequiredHeight(state, fullTextWidth, MIN_DIALOGUE_GAP);
+		final int minimumRootHeight = safeTop + minimumContent + safeBottom;
+
+		final int preferredRootHeight;
+		if (requiresStackedPortrait(state, safeWidth, sideTextWidth)) {
+			final int preferredContent = portraitContentRequiredHeight(state, fullTextWidth, preferredGap);
+			preferredRootHeight = safeTop + portraitHeadHeight(state) + STACK_GAP + preferredContent + safeBottom;
+		} else {
+			final int preferredContent = portraitContentRequiredHeight(state, sideTextWidth, preferredGap);
+			preferredRootHeight = safeTop + Math.max(portraitHeadHeight(state), preferredContent) + safeBottom;
+		}
+
+		return new FitRequirement(true, minimumRootHeight + verticalInset, preferredRootHeight + verticalInset);
+	}
+
+	private static int portraitContentRequiredHeight(PortraitState state, int textWidth, int sectionGap) {
+		final String text = wrapText(state.text, normalizeDialogueText(state.sourceText), Math.max(1, textWidth));
+		final int textHeight = dialogueTextHeight(state.text, text);
+		return state.nameGeometry.y + state.nameGeometry.height
+				+ sectionGap + textHeight + sectionGap + state.continueGeometry.height;
+	}
+
+	private static FitRequirement spriteFitRequirement(SpriteState state, int effectiveWidth) {
+		if (!state.isComplete()) {
+			return FitRequirement.NONE;
+		}
+
+		final int horizontalInset = Math.max(0, ChatboxGeometry.NATIVE_WIDTH - state.rootGeometry.width);
+		final int width = Math.max(1, effectiveWidth - horizontalInset);
+		final int sideTextWidth = Math.max(1, width - SPRITE_SIDE_TEXT_X
+				- Math.max(0, state.rootGeometry.width - state.textGeometry.x - state.textGeometry.width));
+		final int preferredGap = dialogueSectionGap(state.text, state.continueWidget);
+		final int minimumHeight = spriteRequiredHeight(state, width, sideTextWidth, MIN_DIALOGUE_GAP);
+		final int preferredHeight = spriteRequiredHeight(state, width, sideTextWidth, preferredGap);
+		return new FitRequirement(true, minimumHeight, preferredHeight);
+	}
+
+	private static int spriteRequiredHeight(SpriteState state, int width, int sideTextWidth, int sectionGap) {
+		final int continueHeight = state.continueHeight();
+		if (sideTextWidth >= MIN_SIDE_TEXT_WIDTH) {
+			final int rightMargin = Math.max(0,
+					state.rootGeometry.width - state.textGeometry.x - state.textGeometry.width);
+			final int textWidth = Math.max(1, width - SPRITE_SIDE_TEXT_X - rightMargin);
+			final String text = wrapText(state.text, normalizeDialogueText(state.sourceText), textWidth);
+			final int textHeight = dialogueTextHeight(state.text, text);
+			final int blockHeight = textHeight + sectionGap + continueHeight;
+			return Math.max(state.rootGeometry.height,
+					Math.max(state.itemGeometry.height + SPRITE_ITEM_PADDING * 2,
+							blockHeight + SPRITE_ITEM_PADDING * 2));
+		}
+
+		final int contentWidth = Math.max(1, width - SPRITE_STACK_PADDING * 2);
+		final String text = wrapText(state.text, normalizeDialogueText(state.sourceText), contentWidth);
+		final int textHeight = dialogueTextHeight(state.text, text);
+		return SPRITE_STACK_PADDING + state.itemGeometry.height + SPRITE_STACK_GAP
+				+ textHeight + sectionGap + continueHeight + SPRITE_STACK_PADDING;
+	}
+
 	private void applyOptions(int effectiveWidth, int effectiveBodyHeight, MutableResult result) {
 		final Widget options = options();
 		if (!isMounted(options)) {
@@ -126,55 +288,120 @@ public final class DialoguePrompts {
 
 		final int inset = Math.max(0, (ChatboxGeometry.NATIVE_WIDTH - optionsState.rootGeometry.width) / 2);
 		final int width = Math.max(1, effectiveWidth - inset * 2);
-		final List<OptionRow> rows = optionRows(optionsState, width);
-		final int height = optionHeight(optionsState, rows);
+		final List<OptionRow> rows = collectOptionRows(optionsState, width);
+		final OptionLayout layout = optionLayout(optionsState, rows, effectiveBodyHeight);
 		final int x = Math.max(0, (effectiveWidth - width) / 2);
-		final int y = Math.max(0, (effectiveBodyHeight - height) / 2);
-		final Position rootPosition = rootPosition(options, x, y, width, height);
+		final int y = Math.max(0, (effectiveBodyHeight - layout.height) / 2);
+		final Position rootPosition = rootPosition(options, x, y, width, layout.height);
 
-		applyGeometry(options, rootPosition.x, rootPosition.y, width, height, result);
+		applyGeometry(options, rootPosition.x, rootPosition.y, width, layout.height, result);
 		applyOptionRows(rows, width, result);
 		applyOptionGraphics(optionsState, width, result);
 	}
 
-	private static List<OptionRow> optionRows(OptionsState state, int width) {
+	private static List<OptionRow> collectOptionRows(OptionsState state, int width) {
 		final List<OptionRow> rows = new ArrayList<>();
 		for (Map.Entry<Widget, WidgetState> entry : state.children.entrySet()) {
 			final Widget widget = entry.getKey();
 			final WidgetState baseline = entry.getValue();
 			if (widget != null && baseline != null && baseline.geometry.hasSize() && widget.getType() == WidgetType.TEXT) {
-				rows.add(new OptionRow(widget, baseline, wrapText(widget, baseline.sourceText, width)));
+				final OptionRow row = new OptionRow(widget, baseline, wrapText(widget, baseline.sourceText, width));
+				row.height = wrappedHeight(widget, baseline.geometry.height, row.text);
+				rows.add(row);
 			}
 		}
 
 		rows.sort(Comparator.comparingInt(row -> row.baseline.geometry.y));
-
-		int y = rows.isEmpty() ? 0 : rows.get(0).baseline.geometry.y;
-		int previousBottom = y;
-		for (OptionRow row : rows) {
-			final Geometry baseline = row.baseline.geometry;
-			if (row != rows.get(0)) {
-				final int nativeGap = baseline.y - previousBottom;
-				y += Math.max(OPTION_ROW_GAP, nativeGap);
-			}
-
-			row.y = y;
-			row.height = wrappedHeight(row.widget, baseline.height, row.text);
-			y += row.height;
-			previousBottom = baseline.y + baseline.height;
-		}
 		return rows;
 	}
 
-	private static int optionHeight(OptionsState state, List<OptionRow> rows) {
+	private static OptionLayout optionLayout(OptionsState state, List<OptionRow> rows, int availableHeight) {
 		if (rows.isEmpty()) {
-			return state.rootGeometry.height;
+			return new OptionLayout(state.rootGeometry.height, 0, 0, MIN_OPTION_ROW_GAP);
 		}
 
+		final OptionSpacing preferred = optionSpacing(state, rows, false);
+		final OptionSpacing minimum = optionSpacing(state, rows, true);
+		final OptionSpacing selected = availableHeight > 0
+				? compressOptionSpacing(preferred, minimum, rows.size(), availableHeight, rows)
+				: preferred;
+
+		int y = selected.top;
+		for (int i = 0; i < rows.size(); i++) {
+			final OptionRow row = rows.get(i);
+			row.y = y;
+			y += row.height;
+			if (i + 1 < rows.size()) {
+				y += selected.gap;
+			}
+		}
+
+		return new OptionLayout(y + selected.bottom, selected.top, selected.bottom, selected.gap);
+	}
+
+	private static OptionSpacing optionSpacing(OptionsState state, List<OptionRow> rows, boolean minimum) {
+		final OptionRow first = rows.get(0);
 		final OptionRow last = rows.get(rows.size() - 1);
-		final Geometry lastBaseline = last.baseline.geometry;
-		final int bottomMargin = Math.max(0, state.rootGeometry.height - lastBaseline.y - lastBaseline.height);
-		return Math.max(state.rootGeometry.height, last.y + last.height + bottomMargin);
+		final int preferredTop = Math.max(OPTION_OUTER_PADDING, first.baseline.geometry.y);
+		final int nativeBottom = Math.max(0, state.rootGeometry.height
+				- last.baseline.geometry.y - last.baseline.geometry.height);
+		final int preferredBottom = Math.max(OPTION_OUTER_PADDING, nativeBottom);
+		final int preferredGap = preferredOptionGap(rows);
+
+		return minimum
+				? new OptionSpacing(OPTION_OUTER_PADDING, OPTION_OUTER_PADDING, MIN_OPTION_ROW_GAP)
+				: new OptionSpacing(preferredTop, preferredBottom, preferredGap);
+	}
+
+	private static OptionSpacing compressOptionSpacing(OptionSpacing preferred, OptionSpacing minimum, int rowCount,
+			int availableHeight, List<OptionRow> rows) {
+		final int rowHeight = optionRowsHeight(rows);
+		final int gapCount = Math.max(0, rowCount - 1);
+		final int preferredHeight = rowHeight + preferred.top + preferred.bottom + gapCount * preferred.gap;
+		if (preferredHeight <= availableHeight) {
+			return preferred;
+		}
+
+		final int minimumHeight = rowHeight + minimum.top + minimum.bottom + gapCount * minimum.gap;
+		if (minimumHeight >= availableHeight) {
+			return minimum;
+		}
+
+		int remaining = availableHeight - minimumHeight;
+		int top = minimum.top;
+		int bottom = minimum.bottom;
+		int gap = minimum.gap;
+
+		if (gapCount > 0) {
+			final int gapIncrease = Math.min(preferred.gap - minimum.gap, remaining / gapCount);
+			gap += gapIncrease;
+			remaining -= gapIncrease * gapCount;
+		}
+
+		final int topIncrease = Math.min(preferred.top - minimum.top, (remaining + 1) / 2);
+		top += topIncrease;
+		remaining -= topIncrease;
+
+		final int bottomIncrease = Math.min(preferred.bottom - minimum.bottom, remaining);
+		bottom += bottomIncrease;
+
+		return new OptionSpacing(top, bottom, gap);
+	}
+
+	private static int preferredOptionGap(List<OptionRow> rows) {
+		int lineHeight = 1;
+		for (OptionRow row : rows) {
+			lineHeight = Math.max(lineHeight, optionLineHeight(row.widget, row.baseline.geometry.height));
+		}
+		return Math.max(MIN_OPTION_ROW_GAP, lineHeight / OPTION_GAP_DIVISOR);
+	}
+
+	private static int optionRowsHeight(List<OptionRow> rows) {
+		int height = 0;
+		for (OptionRow row : rows) {
+			height += row.height;
+		}
+		return height;
 	}
 
 	private static void applyOptionRows(List<OptionRow> rows, int width, MutableResult result) {
@@ -246,7 +473,7 @@ public final class DialoguePrompts {
 		final int y = Math.max(0, (effectiveBodyHeight - height) / 2);
 		final Position rootPosition = rootPosition(state.root, x, y, width, height);
 
-		if (sideTextWidth < MIN_SIDE_TEXT_WIDTH) {
+		if (requiresStackedPortrait(state, safeWidth, sideTextWidth)) {
 			applyStacked(state, rootPosition, width, height, result);
 		} else {
 			applySideBySide(state, x, width, height, effectiveBodyHeight, rightSide, result);
@@ -268,10 +495,27 @@ public final class DialoguePrompts {
 		final int safeTop = Math.max(0, state.safeGeometry.y);
 		final int safeBottom = Math.max(0,
 				state.rootGeometry.height - state.safeGeometry.y - state.safeGeometry.height);
-		final int minimumSafeHeight = Math.max(state.headGeometry.height, content.requiredHeight);
+		final int minimumSafeHeight = Math.max(portraitHeadHeight(state), content.requiredHeight);
 		final int minimumRootHeight = safeTop + minimumSafeHeight + safeBottom;
 		final int height = Math.min(effectiveBodyHeight, Math.max(baseHeight, minimumRootHeight));
 		final int safeHeight = fittedHeight(state.safeGeometry, state.rootGeometry.height, height);
+
+		final int contentPadding = Math.min(STACK_PADDING, Math.max(0, (safeWidth - 1) / 2));
+		final int fullTextWidth = Math.max(1, safeWidth - contentPadding * 2);
+		final PortraitContentLayout headless = portraitContentLayout(state,
+				contentPadding, contentPadding, contentPadding,
+				fullTextWidth, fullTextWidth, fullTextWidth, safeHeight);
+		final int spareSideHeight = safeHeight - content.requiredHeight;
+		final boolean preferHeadless = state.headHidden
+				|| content.requiredHeight > safeHeight
+				|| content.requiredHeight > headless.requiredHeight
+				&& spareSideHeight < dialogueLineHeight(state.text);
+		if (preferHeadless) {
+			final int rootY = Math.max(0, (effectiveBodyHeight - height) / 2);
+			final Position adjustedRootPosition = rootPosition(state.root, rootX, rootY, width, height);
+			applyHeadless(state, adjustedRootPosition, width, height, result);
+			return;
+		}
 
 		if (content.requiredHeight > safeHeight) {
 			content = portraitContentLayout(state, state.nameGeometry.x, state.textGeometry.x,
@@ -295,8 +539,33 @@ public final class DialoguePrompts {
 		applyPortraitRoot(state, adjustedRootPosition, width, height, result);
 		applyGeometry(state.safe, state.safeGeometry.x, state.safeGeometry.y, safeWidth, safeHeight, result);
 		applyGeometry(state.head, headX, headY, state.headGeometry.width, state.headGeometry.height, result);
+		applyHidden(state.head, state.headHidden, result);
 		applyGeometry(state.content, state.contentGeometry.x, contentOriginalY, contentWidth, contentHeight, result);
 		applyPortraitContent(state, content, contentWidth, result);
+	}
+
+	private void applyHeadless(
+			PortraitState state,
+			Position rootPosition,
+			int width,
+			int height,
+			MutableResult result) {
+		final int safeWidth = fittedWidth(state.safeGeometry, state.rootGeometry.width, width);
+		final int safeHeight = fittedHeight(state.safeGeometry, state.rootGeometry.height, height);
+		final int contentPadding = Math.min(STACK_PADDING, Math.max(0, (safeWidth - 1) / 2));
+		final int childWidth = Math.max(1, safeWidth - contentPadding * 2);
+		final PortraitContentLayout content = portraitContentLayout(state,
+				contentPadding, contentPadding, contentPadding,
+				childWidth, childWidth, childWidth, safeHeight);
+		final int contentHeight = Math.min(safeHeight, content.requiredHeight);
+		final int contentY = Math.max(0, (safeHeight - contentHeight) / 2);
+		final int contentOriginalY = positionY(state.content, contentY, safeHeight, contentHeight);
+
+		applyPortraitRoot(state, rootPosition, width, height, result);
+		applyGeometry(state.safe, state.safeGeometry.x, state.safeGeometry.y, safeWidth, safeHeight, result);
+		applyHidden(state.head, true, result);
+		applyGeometry(state.content, 0, contentOriginalY, safeWidth, contentHeight, result);
+		applyPortraitContent(state, content, safeWidth, result);
 	}
 
 	private void applyStacked(PortraitState state, Position rootPosition, int width, int height, MutableResult result) {
@@ -305,22 +574,50 @@ public final class DialoguePrompts {
 		final int contentWidth = Math.max(1, safeWidth);
 		final int contentPadding = Math.min(STACK_PADDING, Math.max(0, (contentWidth - 1) / 2));
 		final int childWidth = Math.max(1, contentWidth - contentPadding * 2);
-		final PortraitContentLayout content = portraitContentLayout(state, contentPadding, contentPadding, contentPadding,
+		PortraitContentLayout content = portraitContentLayout(state, contentPadding, contentPadding, contentPadding,
 				childWidth, childWidth, childWidth, 0);
-		final int contentHeight = Math.max(state.contentGeometry.height, content.requiredHeight);
-		final int portraitHeight = Math.max(state.safeGeometry.height, state.headGeometry.y + state.headGeometry.height);
-		final int groupHeight = portraitHeight + STACK_GAP + contentHeight;
+		if (content.requiredHeight > safeHeight) {
+			content = portraitContentLayout(state, contentPadding, contentPadding, contentPadding,
+					childWidth, childWidth, childWidth, safeHeight);
+		}
+
+		final int naturalContentHeight = Math.min(safeHeight, content.requiredHeight);
+		final int headHeight = portraitHeadHeight(state);
+		final boolean showHead = !state.headHidden
+				&& headHeight + STACK_GAP + naturalContentHeight + MIN_CONTENT_PADDING * 2 <= safeHeight;
+		final int availableContentHeight = showHead
+				? Math.max(1, safeHeight - headHeight - STACK_GAP - MIN_CONTENT_PADDING * 2)
+				: safeHeight;
+		if (content.requiredHeight > availableContentHeight) {
+			content = portraitContentLayout(state, contentPadding, contentPadding, contentPadding,
+					childWidth, childWidth, childWidth, availableContentHeight);
+		}
+
+		final int contentHeight = Math.min(availableContentHeight, content.requiredHeight);
+		final int groupHeight = showHead ? headHeight + STACK_GAP + contentHeight : contentHeight;
 		final int groupY = Math.max(0, (safeHeight - groupHeight) / 2);
 		final int headX = Math.max(0, (safeWidth - state.headGeometry.width) / 2);
-		final int headY = groupY + state.headGeometry.y;
-		final int contentY = Math.min(Math.max(0, safeHeight - contentHeight), groupY + portraitHeight + STACK_GAP);
+		final int headY = groupY + Math.max(0, headHeight - state.headGeometry.height);
+		final int contentY = showHead ? groupY + headHeight + STACK_GAP : groupY;
 		final int contentOriginalY = positionY(state.content, contentY, safeHeight, contentHeight);
 
 		applyPortraitRoot(state, rootPosition, width, height, result);
 		applyGeometry(state.safe, state.safeGeometry.x, state.safeGeometry.y, safeWidth, safeHeight, result);
-		applyGeometry(state.head, headX, headY, state.headGeometry.width, state.headGeometry.height, result);
+		applyHidden(state.head, !showHead, result);
+		if (showHead) {
+			applyGeometry(state.head, headX, headY, state.headGeometry.width, state.headGeometry.height, result);
+		}
 		applyGeometry(state.content, 0, contentOriginalY, contentWidth, contentHeight, result);
 		applyPortraitContent(state, content, contentWidth, result);
+	}
+
+	private static boolean requiresStackedPortrait(PortraitState state, int safeWidth, int sideTextWidth) {
+		return sideTextWidth < MIN_SIDE_TEXT_WIDTH
+				|| safeWidth < state.headGeometry.width + STACK_GAP + MIN_SIDE_TEXT_WIDTH;
+	}
+
+	private static int portraitHeadHeight(PortraitState state) {
+		return Math.max(state.headGeometry.height, state.headGeometry.y + state.headGeometry.height);
 	}
 
 	private static PortraitContentLayout portraitContentLayout(PortraitState state,
@@ -332,7 +629,7 @@ public final class DialoguePrompts {
 		final int nameY = state.nameGeometry.y;
 		final int fixedHeight = nameY + state.nameGeometry.height + textHeight + state.continueGeometry.height;
 		final int sectionGap = maxHeight > 0
-				? Math.min(naturalGap, Math.max(0, (maxHeight - fixedHeight) / 2))
+				? Math.max(MIN_DIALOGUE_GAP, Math.min(naturalGap, Math.max(0, (maxHeight - fixedHeight) / 2)))
 				: naturalGap;
 		final int textY = nameY + state.nameGeometry.height + sectionGap;
 		final int continueY = textY + textHeight + sectionGap;
@@ -671,6 +968,7 @@ public final class DialoguePrompts {
 		restoreGeometry(state.root, state.rootGeometry, result);
 		restoreGeometry(state.safe, state.safeGeometry, result);
 		restoreGeometry(state.head, state.headGeometry, result);
+		applyHidden(state.head, state.headHidden, result);
 		restoreGeometry(state.content, state.contentGeometry, result);
 		restoreGeometry(state.name, state.nameGeometry, result);
 		restoreGeometry(state.continueWidget, state.continueGeometry, result);
@@ -686,6 +984,16 @@ public final class DialoguePrompts {
 		return text.replace("<br>", " ")
 				.replaceAll("\\s+", " ")
 				.trim();
+	}
+
+	private static boolean sameDialogueText(String first, String second) {
+		final String normalizedFirst = normalizeDialogueText(first);
+		final String normalizedSecond = normalizeDialogueText(second);
+		if (normalizedFirst == null) {
+			return normalizedSecond == null;
+		}
+
+		return normalizedFirst.equals(normalizedSecond);
 	}
 
 	private static String wrapText(Widget widget, String text, int maxWidth) {
@@ -767,10 +1075,18 @@ public final class DialoguePrompts {
 	}
 
 	private static int wrappedHeight(Widget widget, int nativeHeight, String text) {
-		final int lines = lineCount(text);
+		return Math.max(nativeHeight, lineCount(text) * optionLineHeight(widget, nativeHeight) + OPTION_GLYPH_PADDING * 2);
+	}
+
+	private static int optionLineHeight(Widget widget, int nativeHeight) {
+		if (widget != null && widget.getLineHeight() > 0) {
+			return Math.max(nativeHeight, widget.getLineHeight());
+		}
+
 		final FontTypeFace font = widget != null ? widget.getFont() : null;
-		final int lineHeight = font != null ? Math.max(nativeHeight, font.getBaseline() + OPTION_ROW_GAP) : nativeHeight;
-		return Math.max(nativeHeight, lines * lineHeight);
+		return font != null
+				? Math.max(nativeHeight, font.getBaseline())
+				: nativeHeight;
 	}
 
 	private static int dialogueTextHeight(Widget widget, String text) {
@@ -1045,7 +1361,8 @@ public final class DialoguePrompts {
 				}
 
 				final WidgetState current = children.get(widget);
-				if (current != null && current.renderedText != null && !current.renderedText.equals(widget.getText())) {
+				if (current != null && current.renderedText != null
+						&& !sameDialogueText(current.renderedText, widget.getText())) {
 					children.remove(widget);
 				}
 
@@ -1070,6 +1387,32 @@ public final class DialoguePrompts {
 			sourceText = widget.getText();
 			hidden = widget.isSelfHidden();
 			renderedText = sourceText;
+		}
+	}
+
+	private static final class OptionLayout {
+		private final int height;
+		private final int top;
+		private final int bottom;
+		private final int gap;
+
+		private OptionLayout(int height, int top, int bottom, int gap) {
+			this.height = height;
+			this.top = top;
+			this.bottom = bottom;
+			this.gap = gap;
+		}
+	}
+
+	private static final class OptionSpacing {
+		private final int top;
+		private final int bottom;
+		private final int gap;
+
+		private OptionSpacing(int top, int bottom, int gap) {
+			this.top = top;
+			this.bottom = bottom;
+			this.gap = gap;
 		}
 	}
 
@@ -1178,7 +1521,7 @@ public final class DialoguePrompts {
 			}
 
 			final String current = text.getText();
-			if (renderedText == null || !renderedText.equals(current)) {
+			if (renderedText == null || !sameDialogueText(renderedText, current)) {
 				sourceText = current;
 				renderedText = current;
 			}
@@ -1256,6 +1599,7 @@ public final class DialoguePrompts {
 		private final Geometry nameGeometry;
 		private final Geometry continueGeometry;
 		private final Geometry textGeometry;
+		private final boolean headHidden;
 		private String sourceText;
 		private String renderedText;
 		private boolean rootForced;
@@ -1275,6 +1619,7 @@ public final class DialoguePrompts {
 			this.nameGeometry = Geometry.of(name);
 			this.continueGeometry = Geometry.of(continueWidget);
 			this.textGeometry = Geometry.of(text);
+			this.headHidden = head != null && head.isSelfHidden();
 			this.sourceText = text != null ? text.getText() : null;
 			this.renderedText = sourceText;
 		}
@@ -1285,7 +1630,7 @@ public final class DialoguePrompts {
 			}
 
 			final String current = text.getText();
-			if (renderedText == null || !renderedText.equals(current)) {
+			if (renderedText == null || !sameDialogueText(renderedText, current)) {
 				sourceText = current;
 				renderedText = current;
 			}
@@ -1319,6 +1664,52 @@ public final class DialoguePrompts {
 		}
 	}
 
+	public static final class FitRequirement {
+		private static final FitRequirement NONE = new FitRequirement(false, 0, 0);
+
+		private final boolean active;
+		private final int minimumBodyHeight;
+		private final int preferredBodyHeight;
+
+		private FitRequirement(boolean active, int minimumBodyHeight, int preferredBodyHeight) {
+			this.active = active;
+			this.minimumBodyHeight = Math.max(0, minimumBodyHeight);
+			this.preferredBodyHeight = Math.max(this.minimumBodyHeight, preferredBodyHeight);
+		}
+
+		private FitRequirement combine(FitRequirement other) {
+			if (other == null || !other.active) {
+				return this;
+			}
+			if (!active) {
+				return other;
+			}
+			return new FitRequirement(true,
+					Math.max(minimumBodyHeight, other.minimumBodyHeight),
+					Math.max(preferredBodyHeight, other.preferredBodyHeight));
+		}
+
+		public boolean isActive() {
+			return active;
+		}
+
+		public int getMinimumBodyHeight() {
+			return minimumBodyHeight;
+		}
+
+		public int getPreferredBodyHeight() {
+			return preferredBodyHeight;
+		}
+
+		public boolean fitsMinimum(int bodyHeight) {
+			return !active || bodyHeight >= minimumBodyHeight;
+		}
+
+		public boolean fitsPreferred(int bodyHeight) {
+			return !active || bodyHeight >= preferredBodyHeight;
+		}
+	}
+
 	private static final class MutableResult {
 		private int mutations;
 		private int revalidates;
@@ -1348,3 +1739,4 @@ public final class DialoguePrompts {
 		}
 	}
 }
+
