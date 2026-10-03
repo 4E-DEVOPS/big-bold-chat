@@ -14,6 +14,7 @@ import net.runelite.api.FontTypeFace;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetPositionMode;
+import net.runelite.api.widgets.WidgetSizeMode;
 import net.runelite.api.widgets.WidgetType;
 
 /**
@@ -23,8 +24,6 @@ public final class DialoguePrompts {
 	private static final int MIN_SIDE_TEXT_WIDTH = 160;
 	private static final int OPTION_ROW_GAP = 4;
 	private static final int DIALOGUE_LINE_GAP = 0;
-	private static final int DIALOGUE_SECTION_GAP = 16;
-	private static final int SPRITE_SECTION_GAP = 8;
 	private static final int STACK_PADDING = 10;
 	private static final int STACK_GAP = 12;
 	private static final int SPRITE_SIDE_TEXT_X = 96;
@@ -250,33 +249,52 @@ public final class DialoguePrompts {
 		if (sideTextWidth < MIN_SIDE_TEXT_WIDTH) {
 			applyStacked(state, rootPosition, width, height, result);
 		} else {
-			applySideBySide(state, rootPosition, width, height, rightSide, result);
+			applySideBySide(state, x, width, height, effectiveBodyHeight, rightSide, result);
 		}
 
 		return state;
 	}
 
-	private void applySideBySide(PortraitState state, Position rootPosition, int width, int height, boolean rightSide, MutableResult result) {
+	private void applySideBySide(PortraitState state, int rootX, int width, int baseHeight,
+			int effectiveBodyHeight, boolean rightSide, MutableResult result) {
 		final int safeWidth = fittedWidth(state.safeGeometry, state.rootGeometry.width, width);
-		final int safeHeight = fittedHeight(state.safeGeometry, state.rootGeometry.height, height);
 		final int contentWidth = fittedWidth(state.contentGeometry, state.safeGeometry.width, safeWidth);
 		final int nameWidth = fittedWidth(state.nameGeometry, state.contentGeometry.width, contentWidth);
 		final int textWidth = fittedWidth(state.textGeometry, state.contentGeometry.width, contentWidth);
 		final int continueWidth = fittedWidth(state.continueGeometry, state.contentGeometry.width, contentWidth);
-		final PortraitContentLayout content = portraitContentLayout(state, state.nameGeometry.x, state.textGeometry.x,
-				state.continueGeometry.x, nameWidth, textWidth, continueWidth);
-		final int contentHeight = Math.min(safeHeight, Math.max(state.contentGeometry.height, content.requiredHeight));
+		PortraitContentLayout content = portraitContentLayout(state, state.nameGeometry.x, state.textGeometry.x,
+				state.continueGeometry.x, nameWidth, textWidth, continueWidth, 0);
 
-		applyPortraitRoot(state, rootPosition, width, height, result);
-		applyGeometry(state.safe, state.safeGeometry.x, state.safeGeometry.y, safeWidth, safeHeight, result);
+		final int safeTop = Math.max(0, state.safeGeometry.y);
+		final int safeBottom = Math.max(0,
+				state.rootGeometry.height - state.safeGeometry.y - state.safeGeometry.height);
+		final int minimumSafeHeight = Math.max(state.headGeometry.height, content.requiredHeight);
+		final int minimumRootHeight = safeTop + minimumSafeHeight + safeBottom;
+		final int height = Math.min(effectiveBodyHeight, Math.max(baseHeight, minimumRootHeight));
+		final int safeHeight = fittedHeight(state.safeGeometry, state.rootGeometry.height, height);
 
+		if (content.requiredHeight > safeHeight) {
+			content = portraitContentLayout(state, state.nameGeometry.x, state.textGeometry.x,
+					state.continueGeometry.x, nameWidth, textWidth, continueWidth, safeHeight);
+		}
+
+		final int contentHeight = Math.min(safeHeight,
+				Math.max(Math.min(state.contentGeometry.height, safeHeight), content.requiredHeight));
+		final int contentY = Math.max(0, (safeHeight - contentHeight) / 2);
 		final int headX = rightSide
 				? anchoredRightX(state.headGeometry, state.safeGeometry.width, safeWidth)
 				: state.headGeometry.x;
-		final int headY = centeredY(state.headGeometry, state.safeGeometry.height, safeHeight);
-		applyGeometry(state.head, headX, headY, state.headGeometry.width, state.headGeometry.height, result);
+		final int contentBlockHeight = Math.max(1, content.requiredHeight - content.nameY);
+		final int headY = clamp(contentY + content.nameY
+						+ (contentBlockHeight - state.headGeometry.height) / 2,
+				0, Math.max(0, safeHeight - state.headGeometry.height));
+		final int contentOriginalY = positionY(state.content, contentY, safeHeight, contentHeight);
+		final int rootY = Math.max(0, (effectiveBodyHeight - height) / 2);
+		final Position adjustedRootPosition = rootPosition(state.root, rootX, rootY, width, height);
 
-		final int contentOriginalY = positionY(state.content, Math.max(0, (safeHeight - contentHeight) / 2), safeHeight, contentHeight);
+		applyPortraitRoot(state, adjustedRootPosition, width, height, result);
+		applyGeometry(state.safe, state.safeGeometry.x, state.safeGeometry.y, safeWidth, safeHeight, result);
+		applyGeometry(state.head, headX, headY, state.headGeometry.width, state.headGeometry.height, result);
 		applyGeometry(state.content, state.contentGeometry.x, contentOriginalY, contentWidth, contentHeight, result);
 		applyPortraitContent(state, content, contentWidth, result);
 	}
@@ -288,7 +306,7 @@ public final class DialoguePrompts {
 		final int contentPadding = Math.min(STACK_PADDING, Math.max(0, (contentWidth - 1) / 2));
 		final int childWidth = Math.max(1, contentWidth - contentPadding * 2);
 		final PortraitContentLayout content = portraitContentLayout(state, contentPadding, contentPadding, contentPadding,
-				childWidth, childWidth, childWidth);
+				childWidth, childWidth, childWidth, 0);
 		final int contentHeight = Math.max(state.contentGeometry.height, content.requiredHeight);
 		final int portraitHeight = Math.max(state.safeGeometry.height, state.headGeometry.y + state.headGeometry.height);
 		final int groupHeight = portraitHeight + STACK_GAP + contentHeight;
@@ -306,14 +324,20 @@ public final class DialoguePrompts {
 	}
 
 	private static PortraitContentLayout portraitContentLayout(PortraitState state,
-			int nameX, int textX, int continueX, int nameWidth, int textWidth, int continueWidth) {
+			int nameX, int textX, int continueX, int nameWidth, int textWidth, int continueWidth, int maxHeight) {
 		final int fittedTextWidth = Math.max(1, textWidth);
 		final String text = wrapText(state.text, normalizeDialogueText(state.sourceText), fittedTextWidth);
 		final int textHeight = dialogueTextHeight(state.text, text);
+		final int naturalGap = dialogueSectionGap(state.name, state.text, state.continueWidget);
 		final int nameY = state.nameGeometry.y;
-		final int textY = nameY + state.nameGeometry.height + DIALOGUE_SECTION_GAP;
-		final int continueY = textY + textHeight + DIALOGUE_SECTION_GAP;
-		final int requiredHeight = Math.max(nameY + state.nameGeometry.height, continueY + state.continueGeometry.height);
+		final int fixedHeight = nameY + state.nameGeometry.height + textHeight + state.continueGeometry.height;
+		final int sectionGap = maxHeight > 0
+				? Math.min(naturalGap, Math.max(0, (maxHeight - fixedHeight) / 2))
+				: naturalGap;
+		final int textY = nameY + state.nameGeometry.height + sectionGap;
+		final int continueY = textY + textHeight + sectionGap;
+		final int requiredHeight = Math.max(nameY + state.nameGeometry.height,
+				continueY + state.continueGeometry.height);
 		return new PortraitContentLayout(nameX, textX, continueX, Math.max(1, nameWidth), fittedTextWidth,
 				Math.max(1, continueWidth), nameY, textY, text, textHeight, continueY, requiredHeight);
 	}
@@ -375,8 +399,9 @@ public final class DialoguePrompts {
 				state.itemGeometry.width, state.itemGeometry.height, result);
 		applyTextGeometry(state.text, layout.textX, layout.textY,
 				layout.textWidth, layout.textHeight, layout.text, result);
-		applyGeometry(state.continueWidget, layout.continueX, layout.continueY,
-				layout.continueWidth, state.continueGeometry.height, result);
+		applyAbsoluteGeometry(state.continueWidget, layout.continueX, layout.continueY,
+				layout.continueWidth, layout.continueHeight, result);
+		state.continueModesForced = true;
 		state.renderedText = layout.text;
 		return state;
 	}
@@ -387,15 +412,17 @@ public final class DialoguePrompts {
 		final int textWidth = Math.max(1, width - SPRITE_SIDE_TEXT_X - rightMargin);
 		final String text = wrapText(state.text, normalizeDialogueText(state.sourceText), textWidth);
 		final int textHeight = dialogueTextHeight(state.text, text);
-		final int blockHeight = textHeight + SPRITE_SECTION_GAP + state.continueGeometry.height;
+		final int sectionGap = dialogueSectionGap(state.text, state.continueWidget);
+		final int continueHeight = state.continueHeight();
+		final int blockHeight = textHeight + sectionGap + continueHeight;
 		final int height = Math.max(state.rootGeometry.height,
 				Math.max(state.itemGeometry.height + SPRITE_ITEM_PADDING * 2, blockHeight + SPRITE_ITEM_PADDING * 2));
 		final int itemY = Math.max(0, (height - state.itemGeometry.height) / 2);
 		final int textY = Math.max(0, (height - blockHeight) / 2);
-		final int continueY = textY + textHeight + SPRITE_SECTION_GAP;
+		final int continueY = textY + textHeight + sectionGap;
 		return new SpriteLayout(state.itemGeometry.x, itemY,
 				SPRITE_SIDE_TEXT_X, textY, textWidth, textHeight, text,
-				SPRITE_SIDE_TEXT_X, continueY, textWidth, height);
+				SPRITE_SIDE_TEXT_X, continueY, textWidth, continueHeight, height);
 	}
 
 	private static SpriteLayout spriteStackedLayout(SpriteState state, int width) {
@@ -405,11 +432,13 @@ public final class DialoguePrompts {
 		final int itemX = Math.max(0, (width - state.itemGeometry.width) / 2);
 		final int itemY = SPRITE_STACK_PADDING;
 		final int textY = itemY + state.itemGeometry.height + SPRITE_STACK_GAP;
-		final int continueY = textY + textHeight + SPRITE_SECTION_GAP;
-		final int height = continueY + state.continueGeometry.height + SPRITE_STACK_PADDING;
+		final int sectionGap = dialogueSectionGap(state.text, state.continueWidget);
+		final int continueHeight = state.continueHeight();
+		final int continueY = textY + textHeight + sectionGap;
+		final int height = continueY + continueHeight + SPRITE_STACK_PADDING;
 		return new SpriteLayout(itemX, itemY,
 				SPRITE_STACK_PADDING, textY, contentWidth, textHeight, text,
-				SPRITE_STACK_PADDING, continueY, contentWidth, height);
+				SPRITE_STACK_PADDING, continueY, contentWidth, continueHeight, height);
 	}
 
 	private static Widget findSpriteContinue(Widget root, Widget messageText) {
@@ -566,8 +595,46 @@ public final class DialoguePrompts {
 		restoreGeometry(state.item, state.itemGeometry, result);
 		applyTextGeometry(state.text, state.textGeometry.x, state.textGeometry.y,
 				state.textGeometry.width, state.textGeometry.height, state.sourceText, result);
-		restoreGeometry(state.continueWidget, state.continueGeometry, result);
+		restoreSpriteContinue(state, result);
 		return null;
+	}
+
+	private static void restoreSpriteContinue(SpriteState state, MutableResult result) {
+		final Widget widget = state.continueWidget;
+		if (widget == null) {
+			return;
+		}
+
+		boolean changed = false;
+		if (state.continueModesForced) {
+			if (widget.getXPositionMode() != state.continueXPositionMode) {
+				widget.setXPositionMode(state.continueXPositionMode);
+				changed = true;
+			}
+			if (widget.getYPositionMode() != state.continueYPositionMode) {
+				widget.setYPositionMode(state.continueYPositionMode);
+				changed = true;
+			}
+			if (widget.getWidthMode() != state.continueWidthMode) {
+				widget.setWidthMode(state.continueWidthMode);
+				changed = true;
+			}
+			if (widget.getHeightMode() != state.continueHeightMode) {
+				widget.setHeightMode(state.continueHeightMode);
+				changed = true;
+			}
+			state.continueModesForced = false;
+		}
+
+		changed |= applyGeometryFields(widget, state.continueGeometry.x, state.continueGeometry.y,
+				state.continueGeometry.width, state.continueGeometry.height);
+		if (!changed) {
+			return;
+		}
+
+		widget.revalidate();
+		result.mutations++;
+		result.revalidates++;
 	}
 
 	private void restoreOptions(MutableResult result) {
@@ -707,11 +774,30 @@ public final class DialoguePrompts {
 	}
 
 	private static int dialogueTextHeight(Widget widget, String text) {
+		return Math.max(1, lineCount(text) * dialogueLineHeight(widget));
+	}
+
+	private static int dialogueLineHeight(Widget widget) {
+		if (widget != null && widget.getLineHeight() > 0) {
+			return widget.getLineHeight();
+		}
+
 		final FontTypeFace font = widget != null ? widget.getFont() : null;
-		final int lineHeight = font != null
+		return font != null
 				? Math.max(1, font.getBaseline() + DIALOGUE_LINE_GAP)
 				: 16;
-		return Math.max(1, lineCount(text) * lineHeight);
+	}
+
+	private static int dialogueSectionGap(Widget... widgets) {
+		int gap = 1;
+		for (Widget widget : widgets) {
+			gap = Math.max(gap, dialogueLineHeight(widget));
+		}
+		return gap;
+	}
+
+	private static int clamp(int value, int min, int max) {
+		return Math.max(min, Math.min(max, value));
 	}
 
 	private static int lineCount(String text) {
@@ -811,6 +897,33 @@ public final class DialoguePrompts {
 			widget.setText(text);
 			changed = true;
 		}
+		finishGeometry(widget, changed, x, y, width, height, result);
+	}
+
+	private static void applyAbsoluteGeometry(Widget widget, int x, int y, int width, int height,
+			MutableResult result) {
+		if (widget == null) {
+			return;
+		}
+
+		boolean changed = false;
+		if (widget.getXPositionMode() != WidgetPositionMode.ABSOLUTE_LEFT) {
+			widget.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
+			changed = true;
+		}
+		if (widget.getYPositionMode() != WidgetPositionMode.ABSOLUTE_LEFT) {
+			widget.setYPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
+			changed = true;
+		}
+		if (widget.getWidthMode() != WidgetSizeMode.ABSOLUTE) {
+			widget.setWidthMode(WidgetSizeMode.ABSOLUTE);
+			changed = true;
+		}
+		if (widget.getHeightMode() != WidgetSizeMode.ABSOLUTE) {
+			widget.setHeightMode(WidgetSizeMode.ABSOLUTE);
+			changed = true;
+		}
+		changed |= applyGeometryFields(widget, x, y, width, height);
 		finishGeometry(widget, changed, x, y, width, height, result);
 	}
 
@@ -997,10 +1110,11 @@ public final class DialoguePrompts {
 		private final int continueX;
 		private final int continueY;
 		private final int continueWidth;
+		private final int continueHeight;
 		private final int height;
 
 		private SpriteLayout(int itemX, int itemY, int textX, int textY, int textWidth, int textHeight,
-				String text, int continueX, int continueY, int continueWidth, int height) {
+				String text, int continueX, int continueY, int continueWidth, int continueHeight, int height) {
 			this.itemX = itemX;
 			this.itemY = itemY;
 			this.textX = textX;
@@ -1011,6 +1125,7 @@ public final class DialoguePrompts {
 			this.continueX = continueX;
 			this.continueY = continueY;
 			this.continueWidth = continueWidth;
+			this.continueHeight = continueHeight;
 			this.height = height;
 		}
 	}
@@ -1026,10 +1141,16 @@ public final class DialoguePrompts {
 		private final Geometry itemGeometry;
 		private final Geometry textGeometry;
 		private final Geometry continueGeometry;
+		private final int continueXPositionMode;
+		private final int continueYPositionMode;
+		private final int continueWidthMode;
+		private final int continueHeightMode;
+		private final int continueNativeHeight;
 		private String sourceText;
 		private String renderedText;
 		private boolean rootForced;
 		private boolean hostForced;
+		private boolean continueModesForced;
 
 		private SpriteState(Widget host, Widget root, Widget item, Widget text, Widget continueWidget) {
 			this.host = host;
@@ -1042,6 +1163,11 @@ public final class DialoguePrompts {
 			this.itemGeometry = Geometry.of(item);
 			this.textGeometry = Geometry.of(text);
 			this.continueGeometry = Geometry.of(continueWidget);
+			this.continueXPositionMode = continueWidget != null ? continueWidget.getXPositionMode() : WidgetPositionMode.ABSOLUTE_LEFT;
+			this.continueYPositionMode = continueWidget != null ? continueWidget.getYPositionMode() : WidgetPositionMode.ABSOLUTE_LEFT;
+			this.continueWidthMode = continueWidget != null ? continueWidget.getWidthMode() : WidgetSizeMode.ABSOLUTE;
+			this.continueHeightMode = continueWidget != null ? continueWidget.getHeightMode() : WidgetSizeMode.ABSOLUTE;
+			this.continueNativeHeight = continueWidget != null ? Math.max(1, continueWidget.getHeight()) : 1;
 			this.sourceText = text != null ? text.getText() : null;
 			this.renderedText = sourceText;
 		}
@@ -1056,6 +1182,10 @@ public final class DialoguePrompts {
 				sourceText = current;
 				renderedText = current;
 			}
+		}
+
+		private int continueHeight() {
+			return Math.max(continueNativeHeight, dialogueLineHeight(continueWidget));
 		}
 
 		private boolean isComplete() {
