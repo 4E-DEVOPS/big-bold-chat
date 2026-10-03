@@ -33,11 +33,7 @@ public final class UpdateMessages {
 	private final ExternalPluginManager externalPluginManager;
 
 	@Inject
-	public UpdateMessages(
-			Client client,
-			ClientThread clientThread,
-			ConfigManager configManager,
-			ExternalPluginManager externalPluginManager) {
+	public UpdateMessages(Client client, ClientThread clientThread, ConfigManager configManager, ExternalPluginManager externalPluginManager) {
 		this.client = client;
 		this.clientThread = clientThread;
 		this.configManager = configManager;

@@ -3,6 +3,7 @@ package com.bigboldchat.chatbox;
 import java.awt.Rectangle;
 
 import com.bigboldchat.chat.DialoguePrompts;
+import com.bigboldchat.debug.DialogueDiagnostics;
 import com.bigboldchat.debug.PerformanceMetrics;
 import com.bigboldchat.layout.ChatboxBounds;
 import com.bigboldchat.layout.InterfaceBounds;
@@ -591,7 +592,7 @@ public final class ChatboxResizeService {
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
 		if (liveDepth == 0) {
-			syncDialoguePrompts(effectiveWidth);
+			syncDialoguePrompts(effectiveWidth, effectiveBodyHeight);
 		}
 
 		syncChatPresentation();
@@ -700,7 +701,7 @@ public final class ChatboxResizeService {
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
 		if (liveDepth == 0) {
-			syncDialoguePrompts(effectiveWidth);
+			syncDialoguePrompts(effectiveWidth, effectiveBodyHeight);
 		}
 
 		syncChatPresentation();
@@ -804,8 +805,15 @@ public final class ChatboxResizeService {
 	 * Reconciles owned Modern side-row and chatbox geometry before rendering.
 	 */
 	public void reconcileBeforeRender(int width, int height) {
-		if (getLayout() != ChatboxLayout.RESIZABLE_MODERN) {
+		final ChatboxLayout layout = getLayout();
+		if (!isResizableLayout(layout)) {
 			clearCanvasResize();
+			return;
+		}
+
+		if (layout != ChatboxLayout.RESIZABLE_MODERN) {
+			clearCanvasResize();
+			reconcileDialogueBeforeRender();
 			return;
 		}
 
@@ -845,15 +853,20 @@ public final class ChatboxResizeService {
 		recordMutations(sideResult.getMutations());
 		recordRevalidates(sideResult.getRevalidates());
 
-		if (sideResult.getMutations() <= 0 && sideResult.getRevalidates() <= 0) {
-			return;
+		if (sideResult.getMutations() > 0 || sideResult.getRevalidates() > 0) {
+			final ResizeResult result = applySizeInternal(width, height, false, sideResult.getInterfaceOverrides());
+			if (result.isApplied()) {
+				widthRefreshPending |= result.isWidthChanged();
+				heightRefreshPending |= result.isHeightChanged();
+			}
 		}
 
-		final ResizeResult result = applySizeInternal(width, height, false, sideResult.getInterfaceOverrides());
-		if (result.isApplied()) {
-			widthRefreshPending |= result.isWidthChanged();
-			heightRefreshPending |= result.isHeightChanged();
-		}
+		/*
+		 * Native dialogue pages can rebuild after the script callbacks that applied ChatXL geometry.
+		 * Reconcile once at the render boundary so each newly mounted/page-advanced dialogue is laid
+		 * out against the current effective chatbox before it becomes visible.
+		 */
+		reconcileDialogueBeforeRender();
 	}
 
 	public LiveRefresh consumeLiveRefresh() {
@@ -973,16 +986,37 @@ public final class ChatboxResizeService {
 		}
 	}
 
-	private void syncDialoguePrompts() {
-		if (geometryState != null) {
-			syncDialoguePrompts(geometryState.effectiveBounds.width);
+	private void reconcileDialogueBeforeRender() {
+		if (dialoguePrompts.needsPortraitReconcile()) {
+			syncDialoguePrompts("BEFORE_RENDER");
 		}
 	}
 
-	private void syncDialoguePrompts(int effectiveWidth) {
-		final DialoguePrompts.Result result = dialoguePrompts.apply(effectiveWidth);
+	private void syncDialoguePrompts() {
+		syncDialoguePrompts("SYNC");
+	}
+
+	private void syncDialoguePrompts(String trigger) {
+		if (geometryState != null) {
+			final int effectiveHeight = geometryState.effectiveBounds.height;
+			syncDialoguePrompts(trigger, geometryState.effectiveBounds.width,
+					ChatboxGeometry.bodyHeight(effectiveHeight, chatboxButtonsHidden));
+		}
+	}
+
+	private void syncDialoguePrompts(int effectiveWidth, int effectiveBodyHeight) {
+		syncDialoguePrompts("GEOMETRY", effectiveWidth, effectiveBodyHeight);
+	}
+
+	private void syncDialoguePrompts(String trigger, int effectiveWidth, int effectiveBodyHeight) {
+		DialogueDiagnostics.beforeLayoutApply(client, trigger, effectiveWidth, effectiveBodyHeight);
+
+		final DialoguePrompts.Result result = dialoguePrompts.apply(effectiveWidth, effectiveBodyHeight);
 		recordMutations(result.getMutations());
 		recordRevalidates(result.getRevalidates());
+
+		DialogueDiagnostics.afterLayoutApply(client, trigger, effectiveWidth, effectiveBodyHeight,
+				result.getMutations(), result.getRevalidates());
 	}
 
 	private void resetDialoguePrompts() {
