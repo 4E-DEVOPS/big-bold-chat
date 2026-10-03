@@ -10,6 +10,7 @@ import net.runelite.api.ScriptID;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetPositionMode;
 
 /**
  * Applies the selected font and geometry to the chat input widget.
@@ -17,14 +18,9 @@ import net.runelite.api.widgets.Widget;
 public final class InputFontService {
 	private final Client client;
 	private final Configurations config;
+	private final BandState bandState = new BandState();
 
-	private Widget trackedInput;
-	private NativeInputState nativeInputState;
-	private AppliedInputState appliedInputState;
-
-	private Widget trackedScrollArea;
-	private NativeScrollState nativeScrollState;
-	private Integer appliedScrollReserve;
+	private InputState inputState;
 
 	public InputFontService(Client client, Configurations config) {
 		this.client = client;
@@ -37,7 +33,8 @@ public final class InputFontService {
 		}
 
 		final int scriptId = event.getScriptId();
-		if (scriptId == ScriptID.CHAT_TEXT_INPUT_REBUILD || scriptId == ScriptID.CHAT_PROMPT_INIT) {
+		if (scriptId == ScriptID.CHAT_TEXT_INPUT_REBUILD || scriptId == ScriptID.CHAT_PROMPT_INIT
+				|| scriptId == ScriptID.UPDATE_SCROLLBAR) {
 			sync();
 		}
 	}
@@ -48,9 +45,13 @@ public final class InputFontService {
 			return;
 		}
 
+		final Widget chatDisplay = client.getWidget(InterfaceID.Chatbox.CHATDISPLAY);
 		final Widget scrollArea = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
-		captureNativeInputState(input);
-		captureNativeScrollState(scrollArea);
+		final Widget scrollbar = client.getWidget(InterfaceID.Chatbox.CHATSCROLLBAR);
+		final Widget separator = firstDynamicChild(chatDisplay);
+
+		captureInput(input);
+		captureBand(scrollArea, scrollbar, separator);
 
 		final ChatFont configuredFont = config != null
 				? config.inputFont()
@@ -59,163 +60,259 @@ public final class InputFontService {
 				? configuredFont
 				: ChatFont.PLAIN_12;
 		final ChatFontProfile profile = ChatFontRegistry.get(selectedFont);
-
-		final int targetHeight = Math.max(1, nativeInputState.originalHeight
+		final int targetHeight = Math.max(1, inputState.nativeHeight
 				+ profile.getLineHeightAdjustment() + profile.getInputHeightAdjustment());
-		final int targetY = nativeInputState.originalY + profile.getInputYOffset();
-		final String targetText = FontGlyphCorrections.apply(selectedFont, nativeInputState.text);
-		final int targetScrollReserve = nativeScrollState != null
-				? Math.max(0, nativeScrollState.originalHeight + profile.getLineHeightAdjustment())
-				: 0;
+		final int targetY = inputState.nativeY + profile.getInputYOffset();
+		final String targetText = FontGlyphCorrections.apply(selectedFont, inputState.nativeText);
 
-		boolean inputLayoutChanged = false;
+		applyInput(input, selectedFont, targetHeight, targetY, targetText);
+
+		final int inputTopDelta = inputTopDelta(inputState, targetHeight, targetY);
+		applyBand(scrollArea, scrollbar, separator, inputTopDelta);
+	}
+
+	public void restoreNativePresentation() {
+		final Widget input = client.getWidget(InterfaceID.Chatbox.INPUT);
+		if (inputState != null && input == inputState.widget) {
+			restoreInput(input);
+		}
+
+		final Widget scrollArea = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
+		final Widget scrollbar = client.getWidget(InterfaceID.Chatbox.CHATSCROLLBAR);
+		final Widget separator = firstDynamicChild(client.getWidget(InterfaceID.Chatbox.CHATDISPLAY));
+		restoreBand(scrollArea, scrollbar, separator);
+
+		inputState = null;
+		bandState.clear();
+	}
+
+	private void applyInput(Widget input, ChatFont selectedFont, int targetHeight, int targetY, String targetText) {
+		boolean layoutChanged = false;
 
 		if (input.getFontId() != selectedFont.getFontId()) {
 			input.setFontId(selectedFont.getFontId());
-			inputLayoutChanged = true;
+			layoutChanged = true;
 		}
 
 		if (input.getLineHeight() != 0) {
 			input.setLineHeight(0);
-			inputLayoutChanged = true;
+			layoutChanged = true;
 		}
 
 		if (input.getOriginalHeight() != targetHeight) {
 			input.setOriginalHeight(targetHeight);
-			inputLayoutChanged = true;
+			layoutChanged = true;
 		}
 
 		if (input.getOriginalY() != targetY) {
 			input.setOriginalY(targetY);
-			inputLayoutChanged = true;
+			layoutChanged = true;
 		}
 
 		if (targetText != null && !targetText.equals(input.getText())) {
 			input.setText(targetText);
 		}
 
-		if (inputLayoutChanged) {
+		if (layoutChanged) {
 			input.revalidate();
 		}
 
-		if (scrollArea != null && nativeScrollState != null && scrollArea.getOriginalHeight() != targetScrollReserve) {
-			scrollArea.setOriginalHeight(targetScrollReserve);
-			scrollArea.revalidate();
-
-			final Widget scrollbar = client.getWidget(InterfaceID.Chatbox.CHATSCROLLBAR);
-			if (scrollbar != null) {
-				scrollbar.revalidate();
-			}
-		}
-
-		appliedInputState = new AppliedInputState(selectedFont.getFontId(), 0, targetHeight, targetY, targetText);
-		appliedScrollReserve = nativeScrollState != null
-				? targetScrollReserve
-				: null;
+		inputState.appliedFontId = selectedFont.getFontId();
+		inputState.appliedLineHeight = 0;
+		inputState.appliedHeight = targetHeight;
+		inputState.appliedY = targetY;
+		inputState.appliedText = targetText;
 	}
 
-	public void restoreNativePresentation() {
-		final Widget input = client.getWidget(InterfaceID.Chatbox.INPUT);
-		if (input != null && input == trackedInput && nativeInputState != null) {
-			boolean layoutChanged = false;
-
-			if (input.getFontId() != nativeInputState.fontId) {
-				input.setFontId(nativeInputState.fontId);
-				layoutChanged = true;
+	private void applyBand(Widget scrollArea, Widget scrollbar, Widget separator, int inputTopDelta) {
+		if (scrollArea != null && bandState.scrollArea == scrollArea) {
+			final int targetHeight = Math.max(0, bandState.nativeScrollHeight - inputTopDelta);
+			if (scrollArea.getOriginalHeight() != targetHeight) {
+				scrollArea.setOriginalHeight(targetHeight);
+				scrollArea.revalidate();
 			}
-
-			if (input.getLineHeight() != nativeInputState.lineHeight) {
-				input.setLineHeight(nativeInputState.lineHeight);
-				layoutChanged = true;
-			}
-
-			if (input.getOriginalHeight() != nativeInputState.originalHeight) {
-				input.setOriginalHeight(nativeInputState.originalHeight);
-				layoutChanged = true;
-			}
-
-			if (input.getOriginalY() != nativeInputState.originalY) {
-				input.setOriginalY(nativeInputState.originalY);
-				layoutChanged = true;
-			}
-
-			if (nativeInputState.text != null && !nativeInputState.text.equals(input.getText())) {
-				input.setText(nativeInputState.text);
-			}
-
-			if (layoutChanged) {
-				input.revalidate();
-			}
+			bandState.appliedScrollHeight = targetHeight;
 		}
 
-		final Widget scrollArea = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
-		if (scrollArea != null && scrollArea == trackedScrollArea && nativeScrollState != null
-				&& scrollArea.getOriginalHeight() != nativeScrollState.originalHeight) {
-			scrollArea.setOriginalHeight(nativeScrollState.originalHeight);
-			scrollArea.revalidate();
-
-			final Widget scrollbar = client.getWidget(InterfaceID.Chatbox.CHATSCROLLBAR);
-			if (scrollbar != null) {
-				scrollbar.revalidate();
+		if (scrollbar != null && bandState.scrollbar == scrollbar) {
+			final int targetHeight = Math.max(0, bandState.nativeScrollbarHeight - inputTopDelta);
+			if (scrollbar.getOriginalHeight() != targetHeight) {
+				scrollbar.setOriginalHeight(targetHeight);
 			}
+			revalidateScrollbar(scrollbar);
+			bandState.appliedScrollbarHeight = targetHeight;
 		}
 
-		trackedInput = null;
-		nativeInputState = null;
-		appliedInputState = null;
-		trackedScrollArea = null;
-		nativeScrollState = null;
-		appliedScrollReserve = null;
+		if (separator != null && bandState.separator == separator) {
+			final int targetY = offsetOriginalY(bandState.nativeSeparatorY, bandState.separatorYMode, inputTopDelta);
+			if (separator.getOriginalY() != targetY) {
+				separator.setOriginalY(targetY);
+				separator.revalidate();
+			}
+			bandState.appliedSeparatorY = targetY;
+		}
 	}
 
-	private void captureNativeInputState(Widget input) {
-		if (input != trackedInput || nativeInputState == null) {
-			trackedInput = input;
-			nativeInputState = NativeInputState.capture(input);
-			appliedInputState = null;
+	private void restoreInput(Widget input) {
+		boolean layoutChanged = false;
+
+		if (input.getFontId() != inputState.nativeFontId) {
+			input.setFontId(inputState.nativeFontId);
+			layoutChanged = true;
+		}
+		if (input.getLineHeight() != inputState.nativeLineHeight) {
+			input.setLineHeight(inputState.nativeLineHeight);
+			layoutChanged = true;
+		}
+		if (input.getOriginalHeight() != inputState.nativeHeight) {
+			input.setOriginalHeight(inputState.nativeHeight);
+			layoutChanged = true;
+		}
+		if (input.getOriginalY() != inputState.nativeY) {
+			input.setOriginalY(inputState.nativeY);
+			layoutChanged = true;
+		}
+		if (inputState.nativeText != null && !inputState.nativeText.equals(input.getText())) {
+			input.setText(inputState.nativeText);
+		}
+		if (layoutChanged) {
+			input.revalidate();
+		}
+	}
+
+	private void restoreBand(Widget scrollArea, Widget scrollbar, Widget separator) {
+		if (scrollArea != null && scrollArea == bandState.scrollArea
+				&& scrollArea.getOriginalHeight() != bandState.nativeScrollHeight) {
+			scrollArea.setOriginalHeight(bandState.nativeScrollHeight);
+			scrollArea.revalidate();
+		}
+
+		if (scrollbar != null && scrollbar == bandState.scrollbar) {
+			if (scrollbar.getOriginalHeight() != bandState.nativeScrollbarHeight) {
+				scrollbar.setOriginalHeight(bandState.nativeScrollbarHeight);
+			}
+			revalidateScrollbar(scrollbar);
+		}
+
+		if (separator != null && separator == bandState.separator
+				&& separator.getOriginalY() != bandState.nativeSeparatorY) {
+			separator.setOriginalY(bandState.nativeSeparatorY);
+			separator.revalidate();
+		}
+	}
+
+	private void captureInput(Widget input) {
+		if (inputState == null || input != inputState.widget) {
+			inputState = InputState.capture(input);
 			return;
 		}
 
-		if (appliedInputState == null || input.getFontId() != appliedInputState.fontId) {
-			nativeInputState.fontId = input.getFontId();
+		if (inputState.appliedFontId == null || input.getFontId() != inputState.appliedFontId) {
+			inputState.nativeFontId = input.getFontId();
+		}
+		if (inputState.appliedLineHeight == null || input.getLineHeight() != inputState.appliedLineHeight) {
+			inputState.nativeLineHeight = input.getLineHeight();
+		}
+		if (inputState.appliedHeight == null || input.getOriginalHeight() != inputState.appliedHeight) {
+			inputState.nativeHeight = input.getOriginalHeight();
+		}
+		if (inputState.appliedY == null || input.getOriginalY() != inputState.appliedY) {
+			inputState.nativeY = input.getOriginalY();
 		}
 
-		if (appliedInputState == null || input.getLineHeight() != appliedInputState.lineHeight) {
-			nativeInputState.lineHeight = input.getLineHeight();
-		}
-
-		if (appliedInputState == null || input.getOriginalHeight() != appliedInputState.originalHeight) {
-			nativeInputState.originalHeight = input.getOriginalHeight();
-		}
-
-		if (appliedInputState == null || input.getOriginalY() != appliedInputState.originalY) {
-			nativeInputState.originalY = input.getOriginalY();
-		}
+		inputState.yPositionMode = input.getYPositionMode();
 
 		final String currentText = input.getText();
-		if (appliedInputState == null || !equals(currentText, appliedInputState.text)) {
-			nativeInputState.text = currentText;
+		if (inputState.appliedText == null || !equals(currentText, inputState.appliedText)) {
+			inputState.nativeText = currentText;
 		}
 	}
 
-	private void captureNativeScrollState(Widget scrollArea) {
+	private void captureBand(Widget scrollArea, Widget scrollbar, Widget separator) {
 		if (scrollArea == null) {
-			trackedScrollArea = null;
-			nativeScrollState = null;
-			appliedScrollReserve = null;
+			bandState.scrollArea = null;
+			bandState.appliedScrollHeight = null;
+		} else if (scrollArea != bandState.scrollArea) {
+			bandState.scrollArea = scrollArea;
+			bandState.nativeScrollHeight = scrollArea.getOriginalHeight();
+			bandState.appliedScrollHeight = null;
+		} else if (bandState.appliedScrollHeight == null
+				|| scrollArea.getOriginalHeight() != bandState.appliedScrollHeight) {
+			bandState.nativeScrollHeight = scrollArea.getOriginalHeight();
+		}
+
+		if (scrollbar == null) {
+			bandState.scrollbar = null;
+			bandState.appliedScrollbarHeight = null;
+		} else if (scrollbar != bandState.scrollbar) {
+			bandState.scrollbar = scrollbar;
+			bandState.nativeScrollbarHeight = scrollbar.getOriginalHeight();
+			bandState.appliedScrollbarHeight = null;
+		} else if (bandState.appliedScrollbarHeight == null
+				|| scrollbar.getOriginalHeight() != bandState.appliedScrollbarHeight) {
+			bandState.nativeScrollbarHeight = scrollbar.getOriginalHeight();
+		}
+
+		if (separator == null) {
+			bandState.separator = null;
+			bandState.appliedSeparatorY = null;
+		} else {
+			if (separator != bandState.separator) {
+				bandState.separator = separator;
+				bandState.nativeSeparatorY = separator.getOriginalY();
+				bandState.appliedSeparatorY = null;
+			} else if (bandState.appliedSeparatorY == null
+					|| separator.getOriginalY() != bandState.appliedSeparatorY) {
+				bandState.nativeSeparatorY = separator.getOriginalY();
+			}
+			bandState.separatorYMode = separator.getYPositionMode();
+		}
+	}
+
+	private static int inputTopDelta(InputState state, int targetHeight, int targetY) {
+		final int heightDelta = targetHeight - state.nativeHeight;
+		final int yDelta = targetY - state.nativeY;
+
+		if (state.yPositionMode == WidgetPositionMode.ABSOLUTE_BOTTOM) {
+			return -heightDelta - yDelta;
+		}
+		if (state.yPositionMode == WidgetPositionMode.ABSOLUTE_CENTER) {
+			return -(heightDelta / 2) + yDelta;
+		}
+		return yDelta;
+	}
+
+	private static int offsetOriginalY(int originalY, int yPositionMode, int relativeDelta) {
+		return yPositionMode == WidgetPositionMode.ABSOLUTE_BOTTOM
+				? originalY - relativeDelta
+				: originalY + relativeDelta;
+	}
+
+	private static void revalidateScrollbar(Widget scrollbar) {
+		scrollbar.revalidate();
+		scrollbar.revalidateScroll();
+
+		final Widget[] children = scrollbar.getDynamicChildren();
+		if (children == null) {
 			return;
 		}
 
-		if (scrollArea != trackedScrollArea || nativeScrollState == null) {
-			trackedScrollArea = scrollArea;
-			nativeScrollState = new NativeScrollState(scrollArea.getOriginalHeight());
-			appliedScrollReserve = null;
-			return;
+		for (Widget child : children) {
+			if (child != null) {
+				child.revalidate();
+			}
+		}
+	}
+
+	private static Widget firstDynamicChild(Widget widget) {
+		if (widget == null) {
+			return null;
 		}
 
-		if (appliedScrollReserve == null || scrollArea.getOriginalHeight() != appliedScrollReserve) {
-			nativeScrollState.originalHeight = scrollArea.getOriginalHeight();
-		}
+		final Widget[] children = widget.getDynamicChildren();
+		return children != null && children.length > 0
+				? children[0]
+				: null;
 	}
 
 	private static boolean equals(String first, String second) {
@@ -224,47 +321,56 @@ public final class InputFontService {
 				: first.equals(second);
 	}
 
-	private static final class NativeInputState {
-		private int fontId;
-		private int lineHeight;
-		private int originalHeight;
-		private int originalY;
-		private String text;
+	private static final class InputState {
+		private Widget widget;
+		private int nativeFontId;
+		private int nativeLineHeight;
+		private int nativeHeight;
+		private int nativeY;
+		private int yPositionMode;
+		private String nativeText;
+		private Integer appliedFontId;
+		private Integer appliedLineHeight;
+		private Integer appliedHeight;
+		private Integer appliedY;
+		private String appliedText;
 
-		private static NativeInputState capture(Widget input) {
-			final NativeInputState state = new NativeInputState();
-
-			state.fontId = input.getFontId();
-			state.lineHeight = input.getLineHeight();
-			state.originalHeight = input.getOriginalHeight();
-			state.originalY = input.getOriginalY();
-			state.text = input.getText();
-
+		private static InputState capture(Widget input) {
+			final InputState state = new InputState();
+			state.widget = input;
+			state.nativeFontId = input.getFontId();
+			state.nativeLineHeight = input.getLineHeight();
+			state.nativeHeight = input.getOriginalHeight();
+			state.nativeY = input.getOriginalY();
+			state.yPositionMode = input.getYPositionMode();
+			state.nativeText = input.getText();
 			return state;
 		}
 	}
 
-	private static final class AppliedInputState {
-		private final int fontId;
-		private final int lineHeight;
-		private final int originalHeight;
-		private final int originalY;
-		private final String text;
+	private static final class BandState {
+		private Widget scrollArea;
+		private Widget scrollbar;
+		private Widget separator;
+		private int nativeScrollHeight;
+		private int nativeScrollbarHeight;
+		private int nativeSeparatorY;
+		private int separatorYMode;
+		private Integer appliedScrollHeight;
+		private Integer appliedScrollbarHeight;
+		private Integer appliedSeparatorY;
 
-		private AppliedInputState(int fontId, int lineHeight, int originalHeight, int originalY, String text) {
-			this.fontId = fontId;
-			this.lineHeight = lineHeight;
-			this.originalHeight = originalHeight;
-			this.originalY = originalY;
-			this.text = text;
-		}
-	}
-
-	private static final class NativeScrollState {
-		private int originalHeight;
-
-		private NativeScrollState(int originalHeight) {
-			this.originalHeight = originalHeight;
+		private void clear() {
+			scrollArea = null;
+			scrollbar = null;
+			separator = null;
+			nativeScrollHeight = 0;
+			nativeScrollbarHeight = 0;
+			nativeSeparatorY = 0;
+			separatorYMode = 0;
+			appliedScrollHeight = null;
+			appliedScrollbarHeight = null;
+			appliedSeparatorY = null;
 		}
 	}
 }

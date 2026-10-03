@@ -3,7 +3,7 @@ package com.bigboldchat.fonts;
 import com.bigboldchat.config.ChatFont;
 
 public final class Verdana11Bold implements ChatFontProfile {
-	private static final int INPUT_HEIGHT_ADJUSTMENT = 1;
+	private static final int INPUT_HEIGHT_ADJUSTMENT = 0;
 	private static final int INPUT_Y_OFFSET = 1;
 
 	private static final int LINE_HEIGHT_ADJUSTMENT = -1;
