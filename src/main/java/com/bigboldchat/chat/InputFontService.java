@@ -6,11 +6,13 @@ import com.bigboldchat.fonts.ChatFontProfile;
 import com.bigboldchat.fonts.ChatFontRegistry;
 
 import net.runelite.api.Client;
+import net.runelite.api.FontTypeFace;
 import net.runelite.api.ScriptID;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetPositionMode;
+import net.runelite.api.widgets.WidgetTextAlignment;
 
 /**
  * Applies the selected font and geometry to the chat input widget.
@@ -113,6 +115,11 @@ public final class InputFontService {
 			input.setText(targetText);
 		}
 
+		final int targetAlignment = targetInputAlignment(input, selectedFont, targetText);
+		if (input.getXTextAlignment() != targetAlignment) {
+			input.setXTextAlignment(targetAlignment);
+		}
+
 		if (layoutChanged) {
 			input.revalidate();
 		}
@@ -121,7 +128,26 @@ public final class InputFontService {
 		inputState.appliedLineHeight = 0;
 		inputState.appliedHeight = targetHeight;
 		inputState.appliedY = targetY;
+		inputState.appliedXTextAlignment = targetAlignment;
 		inputState.appliedText = targetText;
+	}
+
+	private int targetInputAlignment(Widget input, ChatFont selectedFont, String targetText) {
+		final int nativeAlignment = inputState.nativeXTextAlignment;
+		if (selectedFont == ChatFont.PLAIN_12
+				|| nativeAlignment != WidgetTextAlignment.LEFT && nativeAlignment != WidgetTextAlignment.RIGHT
+				|| targetText == null || input.getWidth() <= 0) {
+			return nativeAlignment;
+		}
+
+		final FontTypeFace font = input.getFont();
+		if (font == null) {
+			return nativeAlignment;
+		}
+
+		return font.getTextWidth(targetText) > input.getWidth()
+				? WidgetTextAlignment.RIGHT
+				: WidgetTextAlignment.LEFT;
 	}
 
 	private void applyBand(Widget scrollArea, Widget scrollbar, Widget separator, int inputTopDelta) {
@@ -172,6 +198,9 @@ public final class InputFontService {
 			input.setOriginalY(inputState.nativeY);
 			layoutChanged = true;
 		}
+		if (input.getXTextAlignment() != inputState.nativeXTextAlignment) {
+			input.setXTextAlignment(inputState.nativeXTextAlignment);
+		}
 		if (inputState.nativeText != null && !inputState.nativeText.equals(input.getText())) {
 			input.setText(inputState.nativeText);
 		}
@@ -218,6 +247,9 @@ public final class InputFontService {
 		}
 		if (inputState.appliedY == null || input.getOriginalY() != inputState.appliedY) {
 			inputState.nativeY = input.getOriginalY();
+		}
+		if (inputState.appliedXTextAlignment == null || input.getXTextAlignment() != inputState.appliedXTextAlignment) {
+			inputState.nativeXTextAlignment = input.getXTextAlignment();
 		}
 
 		inputState.yPositionMode = input.getYPositionMode();
@@ -327,12 +359,14 @@ public final class InputFontService {
 		private int nativeLineHeight;
 		private int nativeHeight;
 		private int nativeY;
+		private int nativeXTextAlignment;
 		private int yPositionMode;
 		private String nativeText;
 		private Integer appliedFontId;
 		private Integer appliedLineHeight;
 		private Integer appliedHeight;
 		private Integer appliedY;
+		private Integer appliedXTextAlignment;
 		private String appliedText;
 
 		private static InputState capture(Widget input) {
@@ -342,6 +376,7 @@ public final class InputFontService {
 			state.nativeLineHeight = input.getLineHeight();
 			state.nativeHeight = input.getOriginalHeight();
 			state.nativeY = input.getOriginalY();
+			state.nativeXTextAlignment = input.getXTextAlignment();
 			state.yPositionMode = input.getYPositionMode();
 			state.nativeText = input.getText();
 			return state;

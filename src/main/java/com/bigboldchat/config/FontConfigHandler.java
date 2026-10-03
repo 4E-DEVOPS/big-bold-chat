@@ -9,7 +9,7 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.events.ConfigChanged;
 
 /**
- * Owns chat-font configuration changes.
+ * Owns font configuration changes.
  */
 public final class FontConfigHandler {
 	private static final String CONFIG_GROUP = "bigboldchat";
@@ -62,9 +62,17 @@ public final class FontConfigHandler {
 
 		if (INPUT_FONT_KEY.equals(event.getKey())) {
 			clientThread.invokeLater(() -> {
-				if (active && inputFontService != null) {
-					inputFontService.sync();
+				if (!active || inputFontService == null) {
+					return;
 				}
+
+				inputFontService.sync();
+
+				if (performanceMetrics != null) {
+					performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.FONT_CHANGED);
+				}
+
+				client.refreshChat();
 			});
 
 			return true;
