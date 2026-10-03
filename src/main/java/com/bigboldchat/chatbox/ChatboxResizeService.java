@@ -3,7 +3,6 @@ package com.bigboldchat.chatbox;
 import java.awt.Rectangle;
 
 import com.bigboldchat.chat.DialoguePrompts;
-import com.bigboldchat.debug.DialogueDiagnostics;
 import com.bigboldchat.debug.PerformanceMetrics;
 import com.bigboldchat.layout.ChatboxBounds;
 import com.bigboldchat.layout.InterfaceBounds;
@@ -1072,53 +1071,36 @@ public final class ChatboxResizeService {
 
 	private void reconcileDialogueBeforeRender() {
 		if (dialoguePrompts.needsPortraitReconcile()) {
-			syncDialoguePrompts("BEFORE_RENDER");
+			syncDialoguePrompts();
 		}
 	}
 
 	private void syncDialoguePrompts() {
-		syncDialoguePrompts("SYNC");
-	}
-
-	private void syncDialoguePrompts(String trigger) {
 		if (geometryState != null) {
 			final int effectiveHeight = geometryState.effectiveBounds.height;
-			syncDialoguePrompts(trigger, geometryState.effectiveBounds.width,
+			syncDialoguePrompts(
+					geometryState.effectiveBounds.width,
 					ChatboxGeometry.bodyHeight(effectiveHeight, chatboxButtonsHidden));
 		}
 	}
 
 	private void syncDialoguePrompts(int effectiveWidth, int effectiveBodyHeight) {
-		syncDialoguePrompts("GEOMETRY", effectiveWidth, effectiveBodyHeight);
-	}
-
-	private void syncDialoguePrompts(String trigger, int effectiveWidth, int effectiveBodyHeight) {
-		DialogueDiagnostics.beforeLayoutApply(client, trigger, effectiveWidth, effectiveBodyHeight);
-
 		DialoguePrompts.Result result = dialoguePrompts.apply(effectiveWidth, effectiveBodyHeight);
 		recordMutations(result.getMutations());
 		recordRevalidates(result.getRevalidates());
 
-		int finalWidth = effectiveWidth;
-		int finalBodyHeight = effectiveBodyHeight;
-		int mutations = result.getMutations();
-		int revalidates = result.getRevalidates();
-
 		if (!dialogueFitResolving && liveDepth == 0 && reconcileDialogueFit()) {
 			final GeometryState adjusted = geometryState;
 			if (adjusted != null) {
-				finalWidth = adjusted.effectiveBounds.width;
-				finalBodyHeight = ChatboxGeometry.bodyHeight(adjusted.effectiveBounds.height, chatboxButtonsHidden);
+				final int finalWidth = adjusted.effectiveBounds.width;
+				final int finalBodyHeight =
+						ChatboxGeometry.bodyHeight(adjusted.effectiveBounds.height, chatboxButtonsHidden);
 
 				result = dialoguePrompts.apply(finalWidth, finalBodyHeight);
 				recordMutations(result.getMutations());
 				recordRevalidates(result.getRevalidates());
-				mutations += result.getMutations();
-				revalidates += result.getRevalidates();
 			}
 		}
-
-		DialogueDiagnostics.afterLayoutApply(client, trigger, finalWidth, finalBodyHeight, mutations, revalidates);
 	}
 
 	private boolean reconcileDialogueFit() {
@@ -1287,7 +1269,6 @@ public final class ChatboxResizeService {
 			return false;
 		}
 
-		final Rectangle liveBefore = InterfaceBounds.liveBounds(slot);
 		final int effectiveX = Math.max(0, effective.x - desired.x);
 		final int effectiveY = Math.max(0, effective.y - desired.y);
 		final boolean controlsChanged = !controlsLayout.matches(effective.width);
@@ -1304,20 +1285,7 @@ public final class ChatboxResizeService {
 		applyGeometry(slot, universe, chatArea, desired.width, desired.height, effectiveX, effectiveY,
 				effective.width, effective.height, bodyHeight, controlsChanged, hostPositionChanged);
 
-		DialogueDiagnostics.dialogueFitGeometry(
-				client,
-				current.configuredWidth,
-				current.configuredHeight,
-				candidate.requestedWidth,
-				candidate.requestedHeight,
-				candidate.baselineDesired,
-				desired,
-				effective,
-				liveBefore,
-				InterfaceBounds.liveBounds(slot));
-
-		final ChatboxBackgroundService.Result backgroundResult =
-				backgroundService.apply(chatArea, effective.width, bodyHeight);
+		final ChatboxBackgroundService.Result backgroundResult = backgroundService.apply(chatArea, effective.width, bodyHeight);
 		recordMutations(backgroundResult.getMutations());
 		recordRevalidates(backgroundResult.getRevalidates());
 		syncChatPresentation();
@@ -1328,8 +1296,7 @@ public final class ChatboxResizeService {
 		return true;
 	}
 
-	private void updateDialogueFitState(GeometryState current, DialogueFitCandidate candidate,
-			DialoguePrompts.FitRequirement requirement) {
+	private void updateDialogueFitState(GeometryState current, DialogueFitCandidate candidate, DialoguePrompts.FitRequirement requirement) {
 		dialogueFitActive = candidate.expanded;
 		if (!dialogueFitActive) {
 			clearDialogueFitState();
