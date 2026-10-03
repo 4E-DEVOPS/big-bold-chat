@@ -2,6 +2,7 @@ package com.bigboldchat;
 
 import com.bigboldchat.chat.FontLayoutService;
 import com.bigboldchat.chat.FontMeasurementService;
+import com.bigboldchat.chat.InputFontService;
 import com.bigboldchat.chatbox.ChatRebuildCoordinator;
 import com.bigboldchat.chatbox.ChatboxResizeService;
 import com.bigboldchat.config.ChatboxConfigHandler;
@@ -78,6 +79,7 @@ public class ChatXL extends Plugin {
 	 */
 	private FontMeasurementService fontMeasurementService;
 	private FontLayoutService fontLayoutService;
+	private InputFontService inputFontService;
 	private ChatboxResizeService chatboxResizeService;
 	private ChatRebuildCoordinator chatRebuildCoordinator;
 	private ChatboxHotkey chatboxHotkey;
@@ -108,14 +110,19 @@ public class ChatXL extends Plugin {
 		chatboxHotkey.activate();
 		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
 		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);
+		inputFontService = new InputFontService(client, config);
 		chatboxConfigHandler = new ChatboxConfigHandler(chatRebuildCoordinator);
-		fontConfigHandler = new FontConfigHandler(client, clientThread, fontLayoutService, performanceMetrics);
+		fontConfigHandler = new FontConfigHandler(client, clientThread, fontLayoutService, inputFontService, performanceMetrics);
 		/*
 		 * Refresh retained rows through the active layout pipeline.
 		 */
 		clientThread.invokeLater(() -> {
 			if (chatRebuildCoordinator != null) {
 				chatRebuildCoordinator.onStartup();
+			}
+
+			if (inputFontService != null) {
+				inputFontService.sync();
 			}
 
 			debugManager.onLoggedIn();
@@ -127,6 +134,7 @@ public class ChatXL extends Plugin {
 	@Override
 	protected void shutDown() {
 		final FontLayoutService shutdownLayoutService = fontLayoutService;
+		final InputFontService shutdownInputFontService = inputFontService;
 		final ChatboxResizeService shutdownResizeService = chatboxResizeService;
 		final PrivateChatOverlay shutdownPrivateChatOverlay = privateChatOverlay;
 		final PrivateChatLayout shutdownPrivateChatLayout = privateChatLayout;
@@ -153,6 +161,7 @@ public class ChatXL extends Plugin {
 		}
 
 		fontLayoutService = null;
+		inputFontService = null;
 		chatboxResizeService = null;
 		chatRebuildCoordinator = null;
 		chatboxHotkey = null;
@@ -189,6 +198,10 @@ public class ChatXL extends Plugin {
 			if (shutdownLayoutService != null) {
 				shutdownLayoutService.restoreNativePresentation();
 				shutdownLayoutService.reset();
+			}
+
+			if (shutdownInputFontService != null) {
+				shutdownInputFontService.restoreNativePresentation();
 			}
 
 			client.refreshChat();
@@ -439,6 +452,10 @@ public class ChatXL extends Plugin {
 			if (metricsEnabled && event != null) {
 				performanceMetrics.recordPost(event.getScriptId(), System.nanoTime() - started);
 			}
+		}
+
+		if (inputFontService != null) {
+			inputFontService.onScriptPostFired(event);
 		}
 
 		if (chatboxResizeService != null) {

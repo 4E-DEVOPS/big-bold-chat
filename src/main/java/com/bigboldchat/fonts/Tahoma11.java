@@ -3,6 +3,9 @@ package com.bigboldchat.fonts;
 import com.bigboldchat.config.ChatFont;
 
 public final class Tahoma11 implements ChatFontProfile {
+	private static final int INPUT_HEIGHT_ADJUSTMENT = 0;
+	private static final int INPUT_Y_OFFSET = 0;
+
 	private static final int LINE_HEIGHT_ADJUSTMENT = 0;
 	private static final int ROW_Y_OFFSET = 0;
 
@@ -26,6 +29,16 @@ public final class Tahoma11 implements ChatFontProfile {
 	@Override
 	public ChatFont getChatFont() {
 		return ChatFont.TAHOMA_11;
+	}
+
+	@Override
+	public int getInputHeightAdjustment() {
+		return INPUT_HEIGHT_ADJUSTMENT;
+	}
+
+	@Override
+	public int getInputYOffset() {
+		return INPUT_Y_OFFSET;
 	}
 
 	@Override

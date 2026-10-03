@@ -9,8 +9,18 @@ public interface ChatFontProfile {
 	ChatFont getChatFont();
 
 	/**
-	 * Selected line-height adjustment.
-	 * Positive increases spacing; negative reduces it.
+	 * Additional height applied to the chat input widget.
+	 */
+	int getInputHeightAdjustment();
+
+	/**
+	 * Original-Y adjustment applied to the chat input widget.
+	 */
+	int getInputYOffset();
+
+	/**
+	 * Shared line-height adjustment for chat rows and the input-band reserve.
+	 * Positive increases spacing or reserve; negative reduces it.
 	 */
 	int getLineHeightAdjustment();
 

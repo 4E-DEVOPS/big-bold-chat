@@ -4,8 +4,11 @@ import com.bigboldchat.config.ChatFont;
 
 public final class Verdana13Bold implements ChatFontProfile {
 	/*
-	 * FontID 1446 uses selected-text ':' correction in FontMeasurementService.
+	 * FontID 1446 uses selected-text ':' substitution.
 	 */
+	private static final int INPUT_HEIGHT_ADJUSTMENT = 0;
+	private static final int INPUT_Y_OFFSET = 1;
+
 	private static final int LINE_HEIGHT_ADJUSTMENT = 0;
 	private static final int ROW_Y_OFFSET = 0;
 
@@ -32,9 +35,17 @@ public final class Verdana13Bold implements ChatFontProfile {
 	}
 
 	@Override
-	public int getLineHeightAdjustment() {
-		return LINE_HEIGHT_ADJUSTMENT;
+	public int getInputHeightAdjustment() {
+		return INPUT_HEIGHT_ADJUSTMENT;
 	}
+
+	@Override
+	public int getInputYOffset() {
+		return INPUT_Y_OFFSET;
+	}
+
+	@Override
+	public int getLineHeightAdjustment() { return LINE_HEIGHT_ADJUSTMENT; }
 
 	@Override
 	public int getRowYOffset() {

@@ -27,12 +27,23 @@ public interface Configurations extends Config {
 
 	@ConfigItem(
 			keyName = "chatFont",
-			name = "Font",
+			name = "Chat Font",
 			description = "Font used for chatbox and private-message text.",
 			position = 0,
 			section = chatBoxSection
 	)
 	default ChatFont chatFont() {
+		return ChatFont.PLAIN_12;
+	}
+
+	@ConfigItem(
+			keyName = "inputFont",
+			name = "Input Font",
+			description = "Font used for text typed into the chatbox.",
+			position = 1,
+			section = chatBoxSection
+	)
+	default ChatFont inputFont() {
 		return ChatFont.PLAIN_12;
 	}
 
@@ -42,7 +53,7 @@ public interface Configurations extends Config {
 			keyName = "chatboxWidth",
 			name = "Chatbox Width",
 			description = "Width of the chatbox.",
-			position = 1,
+			position = 2,
 			section = chatBoxSection
 	)
 	default int chatboxWidth() {
@@ -55,7 +66,7 @@ public interface Configurations extends Config {
 			keyName = "chatboxHeight",
 			name = "Chatbox Height",
 			description = "Height of the chatbox.",
-			position = 2,
+			position = 3,
 			section = chatBoxSection
 	)
 	default int chatboxHeight() {
@@ -68,7 +79,7 @@ public interface Configurations extends Config {
 			keyName = "splitPmWidth",
 			name = "Split-PM Width",
 			description = "Maximum width of split private chat. Follows the live chatbox width until overridden.",
-			position = 3,
+			position = 4,
 			section = chatBoxSection
 	)
 	default int splitPmWidth() {
@@ -84,7 +95,7 @@ public interface Configurations extends Config {
 			keyName = "hideChatboxButtons",
 			name = "Hide Chatbox Buttons",
 			description = "Hide the chatbox button row.",
-			position = 4,
+			position = 5,
 			section = chatBoxSection
 	)
 	default boolean hideChatboxButtons() {
@@ -95,7 +106,7 @@ public interface Configurations extends Config {
 			keyName = "hideChatboxHotkey",
 			name = "Hide Chatbox Hotkey",
 			description = "Toggle the chatbox body between hidden and visible.",
-			position = 5,
+			position = 6,
 			section = chatBoxSection
 	)
 	default Keybind hideChatboxHotkey() {
@@ -106,7 +117,7 @@ public interface Configurations extends Config {
 			keyName = "clearChatHotkey",
 			name = "Clear Chat Hotkey",
 			description = "Clear all chat messages.<br>You can also type ::clear or ::cls.",
-			position = 6,
+			position = 7,
 			section = chatBoxSection
 	)
 	default Keybind clearChatHotkey() {

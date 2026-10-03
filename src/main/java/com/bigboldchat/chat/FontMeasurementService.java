@@ -100,19 +100,8 @@ public final class FontMeasurementService {
 			return null;
 		}
 
-		/*
-		 * FontID 1446 renders ':' incorrectly.
-		 *
-		 * Keep native text unchanged for correlation and replace ':' only in
-		 * the selected text that Chat XL measures and renders.
-		 */
-		final boolean replaceMalformedColons = selectedChatFont == ChatFont.VERDANA_13_BOLD;
-
 		final String visibleRawBodyText = textNormalizer.renderText(rawBody);
-
-		final String selectedRawBodyText = replaceMalformedColons
-				? replaceVerdana13BoldColons(visibleRawBodyText)
-				: visibleRawBodyText;
+		final String selectedRawBodyText = FontGlyphCorrections.apply(selectedChatFont, visibleRawBodyText);
 
 		// Preserve inline images while measuring wrapping.
 		final String measurementBody = textNormalizer.measureSemantic(rawBody);
@@ -236,41 +225,19 @@ public final class FontMeasurementService {
 					? applyInlineIconUsernameSpacing(rawPrefix, fontProfile.getFriendsChatPlayerIconSpacing(), '\u00A0')
 					: rawPrefix;
 
-			/*
-			 * Replace malformed FontID 1446 colons in the selected prefix only.
-			 */
-			if (replaceMalformedColons) {
-				selectedRawPrefixText = replaceVerdana13BoldColons(selectedRawPrefixText);
-			}
+			selectedRawPrefixText = FontGlyphCorrections.apply(selectedChatFont, selectedRawPrefixText);
 
 			selectedPrefixLayoutWidth = selectedFont.getTextWidth(normalizeRawForMeasurement(selectedRawPrefixText));
 
 			nativeBodyX = lineX + nativePrefixWidth + BODY_GAP;
 			selectedBodyX = lineX + selectedPrefixLayoutWidth + BODY_GAP;
 		} else {
-			nativeChannelLayout = measureChannelPrefixLayout(
-					nativeFont,
-					rawPrefixComponents,
-					intStack,
-					intStackSize,
-					lineX,
-					false,
-					0,
-					0,
-					nativeFontProfile.getAccountBuildIconPadding(),
-					0);
+			nativeChannelLayout = measureChannelPrefixLayout(nativeFont, rawPrefixComponents, intStack, intStackSize,
+					lineX, null, 0, 0, nativeFontProfile.getAccountBuildIconPadding(), 0);
 
-			selectedChannelLayout = measureChannelPrefixLayout(
-					selectedFont,
-					rawPrefixComponents,
-					intStack,
-					intStackSize,
-					lineX,
-					replaceMalformedColons,
-					fontProfile.getRankIconRightAdjustment(),
-					fontProfile.getRankIconSizeAdjustment(),
-					fontProfile.getAccountBuildIconPadding(),
-					fontProfile.getChannelAccountBuildIconSpacing());
+			selectedChannelLayout = measureChannelPrefixLayout(selectedFont, rawPrefixComponents, intStack, intStackSize,
+					lineX, selectedChatFont, fontProfile.getRankIconRightAdjustment(), fontProfile.getRankIconSizeAdjustment(),
+					fontProfile.getAccountBuildIconPadding(), fontProfile.getChannelAccountBuildIconSpacing());
 
 			if (nativeChannelLayout == null || selectedChannelLayout == null) {
 				return null;
@@ -372,7 +339,7 @@ public final class FontMeasurementService {
 		return measurement;
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * PRIVATE CHAT
 	 * ================================================================
@@ -407,22 +374,14 @@ public final class FontMeasurementService {
 		return null;
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * CHANNEL / RANK-ICON MEASUREMENT
 	 * ================================================================
 	 */
-	private ChannelPrefixLayout measureChannelPrefixLayout(
-			FontTypeFace font,
-			List<String> rawPrefixComponents,
-			int[] intStack,
-			int intStackSize,
-			int lineX,
-			boolean replaceMalformedColons,
-			int rankIconRightAdjustment,
-			int rankIconSizeAdjustment,
-			int accountBuildIconPadding,
-			int inlineIconUsernameSpacing) {
+	private ChannelPrefixLayout measureChannelPrefixLayout(FontTypeFace font, List<String> rawPrefixComponents,
+			int[] intStack, int intStackSize, int lineX, ChatFont glyphFont, int rankIconRightAdjustment,
+			int rankIconSizeAdjustment, int accountBuildIconPadding, int inlineIconUsernameSpacing) {
 		if (font == null || rawPrefixComponents == null || intStack == null) {
 			return null;
 		}
@@ -437,9 +396,7 @@ public final class FontMeasurementService {
 
 		layout.titleText = textNormalizer.normalizeSemantic(rawTitleText);
 
-		layout.renderedTitleText = replaceMalformedColons
-				? replaceVerdana13BoldColons(rawTitleText)
-				: rawTitleText;
+		layout.renderedTitleText = FontGlyphCorrections.apply(glyphFont, rawTitleText);
 
 		final String rawSenderText = rawPrefixComponents.size() > 1
 				? rawPrefixComponents.get(1)
@@ -461,9 +418,7 @@ public final class FontMeasurementService {
 		 */
 		layout.renderedSenderText = applyInlineIconUsernameSpacing(rawSenderText, inlineIconUsernameSpacing, ' ');
 
-		if (replaceMalformedColons) {
-			layout.renderedSenderText = replaceVerdana13BoldColons(layout.renderedSenderText);
-		}
+		layout.renderedSenderText = FontGlyphCorrections.apply(glyphFont, layout.renderedSenderText);
 
 		if (layout.titleText == null) {
 			layout.titleText = "";
@@ -557,27 +512,7 @@ public final class FontMeasurementService {
 		return layout;
 	}
 
-	/*
-	 * ================================================================
-	 * VERDANA 13 BOLD CORRECTION
-	 * ================================================================
-	 */
-
-	/*
-	 * FontID 1446 renders ':' incorrectly.
-	 *
-	 * This helper is used only for selected Verdana 13 Bold text.
-	 * Native text remains unchanged for widget correlation.
-	 */
-	private String replaceVerdana13BoldColons(String text) {
-		if (text == null || text.isEmpty()) {
-			return text;
-		}
-
-		return text.replace(':', '-');
-	}
-
-	/*
+	/**
 	 * ================================================================
 	 * FONT RESOLUTION
 	 * ================================================================
@@ -626,7 +561,7 @@ public final class FontMeasurementService {
 		}
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * OBJECT-STACK EXTRACTION
 	 * ================================================================
@@ -755,7 +690,7 @@ public final class FontMeasurementService {
 		return closingBracket > 0 && closingBracket < semanticPrefix.length() - 1;
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * TEXT NORMALIZATION
 	 * ================================================================
@@ -769,7 +704,7 @@ public final class FontMeasurementService {
 		return text.replace('\u00A0', ' ');
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * WRAPPING / HEIGHT
 	 * ================================================================
@@ -853,7 +788,7 @@ public final class FontMeasurementService {
 		return (numerator + denominator - 1) / denominator;
 	}
 
-	/*
+	/**
 	 * ================================================================
 	 * RESULT TYPES
 	 * ================================================================
