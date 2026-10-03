@@ -134,10 +134,10 @@ public final class ChatboxPlacement {
 	}
 
 	/*
-	 * Primes RuneLite's movable chatbox overlay with temporary host geometry without
+	 * Primes RuneLite's movable chatbox overlay with host geometry without
 	 * changing or persisting the user's preferred position/location.
 	 */
-	public void applyTemporaryHostBounds(Rectangle hostBounds, boolean updateLocation) {
+	public void applyHostBounds(Rectangle hostBounds, boolean updateLocation) {
 		if (hostBounds == null) {
 			return;
 		}
@@ -159,10 +159,10 @@ public final class ChatboxPlacement {
 	}
 
 	/*
-	 * Applies a selected temporary host anchor once. Subsequent frame/layout
-	 * ownership remains with RuneLite's WidgetOverlay.
+	 * Applies a selected host anchor once. Subsequent frame/layout ownership
+	 * remains with RuneLite's WidgetOverlay.
 	 */
-	public boolean moveTemporaryHost(Widget slot, Rectangle hostBounds) {
+	public boolean moveHost(Widget slot, Rectangle hostBounds) {
 		if (slot == null || hostBounds == null || !isManagedOverlay(findOverlay(overlayName()))) {
 			return false;
 		}
@@ -230,12 +230,41 @@ public final class ChatboxPlacement {
 				return new State(manualBounds, true, restored.x - liveBounds.x, restored.y - liveBounds.y);
 			}
 
-			manualBounds = new Rectangle(liveBounds.x, liveBounds.y, configuredWidth, configuredHeight);
-		} else {
-			manualBounds.setBounds(liveBounds.x, liveBounds.y, configuredWidth, configuredHeight);
+			manualBounds = new Rectangle(liveBounds);
 		}
 
-		return new State(manualBounds, true);
+		/*
+		 * Client-edge contact is authoritative for manual resizing. An attached
+		 * edge remains fixed while the opposite edge grows or shrinks; an axis
+		 * with no client-edge contact remains centered like a floating placement.
+		 */
+		final Rectangle resized = edgeAnchoredBounds(liveBounds, canvas, configuredWidth, configuredHeight);
+		manualBounds.setBounds(resized);
+
+		final boolean hostAnchorUpdate = resized.x != liveBounds.x || resized.y != liveBounds.y;
+		return new State(manualBounds, true, 0, 0, hostAnchorUpdate);
+	}
+
+	private static Rectangle edgeAnchoredBounds(Rectangle liveBounds, Rectangle canvas, int width, int height) {
+		final HorizontalAnchor horizontalAnchor;
+		if (touchesLeft(liveBounds, canvas)) {
+			horizontalAnchor = HorizontalAnchor.LEFT;
+		} else if (touchesRight(liveBounds, canvas)) {
+			horizontalAnchor = HorizontalAnchor.RIGHT;
+		} else {
+			horizontalAnchor = HorizontalAnchor.CENTER;
+		}
+
+		final VerticalAnchor verticalAnchor;
+		if (touchesTop(liveBounds, canvas)) {
+			verticalAnchor = VerticalAnchor.TOP;
+		} else if (touchesBottom(liveBounds, canvas)) {
+			verticalAnchor = VerticalAnchor.BOTTOM;
+		} else {
+			verticalAnchor = VerticalAnchor.CENTER;
+		}
+
+		return new Rectangle(anchoredX(liveBounds, width, horizontalAnchor), anchoredY(liveBounds, height, verticalAnchor), width, height);
 	}
 
 	private Rectangle configuredManualBounds(Rectangle canvas, String overlayName, String preferredLocation, int width, int height) {
@@ -422,16 +451,22 @@ public final class ChatboxPlacement {
 		private final boolean bounded;
 		private final int hostDeltaX;
 		private final int hostDeltaY;
+		private final boolean hostAnchorUpdate;
 
 		private State(Rectangle desiredBounds, boolean bounded) {
-			this(desiredBounds, bounded, 0, 0);
+			this(desiredBounds, bounded, 0, 0, false);
 		}
 
 		private State(Rectangle desiredBounds, boolean bounded, int hostDeltaX, int hostDeltaY) {
+			this(desiredBounds, bounded, hostDeltaX, hostDeltaY, false);
+		}
+
+		private State(Rectangle desiredBounds, boolean bounded, int hostDeltaX, int hostDeltaY, boolean hostAnchorUpdate) {
 			this.desiredBounds = new Rectangle(desiredBounds);
 			this.bounded = bounded;
 			this.hostDeltaX = hostDeltaX;
 			this.hostDeltaY = hostDeltaY;
+			this.hostAnchorUpdate = hostAnchorUpdate;
 		}
 
 		private static State unbounded(int width, int height) {
@@ -456,6 +491,10 @@ public final class ChatboxPlacement {
 
 		public int getHostDeltaY() {
 			return hostDeltaY;
+		}
+
+		public boolean requiresHostAnchorUpdate() {
+			return hostAnchorUpdate;
 		}
 	}
 }

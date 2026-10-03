@@ -458,10 +458,12 @@ public final class ChatboxResizeService {
 			beginLiveScroll();
 
 			/*
-			 * Native 1972 reconstruction exposes transient host and child geometry.
-			 * Reapply the last committed ChatXL rectangle instead of resolving against it.
+			 * keeps committed geometry only while RuneLite is exposing transient
+			 * control, canvas-resize, or native side-layout geometry.
 			 */
-			final ResizeResult result = applyCommittedGeometry(width, height);
+			final ResizeResult result = shouldUseCommittedRelayout()
+					? applyCommittedGeometry(width, height)
+					: applySize(width, height);
 			if (result.isApplied()) {
 				liveWidthChanged |= result.isWidthChanged();
 				liveHeightChanged |= result.isHeightChanged();
@@ -479,6 +481,10 @@ public final class ChatboxResizeService {
 		}
 
 		return ResizeResult.NOT_APPLIED;
+	}
+
+	private boolean shouldUseCommittedRelayout() {
+		return controlClickPending || canvasResizePending || sideLayoutDepth > 0;
 	}
 
 	public ResizeResult onScriptPostFired(ScriptPostFired event, int width, int height) {
@@ -592,7 +598,7 @@ public final class ChatboxResizeService {
 		final int effectiveY = Math.max(0, effectiveBounds.y - desiredBounds.y);
 		final int effectiveBodyHeight = ChatboxGeometry.bodyHeight(effectiveHeight, chatboxButtonsHidden);
 		if (dialogueFitActive) {
-			chatboxPlacement.applyTemporaryHostBounds(desiredBounds, false);
+			chatboxPlacement.applyHostBounds(desiredBounds, false);
 		}
 
 		final boolean hostChanged = slot.getWidth() != hostWidth || slot.getHeight() != hostHeight;
@@ -665,6 +671,7 @@ public final class ChatboxResizeService {
 		final int requestedWidth = dialogueFitActive ? dialogueFitRequestedWidth : width;
 		final int requestedHeight = dialogueFitActive ? dialogueFitRequestedHeight : height;
 		final ChatboxPlacement.State placement = chatboxPlacement.capture(slot, requestedWidth, requestedHeight);
+		final Rectangle desiredBounds = placement.getDesiredBounds();
 		if (placement.requiresHostReposition()) {
 			/*
 			 * Correct a stale host remount offset once before collision solving.
@@ -676,6 +683,22 @@ public final class ChatboxResizeService {
 
 			slot.revalidate();
 			recordRevalidate();
+		}
+
+		/*
+		 * Manual client-edge anchoring needs one absolute host move when a configured
+		 * size change shifts the fixed edge. Do this before side-row collision solving
+		 * so rows observe the same desired host position as ChatboxBounds.
+		 */
+		boolean configuredHostPositionChanged = false;
+		if (placement.requiresHostAnchorUpdate() && !dialogueFitActive && !dialogueFitResolving && !canvasResizePending) {
+			chatboxPlacement.applyHostBounds(desiredBounds, true);
+			configuredHostPositionChanged = chatboxPlacement.moveHost(slot, desiredBounds);
+			if (configuredHostPositionChanged) {
+				recordMutation();
+				slot.revalidate();
+				recordRevalidate();
+			}
 		}
 
 		InterfaceBounds.Overrides interfaceOverrides = suppliedOverrides;
@@ -695,7 +718,6 @@ public final class ChatboxResizeService {
 		/*
 		 * Use the full desired rectangle until post-login geometry stabilizes.
 		 */
-		final Rectangle desiredBounds = placement.getDesiredBounds();
 		final Rectangle effectiveBounds;
 		if (loginGeometryPending) {
 			effectiveBounds = new Rectangle(desiredBounds);
@@ -716,13 +738,14 @@ public final class ChatboxResizeService {
 		final boolean temporaryHost = dialogueFitActive || dialogueFitResolving || restoreTemporaryHost;
 		final boolean moveTemporaryHost = temporaryHost && !dialogueFitActive && !canvasResizePending;
 		if (temporaryHost) {
-			chatboxPlacement.applyTemporaryHostBounds(desiredBounds, moveTemporaryHost);
+			chatboxPlacement.applyHostBounds(desiredBounds, moveTemporaryHost);
 		}
 
-		final boolean hostPositionChanged = moveTemporaryHost && chatboxPlacement.moveTemporaryHost(slot, desiredBounds);
-		if (hostPositionChanged) {
+		final boolean temporaryHostPositionChanged = moveTemporaryHost && chatboxPlacement.moveHost(slot, desiredBounds);
+		if (temporaryHostPositionChanged) {
 			recordMutation();
 		}
+		final boolean hostPositionChanged = configuredHostPositionChanged || temporaryHostPositionChanged;
 
 		final boolean hostChanged = slot.getWidth() != hostWidth || slot.getHeight() != hostHeight;
 		final boolean positionChanged = universe.getRelativeX() != effectiveX || universe.getRelativeY() != effectiveY;
@@ -1272,8 +1295,8 @@ public final class ChatboxResizeService {
 		final boolean heightChanged = universe.getHeight() != effective.height || chatArea.getHeight() != bodyHeight;
 
 		geometryState = new GeometryState(current.configuredWidth, current.configuredHeight, desired, effective);
-		chatboxPlacement.applyTemporaryHostBounds(desired, !canvasResizePending);
-		final boolean hostPositionChanged = !canvasResizePending && chatboxPlacement.moveTemporaryHost(slot, desired);
+		chatboxPlacement.applyHostBounds(desired, !canvasResizePending);
+		final boolean hostPositionChanged = !canvasResizePending && chatboxPlacement.moveHost(slot, desired);
 		if (hostPositionChanged) {
 			recordMutation();
 		}
