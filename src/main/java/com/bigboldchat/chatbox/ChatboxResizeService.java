@@ -591,6 +591,10 @@ public final class ChatboxResizeService {
 		final int effectiveX = Math.max(0, effectiveBounds.x - desiredBounds.x);
 		final int effectiveY = Math.max(0, effectiveBounds.y - desiredBounds.y);
 		final int effectiveBodyHeight = ChatboxGeometry.bodyHeight(effectiveHeight, chatboxButtonsHidden);
+		if (dialogueFitActive) {
+			chatboxPlacement.applyTemporaryHostBounds(desiredBounds, false);
+		}
+
 		final boolean hostChanged = slot.getWidth() != hostWidth || slot.getHeight() != hostHeight;
 		final boolean positionChanged = universe.getRelativeX() != effectiveX || universe.getRelativeY() != effectiveY;
 		final boolean widthChanged = universe.getWidth() != effectiveWidth || chatArea.getWidth() != effectiveWidth;
@@ -599,7 +603,7 @@ public final class ChatboxResizeService {
 
 		if (hostChanged || positionChanged || widthChanged || heightChanged || controlsChanged) {
 			applyGeometry(slot, universe, chatArea, hostWidth, hostHeight, effectiveX, effectiveY,
-					effectiveWidth, effectiveHeight, effectiveBodyHeight, controlsChanged);
+					effectiveWidth, effectiveHeight, effectiveBodyHeight, controlsChanged, false);
 		}
 
 		final ChatboxBackgroundService.Result backgroundResult =
@@ -651,8 +655,10 @@ public final class ChatboxResizeService {
 			return ResizeResult.NOT_APPLIED;
 		}
 
+		boolean restoreTemporaryHost = false;
 		if (dialogueFitActive
 				&& (width != dialogueFitConfiguredWidth || height != dialogueFitConfiguredHeight)) {
+			restoreTemporaryHost = true;
 			clearDialogueFitState();
 		}
 
@@ -707,15 +713,26 @@ public final class ChatboxResizeService {
 		final int effectiveX = Math.max(0, effectiveBounds.x - desiredBounds.x);
 		final int effectiveY = Math.max(0, effectiveBounds.y - desiredBounds.y);
 		final int effectiveBodyHeight = ChatboxGeometry.bodyHeight(effectiveHeight, chatboxButtonsHidden);
+		final boolean temporaryHost = dialogueFitActive || dialogueFitResolving || restoreTemporaryHost;
+		final boolean moveTemporaryHost = temporaryHost && !dialogueFitActive && !canvasResizePending;
+		if (temporaryHost) {
+			chatboxPlacement.applyTemporaryHostBounds(desiredBounds, moveTemporaryHost);
+		}
+
+		final boolean hostPositionChanged = moveTemporaryHost && chatboxPlacement.moveTemporaryHost(slot, desiredBounds);
+		if (hostPositionChanged) {
+			recordMutation();
+		}
+
 		final boolean hostChanged = slot.getWidth() != hostWidth || slot.getHeight() != hostHeight;
 		final boolean positionChanged = universe.getRelativeX() != effectiveX || universe.getRelativeY() != effectiveY;
 		final boolean widthChanged = universe.getWidth() != effectiveWidth || chatArea.getWidth() != effectiveWidth;
 		final boolean heightChanged = universe.getHeight() != effectiveHeight || chatArea.getHeight() != effectiveBodyHeight;
 		final boolean controlsChanged = !controlsLayout.matches(effectiveWidth);
 
-		if (hostChanged || positionChanged || widthChanged || heightChanged || controlsChanged) {
+		if (hostPositionChanged || hostChanged || positionChanged || widthChanged || heightChanged || controlsChanged) {
 			applyGeometry(slot, universe, chatArea, hostWidth, hostHeight, effectiveX, effectiveY,
-					effectiveWidth, effectiveHeight, effectiveBodyHeight, controlsChanged);
+					effectiveWidth, effectiveHeight, effectiveBodyHeight, controlsChanged, hostPositionChanged);
 		}
 
 		final ChatboxBackgroundService.Result backgroundResult =
@@ -737,18 +754,39 @@ public final class ChatboxResizeService {
 	}
 
 	private void applyGeometry(Widget slot, Widget universe, Widget chatArea, int hostWidth, int hostHeight, int effectiveX, int effectiveY,
-			int effectiveWidth, int effectiveHeight, int bodyHeight, boolean controlsChanged) {
-		/*
-		 * Keep the movable host at desired bounds and place the effective chatbox inside it.
-		 */
+			int effectiveWidth, int effectiveHeight, int bodyHeight, boolean controlsChanged, boolean hostPositionChanged) {
+		boolean hostChanged = hostPositionChanged;
 		if (slot.getWidth() != hostWidth || slot.getHeight() != hostHeight) {
 			slot.setSize(hostWidth, hostHeight);
 			recordMutation();
+			hostChanged = true;
+		}
 
+		if (hostChanged) {
 			slot.revalidate();
 			recordRevalidate();
 		}
 
+		applyInnerGeometry(
+				universe,
+				chatArea,
+				effectiveX,
+				effectiveY,
+				effectiveWidth,
+				effectiveHeight,
+				bodyHeight,
+				controlsChanged);
+	}
+
+	private void applyInnerGeometry(
+			Widget universe,
+			Widget chatArea,
+			int effectiveX,
+			int effectiveY,
+			int effectiveWidth,
+			int effectiveHeight,
+			int bodyHeight,
+			boolean controlsChanged) {
 		boolean universeChanged = false;
 		if (universe.getWidth() != effectiveWidth || universe.getHeight() != effectiveHeight) {
 			universe.setSize(effectiveWidth, effectiveHeight, WidgetSizeMode.ABSOLUTE, WidgetSizeMode.ABSOLUTE);
@@ -1123,6 +1161,7 @@ public final class ChatboxResizeService {
 		if (base == null) {
 			return null;
 		}
+		base.baselineDesired = base.result.getDesiredBounds();
 
 		DialogueFitCandidate best = null;
 		final Rectangle baseEffective = base.result.getEffectiveBounds();
@@ -1156,6 +1195,7 @@ public final class ChatboxResizeService {
 			if (candidate == null) {
 				continue;
 			}
+			candidate.baselineDesired = base.result.getDesiredBounds();
 
 			final Rectangle effective = candidate.result.getEffectiveBounds();
 			final int bodyHeight = ChatboxGeometry.bodyHeight(effective.height, chatboxButtonsHidden);
@@ -1224,6 +1264,7 @@ public final class ChatboxResizeService {
 			return false;
 		}
 
+		final Rectangle liveBefore = InterfaceBounds.liveBounds(slot);
 		final int effectiveX = Math.max(0, effective.x - desired.x);
 		final int effectiveY = Math.max(0, effective.y - desired.y);
 		final boolean controlsChanged = !controlsLayout.matches(effective.width);
@@ -1231,8 +1272,26 @@ public final class ChatboxResizeService {
 		final boolean heightChanged = universe.getHeight() != effective.height || chatArea.getHeight() != bodyHeight;
 
 		geometryState = new GeometryState(current.configuredWidth, current.configuredHeight, desired, effective);
+		chatboxPlacement.applyTemporaryHostBounds(desired, !canvasResizePending);
+		final boolean hostPositionChanged = !canvasResizePending && chatboxPlacement.moveTemporaryHost(slot, desired);
+		if (hostPositionChanged) {
+			recordMutation();
+		}
+
 		applyGeometry(slot, universe, chatArea, desired.width, desired.height, effectiveX, effectiveY,
-				effective.width, effective.height, bodyHeight, controlsChanged);
+				effective.width, effective.height, bodyHeight, controlsChanged, hostPositionChanged);
+
+		DialogueDiagnostics.dialogueFitGeometry(
+				client,
+				current.configuredWidth,
+				current.configuredHeight,
+				candidate.requestedWidth,
+				candidate.requestedHeight,
+				candidate.baselineDesired,
+				desired,
+				effective,
+				liveBefore,
+				InterfaceBounds.liveBounds(slot));
 
 		final ChatboxBackgroundService.Result backgroundResult =
 				backgroundService.apply(chatArea, effective.width, bodyHeight);
@@ -1758,6 +1817,7 @@ public final class ChatboxResizeService {
 		private final int requestedHeight;
 		private final ChatboxBounds.Result result;
 		private final boolean expanded;
+		private Rectangle baselineDesired;
 		private int score = Integer.MAX_VALUE;
 		private int preferredDeficit = Integer.MAX_VALUE;
 

@@ -133,6 +133,60 @@ public final class ChatboxPlacement {
 		return runtimeLocation != null && (runtimeLocation.x != configured[0] || runtimeLocation.y != configured[1]);
 	}
 
+	/*
+	 * Primes RuneLite's movable chatbox overlay with temporary host geometry without
+	 * changing or persisting the user's preferred position/location.
+	 */
+	public void applyTemporaryHostBounds(Rectangle hostBounds, boolean updateLocation) {
+		if (hostBounds == null) {
+			return;
+		}
+
+		final Overlay overlay = findOverlay(overlayName());
+		if (!isManagedOverlay(overlay)) {
+			return;
+		}
+
+		final Rectangle overlayBounds = overlay.getBounds();
+		if (overlayBounds == null) {
+			return;
+		}
+
+		overlayBounds.setSize(hostBounds.width, hostBounds.height);
+		if (updateLocation) {
+			overlayBounds.setLocation(hostBounds.x, hostBounds.y);
+		}
+	}
+
+	/*
+	 * Applies a selected temporary host anchor once. Subsequent frame/layout
+	 * ownership remains with RuneLite's WidgetOverlay.
+	 */
+	public boolean moveTemporaryHost(Widget slot, Rectangle hostBounds) {
+		if (slot == null || hostBounds == null || !isManagedOverlay(findOverlay(overlayName()))) {
+			return false;
+		}
+
+		final Rectangle liveBounds = InterfaceBounds.liveBounds(slot);
+		if (liveBounds == null || liveBounds.x == hostBounds.x && liveBounds.y == hostBounds.y) {
+			return false;
+		}
+
+		final Widget parent = slot.getParent();
+		final Rectangle parentBounds = parent != null ? parent.getBounds() : null;
+		if (parentBounds != null) {
+			slot.setForcedPosition(hostBounds.x - parentBounds.x, hostBounds.y - parentBounds.y);
+		} else {
+			slot.setForcedPosition(hostBounds.x, hostBounds.y);
+		}
+
+		return true;
+	}
+
+	private static boolean isManagedOverlay(Overlay overlay) {
+		return overlay != null && (overlay.getPreferredLocation() != null || overlay.getPreferredPosition() != null);
+	}
+
 	private Overlay findOverlay(String name) {
 		if (overlayManager == null || name == null) {
 			return null;
