@@ -272,10 +272,14 @@ public final class FontLayoutService {
 
 		/*
 		 * Correlation has already completed against the native body text.
-		 * Apply the exact selected text measured by MeasurementService.
+		 * Preserve RuneLite's expanded template values instead of writing raw
+		 * assignment/reference tags back into the widget.
 		 */
-		if (state.selectedRawBodyText != null && !state.selectedRawBodyText.equals(bodyWidget.getText())) {
-			changed |= setTextIfChanged(bodyWidget, state.selectedRawBodyText);
+		final String renderedBody = state.parameterizedBody
+				? FontGlyphCorrections.apply(state.selectedChatFont, bodyWidget.getText())
+				: state.selectedRawBodyText;
+		if (renderedBody != null && !renderedBody.equals(bodyWidget.getText())) {
+			changed |= setTextIfChanged(bodyWidget, renderedBody);
 		}
 
 		changed |= setOriginalXIfChanged(bodyWidget, state.selectedBodyX);

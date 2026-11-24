@@ -2,6 +2,9 @@ package com.bigboldchat.chat;
 
 import com.bigboldchat.debug.PerformanceMetrics;
 
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -14,6 +17,7 @@ public final class ChatTextNormalizer {
 	private static final Pattern LINE_BREAK_PATTERN = Pattern.compile("<br\\s*/?>", Pattern.CASE_INSENSITIVE);
 	private static final Pattern IMAGE_PATTERN = Pattern.compile("<img=(\\d+)>", Pattern.CASE_INSENSITIVE);
 	private static final Pattern AT_PATTERN = Pattern.compile("<at>", Pattern.CASE_INSENSITIVE);
+	private static final Pattern PARAMETER_PATTERN = Pattern.compile("<((?:int|str)_[a-z0-9_]+)(?:=([^>]*))?(?::([a-z0-9_]+))?>", Pattern.CASE_INSENSITIVE);
 
 	// Optional performance instrumentation; null when unavailable.
 	private final PerformanceMetrics performanceMetrics;
@@ -47,7 +51,8 @@ public final class ChatTextNormalizer {
 				return normalized.trim();
 			}
 
-			final String withLineBreaks = LINE_BREAK_PATTERN.matcher(text).replaceAll("\n");
+			final String expanded = expandParameters(text);
+			final String withLineBreaks = LINE_BREAK_PATTERN.matcher(expanded).replaceAll("\n");
 			final String withVisibleAtCharacters = AT_PATTERN.matcher(withLineBreaks).replaceAll("@");
 			final String semantic = Text.removeTags(withVisibleAtCharacters).replace('\u00A0', ' ').trim();
 			if (!semantic.isEmpty()) {
@@ -84,7 +89,8 @@ public final class ChatTextNormalizer {
 				return normalized.trim();
 			}
 
-			final String withLineBreaks = LINE_BREAK_PATTERN.matcher(text).replaceAll("\n");
+			final String expanded = expandParameters(text);
+			final String withLineBreaks = LINE_BREAK_PATTERN.matcher(expanded).replaceAll("\n");
 			final String withVisibleAtCharacters = AT_PATTERN.matcher(withLineBreaks).replaceAll("@");
 			return withVisibleAtCharacters.replace('\u00A0', ' ').trim();
 		} finally {
@@ -99,7 +105,52 @@ public final class ChatTextNormalizer {
 			return text;
 		}
 
-		return AT_PATTERN.matcher(text).replaceAll("@");
+		return AT_PATTERN.matcher(expandParameters(text)).replaceAll("@");
+	}
+
+	boolean hasParameters(String text) {
+		return text != null && (text.contains("<int_") || text.contains("<str_")) && PARAMETER_PATTERN.matcher(text).find();
+	}
+
+	/*
+	 * Jagex's chat templates assign a value and reference it later in the same message.
+	 * A native text widget contains the expanded result, not these tags.
+	 * Keep assignments local to one message and leave unsupported tags untouched.
+	 */
+	private String expandParameters(String text) {
+		if (!hasParameters(text)) {
+			return text;
+		}
+
+		final Matcher matcher = PARAMETER_PATTERN.matcher(text);
+		final Map<String, String> values = new HashMap<>();
+		final StringBuffer expanded = new StringBuffer(text.length());
+		while (matcher.find()) {
+			final String key = matcher.group(1).toLowerCase(Locale.ROOT);
+			final String assigned = matcher.group(2);
+			final String replacement;
+			if (assigned != null) {
+				values.put(key, assigned);
+				replacement = "";
+			} else if (values.containsKey(key)) {
+				final String value = values.get(key);
+				replacement = key.startsWith("int_") ? formatInteger(value) : value;
+			} else {
+				// Do not invent a value for an unresolved native substitution.
+				replacement = matcher.group();
+			}
+			matcher.appendReplacement(expanded, Matcher.quoteReplacement(replacement));
+		}
+		matcher.appendTail(expanded);
+		return expanded.toString();
+	}
+
+	private static String formatInteger(String value) {
+		try {
+			return String.format(Locale.US, "%,d", Long.parseLong(value));
+		} catch (NumberFormatException exception) {
+			return value;
+		}
 	}
 
 	/*

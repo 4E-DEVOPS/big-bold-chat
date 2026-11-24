@@ -92,6 +92,7 @@ public final class FontMeasurementService {
 		}
 
 		final String rawBody = (String) objectStack[bodyIndex];
+		final boolean parameterizedBody = textNormalizer.hasParameters(rawBody);
 		final String semanticBody = textNormalizer.normalizeSemantic(rawBody);
 		if (semanticBody == null) {
 			return null;
@@ -285,6 +286,7 @@ public final class FontMeasurementService {
 		measurement.scriptId = scriptId;
 		measurement.semanticBody = semanticBody;
 		measurement.selectedRawBodyText = selectedRawBodyText;
+		measurement.parameterizedBody = parameterizedBody;
 		measurement.selectedChatFont = selectedChatFont;
 		measurement.selectedFontId = selectedChatFont.getFontId();
 		measurement.rawPrefixComponents = new ArrayList<>(rawPrefixComponents);
@@ -803,6 +805,7 @@ public final class FontMeasurementService {
 
 		String semanticBody; // Native semantic body used for correlation.
 		String selectedRawBodyText; // Exact selected raw body rendered after correlation.
+		boolean parameterizedBody; // Use the native expanded widget text in POST.
 
 		ChatFont selectedChatFont;
 		int selectedFontId;
