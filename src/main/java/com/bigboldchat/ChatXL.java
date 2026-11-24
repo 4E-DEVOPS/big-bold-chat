@@ -1,10 +1,13 @@
 package com.bigboldchat;
 
+import com.bigboldchat.dialogue.DialogueCoreService;
+import com.bigboldchat.dialogue.DialogueFitOverlay;
+import com.bigboldchat.dialogue.DialogueFontService;
 import com.bigboldchat.chat.FontLayoutService;
 import com.bigboldchat.chat.FontMeasurementService;
 import com.bigboldchat.chat.InputFontService;
 import com.bigboldchat.chatbox.ChatRebuildCoordinator;
-import com.bigboldchat.chatbox.ChatboxResizeService;
+import com.bigboldchat.chatbox.ChatboxCoreService;
 import com.bigboldchat.config.ChatboxConfigHandler;
 import com.bigboldchat.config.FontConfigHandler;
 import com.bigboldchat.debug.DebugManager;
@@ -15,9 +18,13 @@ import com.bigboldchat.overlay.PrivateChatOverlay;
 
 import com.google.inject.Provides;
 
+import java.awt.event.MouseEvent;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import javax.inject.Inject;
 
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import net.runelite.api.ChatLineBuffer;
 import net.runelite.api.ChatMessageType;
@@ -39,20 +46,24 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.input.KeyManager;
+import net.runelite.client.input.MouseAdapter;
+import net.runelite.client.input.MouseListener;
+import net.runelite.client.input.MouseManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
 
-@Slf4j
 @PluginDescriptor(
 		name = "Chat XL",
 		description = "Resize the chatbox and its text for improved readability.<br>"
 				+ "[A.K.A. BBC - Big Bold Chat]",
 		conflicts = {"Chat Resizer", "Resizable Chat"},
-		tags = {"1877", "accessibility", "bbc", "big", "bigger", "bold", "chat", "chatbox", "classic", "fixed", "font", "fonts", "large", "magnifier", "magnify", "messages", "modern", "pm", "private", "readability", "resizable", "resize", "resizer", "resizing", "scale", "size", "small", "text", "zoom"},
+		tags = {"1877", "accessibility", "bbc", "big", "bigger", "bold", "chat", "chatbox", "classic", "fixed", "font", "fonts", "large", "magnifier", "magnify", "messages", "modern", "pm", "private", "readability", "resizable", "resize", "resizer", "resizing", "scale", "size", "small", "split", "text", "zoom"},
 		enabledByDefault = true
 )
 public class ChatXL extends Plugin {
+
+	private static final Logger log = LoggerFactory.getLogger(ChatXL.class);
 
 	@Inject
 	private Client client;
@@ -67,6 +78,8 @@ public class ChatXL extends Plugin {
 	@Inject
 	private KeyManager keyManager;
 	@Inject
+	private MouseManager mouseManager;
+	@Inject
 	private OverlayManager overlayManager;
 
 	/*
@@ -80,9 +93,18 @@ public class ChatXL extends Plugin {
 	private FontMeasurementService fontMeasurementService;
 	private FontLayoutService fontLayoutService;
 	private InputFontService inputFontService;
-	private ChatboxResizeService chatboxResizeService;
+	private DialogueFontService dialogueFontService;
+
+	private DialogueCoreService dialogueService;
+	private ChatboxCoreService chatboxService;
+
 	private ChatRebuildCoordinator chatRebuildCoordinator;
+
 	private ChatboxHotkey chatboxHotkey;
+	private MouseListener dialogueCollisionMouseListener;
+	private final AtomicBoolean chatboxPlacementSaveQueued = new AtomicBoolean();
+
+	private DialogueFitOverlay dialogueFitOverlay;
 	private PrivateChatOverlay privateChatOverlay;
 	private PrivateChatLayout privateChatLayout;
 
@@ -99,23 +121,62 @@ public class ChatXL extends Plugin {
 	 */
 	@Override
 	protected void startUp() {
+		chatboxPlacementSaveQueued.set(false);
 		performanceMetrics = debugManager.activate();
-		chatboxResizeService = new ChatboxResizeService(client, configManager, overlayManager, performanceMetrics);
-		chatboxResizeService.onGameStateChanged(client.getGameState());
+		dialogueService = new DialogueCoreService(client, configManager, overlayManager, performanceMetrics);
+		chatboxService = dialogueService;
+		dialogueService.setDiagnostics(debugManager.getDialogueDiagnostics(), debugManager::isChatboxDiagnosticsArmed);
+		debugManager.bindChatboxGeometryTrace(dialogueService::chatboxGeometryTrace);
+		chatboxService.onGameStateChanged(client.getGameState());
+		dialogueCollisionMouseListener = new MouseAdapter() {
+			// Observe native drags without intercepting RuneLite's mouse handling.
+			@Override
+			public MouseEvent mousePressed(MouseEvent mouseEvent) {
+				final DialogueCoreService currentDialogueService = dialogueService;
+				if (currentDialogueService != null && mouseEvent.getButton() == MouseEvent.BUTTON1) {
+					currentDialogueService.onOverlayMousePressed(mouseEvent.getX(), mouseEvent.getY());
+				}
+
+				return mouseEvent;
+			}
+
+			@Override
+			public MouseEvent mouseDragged(MouseEvent mouseEvent) {
+				final DialogueCoreService currentDialogueService = dialogueService;
+				if (currentDialogueService != null) {
+					currentDialogueService.onOverlayMouseDragged(mouseEvent.getX(), mouseEvent.getY());
+				}
+
+				return mouseEvent;
+			}
+
+			@Override
+			public MouseEvent mouseReleased(MouseEvent mouseEvent) {
+				final DialogueCoreService currentDialogueService = dialogueService;
+				if (currentDialogueService != null && mouseEvent.getButton() == MouseEvent.BUTTON1) {
+					currentDialogueService.onOverlayMouseReleased(mouseEvent.getX(), mouseEvent.getY());
+				}
+
+				return mouseEvent;
+			}
+		};
+		mouseManager.registerMouseListener(0, dialogueCollisionMouseListener);
+		dialogueFitOverlay = new DialogueFitOverlay(dialogueService, debugManager.getDialogueDiagnostics());
+		overlayManager.add(dialogueFitOverlay);
 		privateChatOverlay = new PrivateChatOverlay();
 		privateChatLayout = new PrivateChatLayout(client, config, configManager, privateChatOverlay);
 		overlayManager.add(privateChatOverlay);
-		chatRebuildCoordinator = new ChatRebuildCoordinator(client, clientThread, config, chatboxResizeService, performanceMetrics);
-		chatboxHotkey = new ChatboxHotkey(clientThread, config, chatboxResizeService, keyManager, this::clearChatHistory);
+		chatRebuildCoordinator = new ChatRebuildCoordinator(client, clientThread, config, chatboxService, performanceMetrics);
+		chatboxHotkey = new ChatboxHotkey(clientThread, config, chatboxService, keyManager, this::clearChatHistory);
 		chatboxHotkey.activate();
 		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
 		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);
 		inputFontService = new InputFontService(client, config);
+		dialogueFontService = new DialogueFontService(client, config);
 		chatboxConfigHandler = new ChatboxConfigHandler(chatRebuildCoordinator);
-		fontConfigHandler = new FontConfigHandler(client, clientThread, fontLayoutService, inputFontService, performanceMetrics);
-		/*
-		 * Refresh retained rows through the active layout pipeline.
-		 */
+		fontConfigHandler = new FontConfigHandler(client, clientThread, fontLayoutService, inputFontService, dialogueFontService, dialogueService, performanceMetrics);
+
+		// Run the initial geometry and font sync after the client thread is ready.
 		clientThread.invokeLater(() -> {
 			if (chatRebuildCoordinator != null) {
 				chatRebuildCoordinator.onStartup();
@@ -123,6 +184,10 @@ public class ChatXL extends Plugin {
 
 			if (inputFontService != null) {
 				inputFontService.sync();
+			}
+
+			if (dialogueFontService != null) {
+				dialogueFontService.sync();
 			}
 
 			debugManager.onLoggedIn();
@@ -135,15 +200,15 @@ public class ChatXL extends Plugin {
 	protected void shutDown() {
 		final FontLayoutService shutdownLayoutService = fontLayoutService;
 		final InputFontService shutdownInputFontService = inputFontService;
-		final ChatboxResizeService shutdownResizeService = chatboxResizeService;
+		final DialogueFontService shutdownDialogueFontService = dialogueFontService;
+		final ChatboxCoreService shutdownChatboxService = chatboxService;
+		final DialogueFitOverlay shutdownDialogueFitOverlay = dialogueFitOverlay;
 		final PrivateChatOverlay shutdownPrivateChatOverlay = privateChatOverlay;
 		final PrivateChatLayout shutdownPrivateChatLayout = privateChatLayout;
 		final PerformanceMetrics shutdownPerformanceMetrics = performanceMetrics;
 		final boolean uninstalling = debugManager.prepareShutdown();
 
-		/*
-		 * Disable PRE / POST and config handling before restoration.
-		 */
+		// Disable PRE / POST and config handling before restoring native widgets.
 		if (chatboxConfigHandler != null) {
 			chatboxConfigHandler.deactivate();
 		}
@@ -160,9 +225,17 @@ public class ChatXL extends Plugin {
 			chatboxHotkey.deactivate();
 		}
 
+		if (dialogueCollisionMouseListener != null) {
+			mouseManager.unregisterMouseListener(dialogueCollisionMouseListener);
+			dialogueCollisionMouseListener = null;
+		}
+
 		fontLayoutService = null;
 		inputFontService = null;
-		chatboxResizeService = null;
+		dialogueFontService = null;
+		dialogueService = null;
+		chatboxService = null;
+		dialogueFitOverlay = null;
 		chatRebuildCoordinator = null;
 		chatboxHotkey = null;
 		privateChatOverlay = null;
@@ -170,6 +243,10 @@ public class ChatXL extends Plugin {
 		fontMeasurementService = null;
 		chatboxConfigHandler = null;
 		fontConfigHandler = null;
+
+		if (shutdownDialogueFitOverlay != null) {
+			overlayManager.remove(shutdownDialogueFitOverlay);
+		}
 
 		if (shutdownPrivateChatOverlay != null) {
 			overlayManager.remove(shutdownPrivateChatOverlay);
@@ -181,18 +258,18 @@ public class ChatXL extends Plugin {
 			shutdownPerformanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.SHUTDOWN);
 		}
 
-		// Restore native presentation on the client thread.
+		// Retain local service references for the deferred native restoration.
 		clientThread.invokeLater(() -> {
 			if (shutdownPrivateChatLayout != null) {
 				shutdownPrivateChatLayout.restoreNative();
 			}
 
-			final ChatboxResizeService.ScrollBaseline scrollBaseline = shutdownResizeService != null
-					? shutdownResizeService.captureScrollBaseline()
+			final ChatboxCoreService.ScrollBaseline scrollBaseline = shutdownChatboxService != null
+					? shutdownChatboxService.captureScrollBaseline()
 					: null;
 
-			if (shutdownResizeService != null) {
-				shutdownResizeService.restoreNativeSize();
+			if (shutdownChatboxService != null) {
+				shutdownChatboxService.restoreNativeSize();
 			}
 
 			if (shutdownLayoutService != null) {
@@ -204,10 +281,14 @@ public class ChatXL extends Plugin {
 				shutdownInputFontService.restoreNativePresentation();
 			}
 
+			if (shutdownDialogueFontService != null) {
+				shutdownDialogueFontService.restoreNativePresentation();
+			}
+
 			client.refreshChat();
 
-			if (shutdownResizeService != null) {
-				shutdownResizeService.restoreScrollBaseline(scrollBaseline);
+			if (shutdownChatboxService != null) {
+				shutdownChatboxService.restoreScrollBaseline(scrollBaseline);
 			}
 
 			debugManager.finishShutdown(uninstalling);
@@ -233,8 +314,8 @@ public class ChatXL extends Plugin {
 			return;
 		}
 
-		if (chatboxResizeService != null) {
-			chatboxResizeService.onGameStateChanged(event.getGameState());
+		if (chatboxService != null) {
+			chatboxService.onGameStateChanged(event.getGameState());
 		}
 
 		if (event.getGameState() != GameState.LOGGED_IN) {
@@ -259,8 +340,8 @@ public class ChatXL extends Plugin {
 			return;
 		}
 
-		if (chatboxResizeService != null) {
-			chatboxResizeService.onCanvasSizeChanged();
+		if (chatboxService != null) {
+			chatboxService.onCanvasSizeChanged();
 		}
 
 		if (chatRebuildCoordinator != null) {
@@ -302,17 +383,17 @@ public class ChatXL extends Plugin {
 	 */
 	@Subscribe
 	public void onMenuOptionClicked(MenuOptionClicked event) {
-		if (event == null || chatboxResizeService == null) {
+		if (event == null || chatboxService == null) {
 			return;
 		}
 
-		if (!chatboxResizeService.onChatControlClicked(event.getWidget())) {
+		if (!chatboxService.onChatControlClicked(event.getWidget())) {
 			return;
 		}
 
 		clientThread.invokeLater(() -> {
-			if (chatboxResizeService != null) {
-				chatboxResizeService.finishChatControlClick();
+			if (chatboxService != null) {
+				chatboxService.finishChatControlClick();
 			}
 		});
 	}
@@ -372,11 +453,51 @@ public class ChatXL extends Plugin {
 	public void onConfigChanged(ConfigChanged event) {
 		debugManager.onConfigChanged(event);
 
-		if (chatboxResizeService != null && chatboxResizeService.isInventoryOverlayReset(event)) {
-			chatboxResizeService.guardInventoryOverlayReset();
+		if (chatboxService != null && chatboxService.isChatboxOverlayPlacementChange(event)) {
+			/* A context-menu reset clears preferredLocation; unlike a native drag,
+			 * that alone must not transfer ownership of the dialogue center.
+			 * Deliver the reset evidence before the coalesced placement callback. */
+			if (dialogueService != null && event.getKey().endsWith("_preferredLocation") && event.getNewValue() == null) {
+				clientThread.invokeLater(() -> {
+					if (dialogueService != null) {
+						dialogueService.onNativeChatboxPlacementReset();
+					}
+				});
+			}
+			if (chatboxPlacementSaveQueued.compareAndSet(false, true)) {
+				clientThread.invokeLater(() -> {
+					chatboxPlacementSaveQueued.set(false);
+					if (chatboxService != null) {
+						chatboxService.onSavedChatboxPlacementChanged(config.chatboxWidth(), config.chatboxHeight());
+					}
+				});
+			}
+		}
+
+		/* The reset target is determined by RuneLite; distinguish an unrelated
+		 * overlay's reset from a standalone chatbox-parent reset without listing
+		 * specific movable widget names or assuming every right-click is a drag. */
+		if (dialogueService != null && event != null && "runelite".equals(event.getGroup()) && event.getKey() != null && event.getKey().endsWith("_preferredLocation") && event.getNewValue() == null && (chatboxService == null || !chatboxService.isChatboxOverlayPlacementChange(event))) {
 			clientThread.invokeLater(() -> {
-				if (chatboxResizeService != null) {
-					chatboxResizeService.reconcileInventoryOverlayReset(config.chatboxWidth(), config.chatboxHeight());
+				if (dialogueService != null) {
+					dialogueService.onOtherOverlayPlacementReset();
+				}
+			});
+		}
+
+		if (dialogueService != null && dialogueService.isDialogueCollisionOverlayChange(event)) {
+			clientThread.invokeLater(() -> {
+				if (dialogueService != null) {
+					dialogueService.markDialogueCollisionDirty();
+				}
+			});
+		}
+
+		if (chatboxService != null && chatboxService.isInventoryOverlayReset(event)) {
+			chatboxService.guardInventoryOverlayReset();
+			clientThread.invokeLater(() -> {
+				if (chatboxService != null) {
+					chatboxService.reconcileInventoryOverlayReset(config.chatboxWidth(), config.chatboxHeight());
 				}
 			});
 		}
@@ -413,8 +534,8 @@ public class ChatXL extends Plugin {
 	public void onScriptPreFired(ScriptPreFired event) {
 		debugManager.onChatboxPre(event);
 
-		if (chatboxResizeService != null) {
-			chatboxResizeService.onScriptPreFired(event, config.chatboxWidth(), config.chatboxHeight());
+		if (chatboxService != null) {
+			chatboxService.onScriptPreFired(event, config.chatboxWidth(), config.chatboxHeight());
 		}
 
 		debugManager.onFontPre(event);
@@ -458,8 +579,12 @@ public class ChatXL extends Plugin {
 			inputFontService.onScriptPostFired(event);
 		}
 
-		if (chatboxResizeService != null) {
-			chatboxResizeService.onScriptPostFired(event, config.chatboxWidth(), config.chatboxHeight());
+		if (dialogueFontService != null) {
+			dialogueFontService.onScriptPostFired(event);
+		}
+
+		if (chatboxService != null) {
+			chatboxService.onScriptPostFired(event, config.chatboxWidth(), config.chatboxHeight());
 		}
 
 		if (chatRebuildCoordinator != null) {
@@ -481,8 +606,9 @@ public class ChatXL extends Plugin {
 	 */
 	@Subscribe
 	public void onPostClientTick(PostClientTick event) {
-		if (chatboxResizeService != null) {
-			chatboxResizeService.reconcilePostLoginGeometry(config.chatboxWidth(), config.chatboxHeight());
+		if (chatboxService != null) {
+			chatboxService.reconcilePostLoginGeometry(config.chatboxWidth(), config.chatboxHeight());
+			chatboxService.reconcileAfterClientTick(config.chatboxWidth(), config.chatboxHeight());
 		}
 
 		if (privateChatLayout != null) {
@@ -496,17 +622,30 @@ public class ChatXL extends Plugin {
 		boolean heightChanged = false;
 
 		if (privateChatLayout != null) {
-			/*
-			 * Resolve split-PM placement before retained chat geometry is refreshed.
-			 */
+			// Resolve split-PM placement before refreshing retained chat geometry.
 			final PrivateChatLayout.Result privateResult = privateChatLayout.sync();
 			widthChanged |= privateResult.isWidthChanged();
 		}
 
-		if (chatboxResizeService != null) {
-			chatboxResizeService.reconcileBeforeRender(config.chatboxWidth(), config.chatboxHeight());
+		if (chatboxService != null) {
+			chatboxService.reconcileBeforeRender(config.chatboxWidth(), config.chatboxHeight());
+		}
+		if (dialogueService != null) {
+			// Diagnostics collect data only while explicitly armed.
+			dialogueService.traceDialogueViewportDiagnostics();
+			if (dialogueFitOverlay != null) {
+				dialogueFitOverlay.sync();
+			}
 
-			final ChatboxResizeService.LiveRefresh refresh = chatboxResizeService.consumeLiveRefresh();
+			/* Rebuild retained rows only after the normal chatbox has returned.
+			 * Temporary dialogue remounts must not trigger a native refresh. */
+			if (dialogueService.consumeNormalChatRestoredEvent() && chatRebuildCoordinator != null) {
+				chatRebuildCoordinator.onDialogueClosed();
+			}
+		}
+
+		if (chatboxService != null) {
+			final ChatboxCoreService.LiveRefresh refresh = chatboxService.consumeLiveRefresh();
 			if (refresh != null) {
 				widthChanged |= refresh.isWidthChanged();
 				heightChanged |= refresh.isHeightChanged();
@@ -514,9 +653,7 @@ public class ChatXL extends Plugin {
 		}
 
 		if (chatRebuildCoordinator != null && (widthChanged || heightChanged)) {
-			/*
-			 * Coalesce chatbox and split-PM geometry changes into one retained-chat refresh.
-			 */
+			// Coalesce chatbox and split-PM geometry changes into one retained-chat refresh.
 			chatRebuildCoordinator.refreshLiveGeometry(widthChanged, heightChanged);
 		}
 	}

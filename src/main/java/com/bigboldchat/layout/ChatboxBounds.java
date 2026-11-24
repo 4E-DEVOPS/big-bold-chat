@@ -13,7 +13,8 @@ import com.bigboldchat.chatbox.ChatboxPlacement;
 import net.runelite.api.Client;
 
 /**
- * Resolves configured chatbox geometry against visible interface bounds.
+ * Resolves desired chatbox geometry against the canvas and movable interface obstacles.
+ * The desired rectangle remains unchanged; collisions affect only the effective rectangle.
  */
 public final class ChatboxBounds {
 	private static final int MIN_WIDTH = 200;
@@ -47,8 +48,8 @@ public final class ChatboxBounds {
 		return resolve(client, placement, buttonsHidden, tracker, null);
 	}
 
-	public static Result resolve(Client client, ChatboxPlacement.State placement, boolean buttonsHidden, Tracker tracker,
-			InterfaceBounds.Overrides overrides) {
+	/* Preserve the 200x100 collision minimum independently of dialogue-fit requirements. */
+	public static Result resolve(Client client, ChatboxPlacement.State placement, boolean buttonsHidden, Tracker tracker, InterfaceBounds.Overrides overrides) {
 		if (client == null || placement == null) {
 			return Result.unbounded(0, 0);
 		}
@@ -62,24 +63,9 @@ public final class ChatboxBounds {
 		final Tracker activeTracker = tracker != null ? tracker : new Tracker();
 		final Resolution resolution = activeTracker.resolve(desiredBounds, interfaces.getCanvas(), interfaces.getIdentifiedObstacles());
 		final Rectangle effectiveBounds = resolution.bounds;
-		final Rectangle presentationBounds = new Rectangle(effectiveBounds.x, effectiveBounds.y, effectiveBounds.width,
-				ChatboxGeometry.bodyHeight(effectiveBounds.height, buttonsHidden));
+		final Rectangle presentationBounds = new Rectangle(effectiveBounds.x, effectiveBounds.y, effectiveBounds.width, ChatboxGeometry.bodyHeight(effectiveBounds.height, buttonsHidden));
 
-		return new Result(desiredBounds, effectiveBounds, interfaces.intersectsForeground(presentationBounds));
-	}
-
-	private static boolean fits(Rectangle candidate, Rectangle canvas, List<InterfaceBounds.Obstacle> obstacles) {
-		if (!canvas.contains(candidate)) {
-			return false;
-		}
-
-		for (InterfaceBounds.Obstacle obstacle : obstacles) {
-			if (candidate.intersects(obstacle.getBounds())) {
-				return false;
-			}
-		}
-
-		return true;
+		return new Result(desiredBounds, effectiveBounds, interfaces.intersectsForeground(presentationBounds), resolution.collisionMask);
 	}
 
 	/**
@@ -95,6 +81,30 @@ public final class ChatboxBounds {
 		public void reset() {
 			contacts.clear();
 			previousDesired = null;
+		}
+
+		public Tracker copy() {
+			final Tracker copy = new Tracker();
+			for (Map.Entry<InterfaceBounds.ObstacleKey, Contact> entry : contacts.entrySet()) {
+				copy.contacts.put(entry.getKey(), entry.getValue().copy());
+			}
+
+			copy.previousDesired = previousDesired != null ? new Rectangle(previousDesired) : null;
+			return copy;
+		}
+
+		public void replaceWith(Tracker source) {
+			contacts.clear();
+			previousDesired = null;
+			if (source == null) {
+				return;
+			}
+
+			for (Map.Entry<InterfaceBounds.ObstacleKey, Contact> entry : source.contacts.entrySet()) {
+				contacts.put(entry.getKey(), entry.getValue().copy());
+			}
+
+			previousDesired = source.previousDesired != null ? new Rectangle(source.previousDesired) : null;
 		}
 
 		private Resolution resolve(Rectangle desired, Rectangle canvas, List<InterfaceBounds.Obstacle> obstacles) {
@@ -140,7 +150,8 @@ public final class ChatboxBounds {
 				if (contact.collisionMask == 0) {
 					contact.collisionMask = detectEntrySides(previousDesired, contact.previousBounds, desired, bounds);
 				}
-
+				/* Preserve the entry edge until contact ends. Reclassifying at the
+				 * minimum size can make a moving obstacle reverse the resize axis. */
 				collisionMask |= contact.collisionMask;
 				if ((contact.collisionMask & COLLIDE_LEFT) != 0) {
 					left = Math.max(left, bounds.x + bounds.width);
@@ -161,14 +172,10 @@ public final class ChatboxBounds {
 			contacts.keySet().removeIf(key -> !seen.contains(key));
 			previousDesired = new Rectangle(desired);
 
-			final Axis horizontal = enforceMinimum(desired.x, desired.x + desired.width, left, right, MIN_WIDTH,
-					collisionMask & COLLIDE_HORIZONTAL, COLLIDE_LEFT, COLLIDE_RIGHT);
-			final Axis vertical = enforceMinimum(desired.y, desired.y + desired.height, top, bottom, MIN_HEIGHT,
-					collisionMask & COLLIDE_VERTICAL, COLLIDE_TOP, COLLIDE_BOTTOM);
-			final Rectangle trackedBounds = new Rectangle(horizontal.start, vertical.start,
-					Math.max(0, horizontal.end - horizontal.start), Math.max(0, vertical.end - vertical.start));
-
-			return preferSingleEdge(desired, canvas, obstacles, new Resolution(trackedBounds, collisionMask));
+			final Axis horizontal = enforceMinimum(desired.x, desired.x + desired.width, left, right, MIN_WIDTH, collisionMask & COLLIDE_HORIZONTAL, COLLIDE_LEFT, COLLIDE_RIGHT);
+			final Axis vertical = enforceMinimum(desired.y, desired.y + desired.height, top, bottom, MIN_HEIGHT, collisionMask & COLLIDE_VERTICAL, COLLIDE_TOP, COLLIDE_BOTTOM);
+			final Rectangle trackedBounds = new Rectangle(horizontal.start, vertical.start, Math.max(0, horizontal.end - horizontal.start), Math.max(0, vertical.end - vertical.start));
+			return new Resolution(trackedBounds, collisionMask);
 		}
 	}
 
@@ -177,156 +184,89 @@ public final class ChatboxBounds {
 	 * COLLISION HELPERS
 	 * ================================================================
 	 */
-	/*
-	 * Prefer one detected edge when it clears every current obstacle and preserves more usable area.
-	 */
-	private static Resolution preferSingleEdge(Rectangle desired, Rectangle canvas, List<InterfaceBounds.Obstacle> obstacles, Resolution tracked) {
-		if (desired == null || canvas == null || tracked == null || !canvas.contains(desired) || tracked.collisionMask == 0) {
-			return tracked;
-		}
-
-		Rectangle bestBounds = tracked.bounds;
-		int bestMask = tracked.collisionMask;
-		long bestArea = area(bestBounds);
-
-		final int[] sides = {COLLIDE_LEFT, COLLIDE_RIGHT, COLLIDE_TOP, COLLIDE_BOTTOM};
-		for (int side : sides) {
-			if ((tracked.collisionMask & side) == 0) {
-				continue;
-			}
-
-			final Rectangle candidate = singleEdgeCandidate(desired, obstacles, side);
-			if (candidate == null || candidate.width < MIN_WIDTH || candidate.height < MIN_HEIGHT || !fits(candidate, canvas, obstacles)) {
-				continue;
-			}
-
-			final long candidateArea = area(candidate);
-			if (candidateArea > bestArea) {
-				bestBounds = candidate;
-				bestMask = side;
-				bestArea = candidateArea;
-			}
-		}
-
-		return bestBounds == tracked.bounds ? tracked : new Resolution(bestBounds, bestMask);
-	}
-
-	private static Rectangle singleEdgeCandidate(Rectangle desired, List<InterfaceBounds.Obstacle> obstacles, int side) {
-		int left = desired.x;
-		int top = desired.y;
-		int right = desired.x + desired.width;
-		int bottom = desired.y + desired.height;
-		boolean intersects = false;
-
-		for (InterfaceBounds.Obstacle obstacle : obstacles) {
-			final Rectangle bounds = obstacle.getBounds();
-			if (!desired.intersects(bounds)) {
-				continue;
-			}
-
-			intersects = true;
-			if (side == COLLIDE_LEFT) {
-				left = Math.max(left, bounds.x + bounds.width);
-			} else if (side == COLLIDE_RIGHT) {
-				right = Math.min(right, bounds.x);
-			} else if (side == COLLIDE_TOP) {
-				top = Math.max(top, bounds.y + bounds.height);
-			} else if (side == COLLIDE_BOTTOM) {
-				bottom = Math.min(bottom, bounds.y);
-			}
-		}
-
-		if (!intersects || right <= left || bottom <= top) {
-			return null;
-		}
-
-		return new Rectangle(left, top, right - left, bottom - top);
-	}
-
-	private static long area(Rectangle bounds) {
-		return bounds != null ? (long) Math.max(0, bounds.width) * Math.max(0, bounds.height) : 0L;
-	}
-
 	private static int detectEntrySides(Rectangle previousDesired, Rectangle previousObstacle, Rectangle desired, Rectangle obstacle) {
-		int collisionMask = 0;
-
-		/*
-		 * New contacts choose the single edge that preserves the largest usable area.
-		 */
-		if (previousObstacle == null) {
-			return bestSingleSide(desired, obstacle, COLLIDE_ALL);
+		/* Prefer the currently covered boundary over an earlier trajectory;
+		 * movable rows can cross the box between geometry samples. */
+		final int boundary = currentBoundaryContact(desired, obstacle);
+		if (Integer.bitCount(boundary) == 1) {
+			return boundary;
 		}
 
-		/*
-		 * Discontinuous obstacle moves are resolved from current geometry instead of prior direction.
-		 */
-		if (isDiscontinuousMove(previousObstacle, obstacle)) {
-			return bestSingleSide(desired, obstacle, COLLIDE_ALL);
-		}
-
-		if (previousDesired != null && !previousDesired.intersects(previousObstacle)) {
+		if (previousDesired != null && previousObstacle != null && !previousDesired.intersects(previousObstacle)) {
+			int entry = 0;
 			final int previousRight = previousDesired.x + previousDesired.width;
 			final int previousBottom = previousDesired.y + previousDesired.height;
-			final int previousObstacleRight = previousObstacle.x + previousObstacle.width;
-			final int previousObstacleBottom = previousObstacle.y + previousObstacle.height;
-
-			if (previousObstacleRight <= previousDesired.x) {
-				collisionMask |= COLLIDE_LEFT;
+			final int obstacleRight = previousObstacle.x + previousObstacle.width;
+			final int obstacleBottom = previousObstacle.y + previousObstacle.height;
+			if (obstacleRight <= previousDesired.x) {
+				entry |= COLLIDE_LEFT;
 			}
 			if (previousObstacle.x >= previousRight) {
-				collisionMask |= COLLIDE_RIGHT;
+				entry |= COLLIDE_RIGHT;
 			}
-			if (previousObstacleBottom <= previousDesired.y) {
-				collisionMask |= COLLIDE_TOP;
+			if (obstacleBottom <= previousDesired.y) {
+				entry |= COLLIDE_TOP;
 			}
 			if (previousObstacle.y >= previousBottom) {
-				collisionMask |= COLLIDE_BOTTOM;
+				entry |= COLLIDE_BOTTOM;
 			}
-
-			if (collisionMask != 0) {
-				return resolveCornerCollision(desired, obstacle, collisionMask);
+			/* A previous entry is valid only when consistent with the current
+			 * boundary; fully internal overlaps retain their entry direction. */
+			final int supported = boundary != 0 ? entry & boundary : entry;
+			if (supported != 0) {
+				return preferredTravelSide(desired, previousObstacle, obstacle, supported);
 			}
 		}
 
+		if (previousObstacle != null) {
+			final int travelSide = travelDirectionSide(previousObstacle, obstacle);
+			final int allowed = boundary != 0 ? boundary : COLLIDE_ALL;
+			if ((travelSide & allowed) != 0) {
+				return travelSide;
+			}
+		}
+		return bestSingleSide(desired, obstacle, boundary != 0 ? boundary : COLLIDE_ALL);
+	}
+
+	private static int currentBoundaryContact(Rectangle desired, Rectangle obstacle) {
+		int mask = 0;
 		final int desiredRight = desired.x + desired.width;
 		final int desiredBottom = desired.y + desired.height;
 		final int obstacleRight = obstacle.x + obstacle.width;
 		final int obstacleBottom = obstacle.y + obstacle.height;
-
 		if (obstacle.x <= desired.x && obstacleRight > desired.x) {
-			collisionMask |= COLLIDE_LEFT;
+			mask |= COLLIDE_LEFT;
 		}
 		if (obstacle.x < desiredRight && obstacleRight >= desiredRight) {
-			collisionMask |= COLLIDE_RIGHT;
+			mask |= COLLIDE_RIGHT;
 		}
 		if (obstacle.y <= desired.y && obstacleBottom > desired.y) {
-			collisionMask |= COLLIDE_TOP;
+			mask |= COLLIDE_TOP;
 		}
 		if (obstacle.y < desiredBottom && obstacleBottom >= desiredBottom) {
-			collisionMask |= COLLIDE_BOTTOM;
+			mask |= COLLIDE_BOTTOM;
 		}
-
-		if (collisionMask != 0) {
-			return resolveCornerCollision(desired, obstacle, collisionMask);
-		}
-
-		return bestSingleSide(desired, obstacle, COLLIDE_ALL);
+		return mask;
 	}
 
-	private static boolean isDiscontinuousMove(Rectangle previous, Rectangle current) {
-		if (previous == null || current == null) {
-			return false;
+	private static int preferredTravelSide(Rectangle desired, Rectangle previous, Rectangle current, int candidates) {
+		if (Integer.bitCount(candidates) == 1) {
+			return candidates;
 		}
-
-		final int horizontalThreshold = Math.max(1, Math.max(previous.width, current.width));
-		final int verticalThreshold = Math.max(1, Math.max(previous.height, current.height));
-		return Math.abs(current.x - previous.x) > horizontalThreshold || Math.abs(current.y - previous.y) > verticalThreshold;
+		final int trajectory = travelDirectionSide(previous, current);
+		return (candidates & trajectory) != 0 ? trajectory : bestSingleSide(desired, current, candidates);
 	}
 
-	private static int resolveCornerCollision(Rectangle desired, Rectangle obstacle, int collisionMask) {
-		final boolean horizontal = (collisionMask & COLLIDE_HORIZONTAL) != 0;
-		final boolean vertical = (collisionMask & COLLIDE_VERTICAL) != 0;
-		return horizontal && vertical ? bestSingleSide(desired, obstacle, collisionMask) : collisionMask;
+	private static int travelDirectionSide(Rectangle previous, Rectangle current) {
+		final int dx = current.x - previous.x;
+		final int dy = current.y - previous.y;
+		if (Math.abs(dx) > Math.abs(dy) && dx != 0) {
+			return dx > 0 ? COLLIDE_LEFT : COLLIDE_RIGHT;
+		}
+		if (dy != 0) {
+			return dy > 0 ? COLLIDE_TOP : COLLIDE_BOTTOM;
+		}
+		return 0;
 	}
 
 	private static int bestSingleSide(Rectangle desired, Rectangle obstacle, int candidates) {
@@ -349,8 +289,7 @@ public final class ChatboxBounds {
 			final long remainingArea = horizontal ? (long) remaining * desired.height : (long) desired.width * remaining;
 			final int loss = Math.max(0, desiredSize - remaining);
 
-			if (bestSide == 0 || valid && !bestValid || valid == bestValid && remainingArea > bestArea
-					|| valid == bestValid && remainingArea == bestArea && loss < bestLoss) {
+			if (bestSide == 0 || valid && !bestValid || valid == bestValid && remainingArea > bestArea || valid == bestValid && remainingArea == bestArea && loss < bestLoss) {
 				bestSide = side;
 				bestValid = valid;
 				bestArea = remainingArea;
@@ -384,8 +323,9 @@ public final class ChatboxBounds {
 		return Math.max(minimum, Math.min(value, maximum));
 	}
 
-	private static Axis enforceMinimum(int desiredStart, int desiredEnd, int constrainedStart, int constrainedEnd,
-			int minimum, int collisionMask, int startCollision, int endCollision) {
+	/* A single collision preserves its opposite edge; two-sided contacts
+	 * retain the minimum area around the original center. */
+	private static Axis enforceMinimum(int desiredStart, int desiredEnd, int constrainedStart, int constrainedEnd, int minimum, int collisionMask, int startCollision, int endCollision) {
 		if (constrainedEnd - constrainedStart >= minimum) {
 			return new Axis(constrainedStart, constrainedEnd);
 		}
@@ -421,6 +361,13 @@ public final class ChatboxBounds {
 	private static final class Contact {
 		private Rectangle previousBounds;
 		private int collisionMask;
+
+		private Contact copy() {
+			final Contact copy = new Contact();
+			copy.previousBounds = previousBounds != null ? new Rectangle(previousBounds) : null;
+			copy.collisionMask = collisionMask;
+			return copy;
+		}
 	}
 
 	private static final class Resolution {
@@ -447,16 +394,18 @@ public final class ChatboxBounds {
 		private final Rectangle desiredBounds;
 		private final Rectangle effectiveBounds;
 		private final boolean foregroundOverlap;
+		private final int collisionMask;
 
-		private Result(Rectangle desiredBounds, Rectangle effectiveBounds, boolean foregroundOverlap) {
+		private Result(Rectangle desiredBounds, Rectangle effectiveBounds, boolean foregroundOverlap, int collisionMask) {
 			this.desiredBounds = new Rectangle(desiredBounds);
 			this.effectiveBounds = new Rectangle(effectiveBounds);
 			this.foregroundOverlap = foregroundOverlap;
+			this.collisionMask = collisionMask;
 		}
 
 		private static Result unbounded(int width, int height) {
 			final Rectangle bounds = new Rectangle(0, 0, width, height);
-			return new Result(bounds, bounds, false);
+			return new Result(bounds, bounds, false, 0);
 		}
 
 		public int getWidth() {
@@ -477,6 +426,22 @@ public final class ChatboxBounds {
 
 		public boolean isForegroundOverlap() {
 			return foregroundOverlap;
+		}
+
+		public boolean isLeftCollision() {
+			return (collisionMask & COLLIDE_LEFT) != 0;
+		}
+
+		public boolean isRightCollision() {
+			return (collisionMask & COLLIDE_RIGHT) != 0;
+		}
+
+		public boolean isTopCollision() {
+			return (collisionMask & COLLIDE_TOP) != 0;
+		}
+
+		public boolean isBottomCollision() {
+			return (collisionMask & COLLIDE_BOTTOM) != 0;
 		}
 	}
 }

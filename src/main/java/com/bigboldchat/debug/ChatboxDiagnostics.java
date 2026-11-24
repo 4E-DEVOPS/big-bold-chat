@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -20,29 +21,39 @@ import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 
 /**
- * Observer-only diagnostics for chatbox geometry and reconstruction.
+ * Observes native chatbox reconstruction and geometry changes while debug-chatbox is armed.
  */
 @Slf4j
 public final class ChatboxDiagnostics {
 	private static final String COMMAND = "debug-chatbox";
 
-	/*
-	 * Reference plugins use these native rebuild paths for resizable chat.
-	 * Diagnostics observe them only; ChatXL never invokes them.
-	 */
+	// Observe RuneLite's native resize and rewrap scripts without invoking them.
 	private static final int RESIZES_CHAT = 924;
 	private static final int REWRAPS_CHAT = 663;
 
 	private static final int INT_STACK_TAIL_SIZE = 16;
 	private static final int MAX_LOGGED_STRING_LENGTH = 200;
+	private static final int CHAT_CONTAINER_LAYOUT = 113;
+	private static final int TOPLEVEL_RELAYOUT = 1972;
+	private static final int DRAG_LAYOUT = 4730;
 
 	private final Client client;
 	private final Deque<ResizeTraceFrame> resizeTraceFrames = new ArrayDeque<>();
 
 	private boolean armed;
+	private Supplier<String> geometryTraceSupplier;
+
+	// Optional read-only snapshot of ChatXL's committed geometry for native script correlation.
+	public synchronized void setGeometryTraceSupplier(Supplier<String> supplier) {
+		geometryTraceSupplier = supplier;
+	}
 
 	public ChatboxDiagnostics(Client client) {
 		this.client = client;
+	}
+
+	public synchronized boolean isArmed() {
+		return armed;
 	}
 
 	public synchronized boolean onCommandExecuted(CommandExecuted event) {
@@ -53,10 +64,9 @@ public final class ChatboxDiagnostics {
 		armed = !armed;
 		resizeTraceFrames.clear();
 
-		log.debug(
-				"[Chat XL][Chatbox Diagnostic] {}", armed
-						? "ARMED"
-						: "DISARMED");
+		log.debug("[Chat XL][Chatbox Diagnostic] {}", armed
+			? "ARMED"
+			: "DISARMED");
 
 		return true;
 	}
@@ -102,15 +112,7 @@ public final class ChatboxDiagnostics {
 		}
 
 		if (frame.scriptId != event.getScriptId()) {
-			log.debug(
-					"[Chat XL][Chatbox Diagnostic]"
-							+ " STACK MISMATCH"
-							+ " | expectedScriptId={}"
-							+ " | actualScriptId={}"
-							+ " | depth={}",
-					frame.scriptId,
-					event.getScriptId(),
-					resizeTraceFrames.size());
+			log.debug("[Chat XL][Chatbox Diagnostic]" + " STACK MISMATCH" + " | expectedScriptId={}" + " | actualScriptId={}" + " | depth={}", frame.scriptId, event.getScriptId(), resizeTraceFrames.size());
 			resizeTraceFrames.clear();
 			return;
 		}
@@ -131,6 +133,29 @@ public final class ChatboxDiagnostics {
 		}
 	}
 
+	/*
+	 * Correlates native slot and universe changes with ChatXL's committed geometry.
+	 * Include changes observed before nested scripts complete their parent callback.
+	 */
+	private void traceNativeGeometryChanges(ResizeTraceFrame frame, String phase, List<String> changes) {
+		if (geometryTraceSupplier == null || frame.scriptId != CHAT_CONTAINER_LAYOUT && frame.scriptId != TOPLEVEL_RELAYOUT && frame.scriptId != DRAG_LAYOUT) {
+			return;
+		}
+		final List<String> geometryChanges = new ArrayList<>();
+		for (String change : changes) {
+			if (change.startsWith("component=SLOT_") || change.startsWith("component=UNIVERSE")) {
+				geometryChanges.add(change);
+			}
+		}
+		if (geometryChanges.isEmpty()) {
+			return;
+		}
+		final String geometry = geometryTraceSupplier.get();
+		if (geometry != null) {
+			log.debug("[Chat XL][Chatbox Diagnostic] GEOMETRY_SCRIPT | scriptId={} | phase={} | depth={} | changes={} | {}", frame.scriptId, phase, frame.depth, geometryChanges, geometry);
+		}
+	}
+
 	private static boolean isRebuildCandidate(int scriptId) {
 		return scriptId == RESIZES_CHAT || scriptId == REWRAPS_CHAT;
 	}
@@ -142,42 +167,17 @@ public final class ChatboxDiagnostics {
 
 		final List<String> changes = compareResizeSnapshots(frame.candidateEntry, current);
 		if (changes.isEmpty()) {
-			log.debug(
-					"[Chat XL][Chatbox Diagnostic]"
-							+ " REBUILD CHANGE"
-							+ " | scriptId={}"
-							+ " | none",
-					frame.scriptId);
+			log.debug("[Chat XL][Chatbox Diagnostic]" + " REBUILD CHANGE" + " | scriptId={}" + " | none", frame.scriptId);
 			return;
 		}
 
 		for (String change : changes) {
-			log.debug(
-					"[Chat XL][Chatbox Diagnostic]"
-							+ " REBUILD CHANGE"
-							+ " | scriptId={}"
-							+ " | {}",
-					frame.scriptId,
-					change);
+			log.debug("[Chat XL][Chatbox Diagnostic]" + " REBUILD CHANGE" + " | scriptId={}" + " | {}", frame.scriptId, change);
 		}
 	}
 
 	private void logRebuildState(ResizeTraceFrame frame, String phase, ChatStateSnapshot state) {
-		log.debug(
-				"[Chat XL][Chatbox Diagnostic]"
-						+ " REBUILD"
-						+ " | phase={}"
-						+ " | depth={}"
-						+ " | scriptId={}"
-						+ " | args={}"
-						+ " | intTail={}"
-						+ " | {}",
-				phase,
-				frame.depth,
-				frame.scriptId,
-				frame.arguments,
-				frame.intTailBefore,
-				state.describe());
+		log.debug("[Chat XL][Chatbox Diagnostic]" + " REBUILD" + " | phase={}" + " | depth={}" + " | scriptId={}" + " | args={}" + " | intTail={}" + " | {}", phase, frame.depth, frame.scriptId, frame.arguments, frame.intTailBefore, state.describe());
 	}
 
 	private void logResizeChanges(ResizeTraceFrame frame, ResizeSnapshot current, String phase, int nextScriptId) {
@@ -190,38 +190,12 @@ public final class ChatboxDiagnostics {
 			return;
 		}
 
-		log.debug(
-				"[Chat XL][Chatbox Diagnostic]"
-						+ " SCRIPT"
-						+ " | phase={}"
-						+ " | depth={}"
-						+ " | scriptId={}"
-						+ " | nextScriptId={}"
-						+ " | topLevel={}->{}"
-						+ " | args={}"
-						+ " | intTail={}"
-						+ " | strings={}",
-				phase,
-				frame.depth,
-				frame.scriptId,
-				nextScriptId >= 0
-						? Integer.toString(nextScriptId)
-						: "-",
-				frame.checkpoint.topLevel,
-				current.topLevel,
-				frame.arguments,
-				frame.intTailBefore,
-				frame.stringsBefore);
+		log.debug("[Chat XL][Chatbox Diagnostic]" + " SCRIPT" + " | phase={}" + " | depth={}" + " | scriptId={}" + " | nextScriptId={}" + " | topLevel={}->{}" + " | args={}" + " | intTail={}" + " | strings={}", phase, frame.depth, frame.scriptId, nextScriptId >= 0 ? Integer.toString(nextScriptId) : "-", frame.checkpoint.topLevel, current.topLevel, frame.arguments, frame.intTailBefore, frame.stringsBefore);
 
 		for (String change : changes) {
-			log.debug(
-					"[Chat XL][Chatbox Diagnostic]"
-							+ " CHANGE"
-							+ " | scriptId={}"
-							+ " | {}",
-					frame.scriptId,
-					change);
+			log.debug("[Chat XL][Chatbox Diagnostic]" + " CHANGE" + " | scriptId={}" + " | {}", frame.scriptId, change);
 		}
+		traceNativeGeometryChanges(frame, phase, changes);
 	}
 
 	private List<String> compareResizeSnapshots(ResizeSnapshot before, ResizeSnapshot after) {
@@ -232,11 +206,7 @@ public final class ChatboxDiagnostics {
 		}
 
 		if (before.topLevel != after.topLevel) {
-			changes.add("component=TOPLEVEL"
-					+ " | id="
-					+ before.topLevel
-					+ "->"
-					+ after.topLevel);
+			changes.add("component=TOPLEVEL" + " | id=" + before.topLevel + "->" + after.topLevel);
 		}
 
 		final Set<String> labels = new LinkedHashSet<>();
@@ -303,10 +273,7 @@ public final class ChatboxDiagnostics {
 	}
 
 	private ChatStateSnapshot snapshotChatState() {
-		return new ChatStateSnapshot(
-				client.getWidget(InterfaceID.Chatbox.SCROLLAREA),
-				client.getWidget(InterfaceID.Chatbox.CHATSCROLLBAR),
-				client.getWidget(InterfaceID.Chatbox.CHATAREA));
+		return new ChatStateSnapshot(client.getWidget(InterfaceID.Chatbox.SCROLLAREA), client.getWidget(InterfaceID.Chatbox.CHATSCROLLBAR), client.getWidget(InterfaceID.Chatbox.CHATAREA));
 	}
 
 	private String traceScriptArguments(ScriptPreFired event) {
@@ -369,10 +336,7 @@ public final class ChatboxDiagnostics {
 
 			String text = (String) value;
 
-			text = text
-					.replace("\r\n", "\\n")
-					.replace('\r', '\n')
-					.replace("\n", "\\n");
+			text = text.replace("\r\n", "\\n").replace('\r', '\n').replace("\n", "\\n");
 
 			if (text.length() > MAX_LOGGED_STRING_LENGTH) {
 				text = text.substring(0, MAX_LOGGED_STRING_LENGTH) + "...";
@@ -461,36 +425,7 @@ public final class ChatboxDiagnostics {
 		}
 
 		private String describe() {
-			return "scrollArea=[present="
-					+ scrollAreaPresent
-					+ ", height="
-					+ viewportHeight
-					+ ", scrollHeight="
-					+ scrollHeight
-					+ ", scrollY="
-					+ scrollY
-					+ ", static="
-					+ staticChildren
-					+ ", dynamic="
-					+ dynamicChildren
-					+ ", nested="
-					+ nestedChildren
-					+ "]"
-					+ " | directChildY="
-					+ childRange.describe()
-					+ " | scrollbar=[present="
-					+ scrollbarPresent
-					+ ", x="
-					+ scrollbarX
-					+ ", y="
-					+ scrollbarY
-					+ ", width="
-					+ scrollbarWidth
-					+ ", height="
-					+ scrollbarHeight
-					+ "]"
-					+ " | chatAreaDynamic="
-					+ chatAreaDynamicChildren;
+			return "scrollArea=[present=" + scrollAreaPresent + ", height=" + viewportHeight + ", scrollHeight=" + scrollHeight + ", scrollY=" + scrollY + ", static=" + staticChildren + ", dynamic=" + dynamicChildren + ", nested=" + nestedChildren + "]" + " | directChildY=" + childRange.describe() + " | scrollbar=[present=" + scrollbarPresent + ", x=" + scrollbarX + ", y=" + scrollbarY + ", width=" + scrollbarWidth + ", height=" + scrollbarHeight + "]" + " | chatAreaDynamic=" + chatAreaDynamicChildren;
 		}
 
 		private static int childCount(Widget[] children) {
@@ -738,29 +673,7 @@ public final class ChatboxDiagnostics {
 				return "MISSING";
 			}
 
-			return "id="
-					+ id
-					+ ", identity="
-					+ identity
-					+ ", original=["
-					+ originalX
-					+ ","
-					+ originalY
-					+ ","
-					+ originalWidth
-					+ "x"
-					+ originalHeight
-					+ "]"
-					+ ", relative=["
-					+ relativeX
-					+ ","
-					+ relativeY
-					+ "]"
-					+ ", calculated=["
-					+ width
-					+ "x"
-					+ height
-					+ "]";
+			return "id=" + id + ", identity=" + identity + ", original=[" + originalX + "," + originalY + "," + originalWidth + "x" + originalHeight + "]" + ", relative=[" + relativeX + "," + relativeY + "]" + ", calculated=[" + width + "x" + height + "]";
 		}
 
 		private static int childCount(Widget[] children) {
@@ -776,11 +689,7 @@ public final class ChatboxDiagnostics {
 
 			appendSeparator(builder);
 
-			builder.append(name)
-					.append('=')
-					.append(before)
-					.append("->")
-					.append(after);
+			builder.append(name).append('=').append(before).append("->").append(after);
 		}
 
 		private static void appendDifference(StringBuilder builder, String name, boolean before, boolean after) {
@@ -790,11 +699,7 @@ public final class ChatboxDiagnostics {
 
 			appendSeparator(builder);
 
-			builder.append(name)
-					.append('=')
-					.append(before)
-					.append("->")
-					.append(after);
+			builder.append(name).append('=').append(before).append("->").append(after);
 		}
 
 		private static void appendSeparator(StringBuilder builder) {

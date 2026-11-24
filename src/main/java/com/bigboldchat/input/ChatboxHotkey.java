@@ -1,7 +1,7 @@
 package com.bigboldchat.input;
 
 import com.bigboldchat.Configurations;
-import com.bigboldchat.chatbox.ChatboxResizeService;
+import com.bigboldchat.chatbox.ChatboxCoreService;
 
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.input.KeyManager;
@@ -12,7 +12,7 @@ import net.runelite.client.util.HotkeyListener;
  */
 public final class ChatboxHotkey {
 	private final ClientThread clientThread;
-	private final ChatboxResizeService resizeService;
+	private final ChatboxCoreService resizeService;
 	private final KeyManager keyManager;
 	private final Runnable clearChat;
 	private final HotkeyListener visibilityHotkeyListener;
@@ -20,12 +20,7 @@ public final class ChatboxHotkey {
 
 	private volatile boolean active;
 
-	public ChatboxHotkey(
-			ClientThread clientThread,
-			Configurations config,
-			ChatboxResizeService resizeService,
-			KeyManager keyManager,
-			Runnable clearChat) {
+	public ChatboxHotkey(ClientThread clientThread, Configurations config, ChatboxCoreService resizeService, KeyManager keyManager, Runnable clearChat) {
 		this.clientThread = clientThread;
 		this.resizeService = resizeService;
 		this.keyManager = keyManager;

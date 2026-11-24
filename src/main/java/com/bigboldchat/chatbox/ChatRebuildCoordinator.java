@@ -8,46 +8,44 @@ import net.runelite.api.events.ScriptPostFired;
 import net.runelite.client.callback.ClientThread;
 
 /**
- * Coalesces chatbox geometry commits and native chat rebuilds.
+ * Coalesces configured chatbox geometry changes and native chat reconstruction.
  */
 public final class ChatRebuildCoordinator {
 	private final Client client;
 	private final ClientThread clientThread;
 	private final Configurations config;
-	private final ChatboxResizeService resizeService;
+	private final ChatboxCoreService chatboxService;
 	private final PerformanceMetrics performanceMetrics;
 
 	private volatile boolean active = true;
+
 	private boolean commitQueued;
 	private boolean boundsChanged;
-	private boolean pendingWidthRefresh;
-	private boolean pendingHeightRefresh;
 	private boolean forceRefreshAfterCommit;
 	private boolean forceRefreshTracksVisibility;
 	private PerformanceMetrics.RefreshReason forceRefreshReason;
+
 	private boolean refreshQueued;
 	private boolean refreshWidthChanged;
 	private boolean refreshHeightChanged;
 	private boolean refreshForced;
 	private boolean refreshTracksVisibility;
 	private PerformanceMetrics.RefreshReason refreshReason;
-	private ChatboxResizeService.ScrollBaseline refreshScrollBaseline;
+	private ChatboxCoreService.ScrollBaseline refreshScrollBaseline;
+
 	private boolean visibilityRefreshPending;
 	private PerformanceMetrics.RefreshReason visibilityRefreshReason;
+
 	private boolean refreshing;
+
 	private int committedWidth;
 	private int committedHeight;
 
-	public ChatRebuildCoordinator(
-			Client client,
-			ClientThread clientThread,
-			Configurations config,
-			ChatboxResizeService resizeService,
-			PerformanceMetrics performanceMetrics) {
+	public ChatRebuildCoordinator(Client client, ClientThread clientThread, Configurations config, ChatboxCoreService chatboxService, PerformanceMetrics performanceMetrics) {
 		this.client = client;
 		this.clientThread = clientThread;
 		this.config = config;
-		this.resizeService = resizeService;
+		this.chatboxService = chatboxService;
 		this.performanceMetrics = performanceMetrics;
 		this.committedWidth = config.chatboxWidth();
 		this.committedHeight = config.chatboxHeight();
@@ -66,7 +64,7 @@ public final class ChatRebuildCoordinator {
 			return;
 		}
 
-		queueCommit(false, false, false);
+		queueCommit(false);
 	}
 
 	public void onButtonsChanged() {
@@ -74,7 +72,7 @@ public final class ChatRebuildCoordinator {
 			return;
 		}
 
-		queueCommit(true, false, false);
+		queueCommit(true);
 	}
 
 	public void onCanvasSizeChanged() {
@@ -82,7 +80,7 @@ public final class ChatRebuildCoordinator {
 			return;
 		}
 
-		queueCommit(true, false, false);
+		queueCommit(true);
 	}
 
 	public void onInterfaceChanged() {
@@ -90,44 +88,37 @@ public final class ChatRebuildCoordinator {
 			return;
 		}
 
-		queueCommit(true, false, false);
+		queueCommit(true);
 	}
 
-	public void onLayoutChanged(ChatboxResizeService.ResizeResult result) {
-		if (!active || refreshing || result == null || !result.isApplied()
-				|| !result.isWidthChanged() && !result.isHeightChanged()) {
+	/*
+	 * Native dialogue teardown may restore the configured width without rebuilding retained chat rows.
+	 * Rebuild them after normal chat has been restored.
+	 */
+	public void onDialogueClosed() {
+		if (!active || refreshing || chatboxService == null) {
 			return;
 		}
 
-		/*
-		 * Script-driven layout changes apply geometry synchronously so the
-		 * native relayout sees it. Reapply once after that script stack settles,
-		 * then refresh presentation against the stable effective dimensions.
-		 */
-		queueCommit(true, result.isWidthChanged(), result.isHeightChanged());
+		queueRefresh(true, false, false, PerformanceMetrics.RefreshReason.WIDTH_CHANGED, false, chatboxService.captureScrollBaseline());
 	}
 
 	public void refreshLiveGeometry(boolean widthChanged, boolean heightChanged) {
-		if (!active || refreshing || resizeService == null || !widthChanged && !heightChanged) {
+		if (!active || refreshing || chatboxService == null || !widthChanged && !heightChanged) {
 			return;
 		}
 
-		final ChatboxResizeService.ScrollBaseline scrollBaseline = resizeService.captureScrollBaseline();
+		final ChatboxCoreService.ScrollBaseline scrollBaseline = chatboxService.captureScrollBaseline();
 
 		/*
-		 * Live geometry is already authoritative. Rebuild retained rows only;
-		 * sending this path through the geometry commit queue previously made
-		 * ChatXL fight RuneScape's native relayout and caused visible oscillation.
-		 * The same rebuild now serves chatbox and independently-sized split-PM
-		 * width changes, so callers coalesce both reasons before reaching here.
+		 * Live geometry is already committed. Requeueing geometry would compete with
+		 * RuneLite's native relayout, so rebuild retained rows without another resize.
+		 * The caller coalesces chatbox and split-PM width changes.
 		 */
 		refreshing = true;
 		try {
 			if (performanceMetrics != null) {
-				/*
-				 * A single rebuild may satisfy both axes. Classify it as a width refresh
-				 * when wrapping is involved, otherwise as a height-only refresh.
-				 */
+				// Width changes take precedence because they require text rewrapping.
 				final PerformanceMetrics.RefreshReason reason = widthChanged
 						? PerformanceMetrics.RefreshReason.WIDTH_CHANGED
 						: PerformanceMetrics.RefreshReason.HEIGHT_CHANGED;
@@ -136,15 +127,15 @@ public final class ChatRebuildCoordinator {
 			}
 
 			client.refreshChat();
-			resizeService.restoreRebuildScroll(scrollBaseline);
+			chatboxService.restoreRebuildScroll(scrollBaseline);
 		} finally {
 			refreshing = false;
 		}
 	}
 
+	// Retry a visibility-dependent rebuild once RuneLite has revealed native chat.
 	public void onScriptPostFired(ScriptPostFired event) {
-		if (!active || event == null || event.getScriptId() != ChatboxResizeService.CHAT_VISIBILITY
-				|| resizeService == null || resizeService.isChatHidden()) {
+		if (!active || event == null || event.getScriptId() != ChatboxCoreService.CHAT_VISIBILITY || chatboxService == null || chatboxService.isChatHidden()) {
 			return;
 		}
 
@@ -166,8 +157,6 @@ public final class ChatRebuildCoordinator {
 		active = false;
 		commitQueued = false;
 		boundsChanged = false;
-		pendingWidthRefresh = false;
-		pendingHeightRefresh = false;
 		forceRefreshAfterCommit = false;
 		forceRefreshTracksVisibility = false;
 		forceRefreshReason = null;
@@ -183,41 +172,34 @@ public final class ChatRebuildCoordinator {
 	}
 
 	private void applyConfiguredSize(PerformanceMetrics.RefreshReason reason, boolean trackVisibility) {
-		if (!active || resizeService == null || config == null) {
+		if (!active || chatboxService == null || config == null) {
 			return;
 		}
 
-		resizeService.setChatboxButtonsHidden(config.hideChatboxButtons());
+		chatboxService.setChatboxButtonsHidden(config.hideChatboxButtons());
 
 		final int width = config.chatboxWidth();
 		final int height = config.chatboxHeight();
-		final ChatboxResizeService.ScrollBaseline scrollBaseline = resizeService.captureScrollBaseline();
-		final ChatboxResizeService.ResizeResult result = resizeService.applySize(width, height);
+		final ChatboxCoreService.ScrollBaseline scrollBaseline = chatboxService.captureScrollBaseline();
+		final ChatboxCoreService.ResizeResult result = chatboxService.applySize(width, height);
 		if (result != null && result.isApplied()) {
 			committedWidth = width;
 			committedHeight = height;
-		} else if (resizeService.getLayout() != ChatboxLayout.FIXED) {
+		} else if (chatboxService.getLayout() != ChatboxLayout.FIXED) {
 			queueForcedCommit(reason, trackVisibility);
 		}
 
-		/*
-		 * Retained rows need one native rebuild even when
-		 * configured  geometry already matches the mounted chatbox.
-		 */
-		queueRefresh(
-				result != null && result.isWidthChanged(),
-				result != null && result.isHeightChanged(),
-				true, reason, trackVisibility, scrollBaseline);
+		// Retained rows need a rebuild even when configured geometry is unchanged.
+		queueRefresh(result != null && result.isWidthChanged(), result != null && result.isHeightChanged(), true, reason, trackVisibility, scrollBaseline);
 	}
 
-	private synchronized void queueCommit(boolean boundsChanged, boolean widthRefresh, boolean heightRefresh) {
+	// Coalesce consecutive configuration, canvas and interface changes into one client-thread commit.
+	private synchronized void queueCommit(boolean boundsChanged) {
 		if (!active) {
 			return;
 		}
 
 		this.boundsChanged |= boundsChanged;
-		pendingWidthRefresh |= widthRefresh;
-		pendingHeightRefresh |= heightRefresh;
 		if (commitQueued) {
 			return;
 		}
@@ -248,47 +230,37 @@ public final class ChatRebuildCoordinator {
 
 	private void drainCommit() {
 		final boolean reapplyBounds;
-		final boolean widthRefresh;
-		final boolean heightRefresh;
 		final boolean forceRefresh;
 		final boolean trackVisibility;
 		final PerformanceMetrics.RefreshReason forcedReason;
 		synchronized (this) {
 			commitQueued = false;
 			reapplyBounds = boundsChanged;
-			widthRefresh = pendingWidthRefresh;
-			heightRefresh = pendingHeightRefresh;
 			forceRefresh = forceRefreshAfterCommit;
 			trackVisibility = forceRefreshTracksVisibility;
 			forcedReason = forceRefreshReason;
 			boundsChanged = false;
-			pendingWidthRefresh = false;
-			pendingHeightRefresh = false;
 		}
 
-		if (!active || resizeService == null || config == null) {
+		if (!active || chatboxService == null || config == null) {
 			return;
 		}
 
-		resizeService.setChatboxButtonsHidden(config.hideChatboxButtons());
+		chatboxService.setChatboxButtonsHidden(config.hideChatboxButtons());
 
 		final int width = config.chatboxWidth();
 		final int height = config.chatboxHeight();
 		final boolean widthChanged = width != committedWidth;
 		final boolean heightChanged = height != committedHeight;
-		if (!widthChanged
-				&& !heightChanged
-				&& !reapplyBounds
-				&& !widthRefresh
-				&& !heightRefresh
-				&& !forceRefresh) {
+		if (!widthChanged && !heightChanged && !reapplyBounds && !forceRefresh) {
 			return;
 		}
 
-		final ChatboxResizeService.ScrollBaseline scrollBaseline = resizeService.captureScrollBaseline();
-		final ChatboxResizeService.ResizeResult result = resizeService.applySize(width, height);
+		final ChatboxCoreService.ScrollBaseline scrollBaseline = chatboxService.captureScrollBaseline();
+		final ChatboxCoreService.ResizeResult result = chatboxService.applySize(width, height);
 		if (result == null || !result.isApplied()) {
-			if (resizeService.getLayout() == ChatboxLayout.FIXED) {
+			// Keep a forced refresh pending until a later resizable-layout commit succeeds.
+			if (chatboxService.getLayout() == ChatboxLayout.FIXED) {
 				clearForcedCommit();
 			}
 			return;
@@ -301,10 +273,7 @@ public final class ChatRebuildCoordinator {
 			clearForcedCommit();
 		}
 
-		queueRefresh(
-				widthRefresh || result.isWidthChanged(),
-				heightRefresh || result.isHeightChanged(),
-				forceRefresh, forcedReason, trackVisibility, scrollBaseline);
+		queueRefresh(result.isWidthChanged(), result.isHeightChanged(), forceRefresh, forcedReason, trackVisibility, scrollBaseline);
 	}
 
 	private synchronized void clearForcedCommit() {
@@ -313,9 +282,7 @@ public final class ChatRebuildCoordinator {
 		forceRefreshReason = null;
 	}
 
-	private synchronized void queueRefresh(
-			boolean widthChanged, boolean heightChanged, boolean forced, PerformanceMetrics.RefreshReason reason,
-			boolean trackVisibility, ChatboxResizeService.ScrollBaseline scrollBaseline) {
+	private synchronized void queueRefresh(boolean widthChanged, boolean heightChanged, boolean forced, PerformanceMetrics.RefreshReason reason, boolean trackVisibility, ChatboxCoreService.ScrollBaseline scrollBaseline) {
 		if (!active || (!forced && !widthChanged && !heightChanged)) {
 			return;
 		}
@@ -346,7 +313,7 @@ public final class ChatRebuildCoordinator {
 		final boolean forced;
 		final boolean trackVisibility;
 		final PerformanceMetrics.RefreshReason explicitReason;
-		final ChatboxResizeService.ScrollBaseline scrollBaseline;
+		final ChatboxCoreService.ScrollBaseline scrollBaseline;
 		synchronized (this) {
 			refreshQueued = false;
 			widthChanged = refreshWidthChanged;
@@ -374,7 +341,7 @@ public final class ChatRebuildCoordinator {
 			}
 
 			client.refreshChat();
-			resizeService.restoreRebuildScroll(scrollBaseline);
+			chatboxService.restoreRebuildScroll(scrollBaseline);
 
 			if (trackVisibility) {
 				rememberVisibilityRefresh(explicitReason);
@@ -384,8 +351,7 @@ public final class ChatRebuildCoordinator {
 		}
 	}
 
-	private PerformanceMetrics.RefreshReason resolveRefreshReason(boolean widthChanged, boolean heightChanged,
-			PerformanceMetrics.RefreshReason explicitReason) {
+	private PerformanceMetrics.RefreshReason resolveRefreshReason(boolean widthChanged, boolean heightChanged, PerformanceMetrics.RefreshReason explicitReason) {
 		if (explicitReason != null) {
 			return explicitReason;
 		}
@@ -400,7 +366,7 @@ public final class ChatRebuildCoordinator {
 	}
 
 	private synchronized void rememberVisibilityRefresh(PerformanceMetrics.RefreshReason reason) {
-		if (resizeService == null || !resizeService.isChatHidden()) {
+		if (chatboxService == null || !chatboxService.isChatHidden()) {
 			visibilityRefreshPending = false;
 			visibilityRefreshReason = null;
 			return;
@@ -409,5 +375,4 @@ public final class ChatRebuildCoordinator {
 		visibilityRefreshPending = true;
 		visibilityRefreshReason = reason;
 	}
-
 }

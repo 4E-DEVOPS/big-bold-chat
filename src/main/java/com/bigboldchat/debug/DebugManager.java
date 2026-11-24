@@ -2,6 +2,8 @@ package com.bigboldchat.debug;
 
 import com.bigboldchat.Configurations;
 
+import java.util.function.Supplier;
+
 import javax.inject.Inject;
 
 import net.runelite.api.Client;
@@ -12,7 +14,7 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 /**
- * Owns optional Chat XL diagnostics and routes debug-only events and commands.
+ * Coordinates optional Chat XL diagnostics and plugin lifecycle messages.
  */
 public final class DebugManager {
 	private final Client client;
@@ -23,12 +25,12 @@ public final class DebugManager {
 	private final UpdateMessages updateMessages;
 
 	private ChatboxDiagnostics chatboxDiagnostics;
+	private DialogueDiagnostics dialogueDiagnostics;
 	private FontDiagnostics fontDiagnostics;
 	private SideContainerDiagnostics sideContainerDiagnostics;
 
 	@Inject
-	public DebugManager(Client client, Configurations config, ChatMessageTests chatMessageTests,
-			OverlayManager overlayManager, UpdateMessages updateMessages) {
+	public DebugManager(Client client, Configurations config, ChatMessageTests chatMessageTests, OverlayManager overlayManager, UpdateMessages updateMessages) {
 		this.client = client;
 		this.config = config;
 		this.chatMessageTests = chatMessageTests;
@@ -41,6 +43,7 @@ public final class DebugManager {
 		deactivate();
 		performanceMetrics.reset();
 		chatboxDiagnostics = new ChatboxDiagnostics(client);
+		dialogueDiagnostics = new DialogueDiagnostics();
 		fontDiagnostics = new FontDiagnostics(client, config);
 		sideContainerDiagnostics = new SideContainerDiagnostics(client, config, overlayManager);
 		return performanceMetrics;
@@ -55,17 +58,26 @@ public final class DebugManager {
 			chatboxDiagnostics.reset();
 		}
 
+		if (dialogueDiagnostics != null) {
+			dialogueDiagnostics.deactivate();
+		}
+
 		if (sideContainerDiagnostics != null) {
 			sideContainerDiagnostics.reset();
 		}
 
 		fontDiagnostics = null;
 		chatboxDiagnostics = null;
+		dialogueDiagnostics = null;
 		sideContainerDiagnostics = null;
 	}
 
 	public boolean onCommandExecuted(CommandExecuted event) {
 		if (chatboxDiagnostics != null && chatboxDiagnostics.onCommandExecuted(event)) {
+			return true;
+		}
+
+		if (dialogueDiagnostics != null && dialogueDiagnostics.onCommandExecuted(event)) {
 			return true;
 		}
 
@@ -86,6 +98,21 @@ public final class DebugManager {
 		}
 
 		return updateMessages.onCommandExecuted(event);
+	}
+
+	// Provides native-script diagnostics with a read-only snapshot of committed chatbox geometry.
+	public void bindChatboxGeometryTrace(Supplier<String> supplier) {
+		if (chatboxDiagnostics != null) {
+			chatboxDiagnostics.setGeometryTraceSupplier(supplier);
+		}
+	}
+
+	public DialogueDiagnostics getDialogueDiagnostics() {
+		return dialogueDiagnostics;
+	}
+
+	public boolean isChatboxDiagnosticsArmed() {
+		return chatboxDiagnostics != null && chatboxDiagnostics.isArmed();
 	}
 
 	public void onConfigChanged(ConfigChanged event) {
