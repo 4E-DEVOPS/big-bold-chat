@@ -67,11 +67,7 @@ public final class PrivateChatLayout {
 	private int stableDesiredWidth;
 	private boolean nativeLayoutDirty;
 
-	public PrivateChatLayout(
-			Client client,
-			Configurations config,
-			ConfigManager configManager,
-			PrivateChatOverlay overlay) {
+	public PrivateChatLayout(Client client, Configurations config, ConfigManager configManager, PrivateChatOverlay overlay) {
 		this.client = client;
 		this.config = config;
 		this.configManager = configManager;
@@ -119,10 +115,7 @@ public final class PrivateChatLayout {
 				: 0;
 		final Rectangle baseContentBounds = contentBounds == null
 				? null
-				: translated(
-						contentBounds,
-						-currentOffsetX,
-						-currentOffsetY - currentContentShiftY);
+				: translated(contentBounds, -currentOffsetX, -currentOffsetY - currentContentShiftY);
 
 		/*
 		 * RuneLite's BOTTOM_LEFT snap corner is the green anchor above the
@@ -130,9 +123,7 @@ public final class PrivateChatLayout {
 		 * directly rather than deriving Y from a reflowing overlay rectangle.
 		 */
 		final boolean chatboxAnchored = overlay.getPreferredPosition() == OverlayPosition.BOTTOM_LEFT;
-		final Offset target = overlay.isManuallyPositioned()
-				&& !chatboxAnchored
-				&& baseContentBounds != null
+		final Offset target = overlay.isManuallyPositioned() && !chatboxAnchored && baseContentBounds != null
 				? manualOffset(baseContentBounds)
 				: chatboxOffset(chatSlot);
 
@@ -201,9 +192,7 @@ public final class PrivateChatLayout {
 		}
 
 		final int scriptId = event.getScriptId();
-		if (scriptId == TOPLEVEL_LAYOUT_SCRIPT
-				|| scriptId == CHAT_ON_CHAT_TRANSMIT_SCRIPT
-				|| scriptId == ScriptID.SPLITPM_CHANGED) {
+		if (scriptId == TOPLEVEL_LAYOUT_SCRIPT || scriptId == CHAT_ON_CHAT_TRANSMIT_SCRIPT || scriptId == ScriptID.SPLITPM_CHANGED) {
 			nativeLayoutDirty = true;
 		}
 	}
@@ -219,11 +208,7 @@ public final class PrivateChatLayout {
 		final Widget pmChat = client.getWidget(InterfaceID.PM_CHAT, 0);
 		final Rectangle contentBounds = visiblePmBounds();
 		final Rectangle overlayBounds = overlay.getBounds();
-		if (pmHost == null
-				|| pmChat == null
-				|| contentBounds == null
-				|| overlayBounds == null
-				|| overlayBounds.isEmpty()) {
+		if (pmHost == null || pmChat == null || contentBounds == null || overlayBounds == null || overlayBounds.isEmpty()) {
 			return;
 		}
 
@@ -236,38 +221,24 @@ public final class PrivateChatLayout {
 		 * Recover the rows' native vertical offset from the final geometry, then
 		 * reassert the existing movable-overlay placement before the next frame.
 		 */
-		final int nativeRowOffsetY = contentBounds.y
-				- pmHost.getRelativeY()
-				+ pmChat.getScrollY()
-				- nativeContentScrollY;
+		final int nativeRowOffsetY = contentBounds.y - pmHost.getRelativeY() + pmChat.getScrollY() - nativeContentScrollY;
 		final int desiredContentY = overlayBounds.y + SURFACE_TOP_PADDING;
-		final int contentShiftY = Math.max(
-				0,
-				SURFACE_TOP_PADDING - nativeRowOffsetY);
-		final int targetHostY = desiredContentY
-				- nativeRowOffsetY
-				- contentShiftY;
+		final int contentShiftY = Math.max(0, SURFACE_TOP_PADDING - nativeRowOffsetY);
+		final int targetHostY = desiredContentY - nativeRowOffsetY - contentShiftY;
 
 		/*
 		 * Horizontal PM rows do not use the vertical scroll compensation. Preserve
 		 * their final native offset while translating the host so the row union
 		 * remains aligned with the movable overlay.
 		 */
-		final int targetHostX = pmHost.getRelativeX()
-				+ overlayBounds.x
-				- contentBounds.x;
+		final int targetHostX = pmHost.getRelativeX() + overlayBounds.x - contentBounds.x;
 
 		applyContentShift(pmChat, contentShiftY);
-		applyOffset(
-				pmHost,
-				targetHostX - pmHost.getOriginalX(),
-				targetHostY - pmHost.getOriginalY());
+		applyOffset(pmHost, targetHostX - pmHost.getOriginalX(), targetHostY - pmHost.getOriginalY());
 
 		final Rectangle finalContentBounds = visiblePmBounds();
 		if (finalContentBounds != null) {
-			overlay.setNaturalBounds(surfaceBounds(
-					finalContentBounds,
-					Math.min(pmHost.getWidth(), finalContentBounds.width)));
+			overlay.setNaturalBounds(surfaceBounds(finalContentBounds, Math.min(pmHost.getWidth(), finalContentBounds.width)));
 		}
 	}
 
@@ -375,18 +346,13 @@ public final class PrivateChatLayout {
 		}
 	}
 
-	private Rectangle stableCollisionBounds(
-			Widget pmHost,
-			Rectangle expectedContentBounds,
-			int desiredWidth) {
+	private Rectangle stableCollisionBounds(Widget pmHost, Rectangle expectedContentBounds, int desiredWidth) {
 		if (pmHost == null || expectedContentBounds == null) {
 			return null;
 		}
 
 		final int currentHeight = Math.max(1, expectedContentBounds.height);
-		if (stableCollisionHeight <= 0
-				|| stableDesiredWidth != desiredWidth
-				|| pmHost.getWidth() >= desiredWidth) {
+		if (stableCollisionHeight <= 0 || stableDesiredWidth != desiredWidth || pmHost.getWidth() >= desiredWidth) {
 			stableCollisionHeight = currentHeight;
 			stableDesiredWidth = desiredWidth;
 		}
@@ -398,17 +364,12 @@ public final class PrivateChatLayout {
 		 * oscillation. Bottom-left chatbox anchoring preserves the PM's lower edge;
 		 * freely detached overlays preserve their top edge.
 		 */
-		final boolean bottomAnchored = !overlay.isManuallyPositioned()
-				|| overlay.getPreferredPosition() == OverlayPosition.BOTTOM_LEFT;
+		final boolean bottomAnchored = !overlay.isManuallyPositioned() || overlay.getPreferredPosition() == OverlayPosition.BOTTOM_LEFT;
 		final int y = bottomAnchored
 				? expectedContentBounds.y + expectedContentBounds.height - stableCollisionHeight
 				: expectedContentBounds.y;
 
-		return new Rectangle(
-				expectedContentBounds.x,
-				y,
-				desiredWidth,
-				stableCollisionHeight);
+		return new Rectangle(expectedContentBounds.x, y, desiredWidth, stableCollisionHeight);
 	}
 
 	private Offset chatboxOffset(Widget chatSlot) {
@@ -422,23 +383,15 @@ public final class PrivateChatLayout {
 		 * ChatXL's temporary width/height changes. A normal resizable chatbox ends
 		 * at the canvas bottom-left regardless of its current constrained size.
 		 */
-		return new Offset(
-				bounds.x,
-				bounds.y + bounds.height - client.getCanvasHeight());
+		return new Offset(bounds.x, bounds.y + bounds.height - client.getCanvasHeight());
 	}
 
 	private Offset manualOffset(Rectangle baseContentBounds) {
 		final Rectangle overlayBounds = overlay.getBounds();
-		return new Offset(
-				overlayBounds.x - baseContentBounds.x,
-				overlayBounds.y + SURFACE_TOP_PADDING - baseContentBounds.y);
+		return new Offset(overlayBounds.x - baseContentBounds.x, overlayBounds.y + SURFACE_TOP_PADDING - baseContentBounds.y);
 	}
 
-	private void applyClippingSafePlacement(
-			Widget pmHost,
-			Widget pmChat,
-			Offset target,
-			Rectangle expectedContentBounds) {
+	private void applyClippingSafePlacement(Widget pmHost, Widget pmChat, Offset target, Rectangle expectedContentBounds) {
 		if (pmChat == null || expectedContentBounds == null) {
 			restoreContentShift();
 			applyOffset(pmHost, target.x, target.y);
@@ -452,16 +405,11 @@ public final class PrivateChatLayout {
 		 * unchanged. The currently-proven failure is vertical: the visible PM rows
 		 * can sit above both native clipping containers after the canvas shrinks.
 		 */
-		final int envelopeY = Math.min(
-				requestedHostY,
-				expectedContentBounds.y - SURFACE_TOP_PADDING);
+		final int envelopeY = Math.min(requestedHostY, expectedContentBounds.y - SURFACE_TOP_PADDING);
 		final int contentShiftY = requestedHostY - envelopeY;
 
 		applyContentShift(pmChat, contentShiftY);
-		applyOffset(
-				pmHost,
-				target.x,
-				envelopeY - pmHost.getOriginalY());
+		applyOffset(pmHost, target.x, envelopeY - pmHost.getOriginalY());
 	}
 
 	private void applyContentShift(Widget pmChat, int shiftY) {
@@ -499,9 +447,7 @@ public final class PrivateChatLayout {
 
 		final int targetX = pmHost.getOriginalX() + offsetX;
 		final int targetY = pmHost.getOriginalY() + offsetY;
-		if (forcedHost == pmHost
-				&& pmHost.getRelativeX() == targetX
-				&& pmHost.getRelativeY() == targetY) {
+		if (forcedHost == pmHost && pmHost.getRelativeX() == targetX && pmHost.getRelativeY() == targetY) {
 			return;
 		}
 
@@ -534,8 +480,7 @@ public final class PrivateChatLayout {
 					return false;
 				}
 
-				targetOriginalWidth = Math.max(0, Math.min(16384,
-						(int) Math.round(width * 16384.0 / proportionalParent.getWidth())));
+				targetOriginalWidth = Math.max(0, Math.min(16384, (int) Math.round(width * 16384.0 / proportionalParent.getWidth())));
 				break;
 			default:
 				return false;
@@ -601,8 +546,7 @@ public final class PrivateChatLayout {
 			return;
 		}
 
-		if (sizedHost.getOriginalWidth() == appliedOriginalWidth
-				&& sizedHost.getOriginalWidth() != nativeOriginalWidth) {
+		if (sizedHost.getOriginalWidth() == appliedOriginalWidth && sizedHost.getOriginalWidth() != nativeOriginalWidth) {
 			sizedHost.setOriginalWidth(nativeOriginalWidth);
 			sizedHost.revalidate();
 		}
@@ -694,11 +638,7 @@ public final class PrivateChatLayout {
 			return null;
 		}
 
-		return new Rectangle(
-				contentBounds.x,
-				contentBounds.y - SURFACE_TOP_PADDING,
-				width,
-				contentBounds.height + SURFACE_TOP_PADDING + SURFACE_BOTTOM_PADDING);
+		return new Rectangle(contentBounds.x, contentBounds.y - SURFACE_TOP_PADDING, width, contentBounds.height + SURFACE_TOP_PADDING + SURFACE_BOTTOM_PADDING);
 	}
 
 	private static Rectangle translated(Rectangle bounds, int x, int y) {

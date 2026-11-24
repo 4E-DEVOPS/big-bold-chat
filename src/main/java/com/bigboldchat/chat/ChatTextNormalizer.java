@@ -89,9 +89,7 @@ public final class ChatTextNormalizer {
 			return withVisibleAtCharacters.replace('\u00A0', ' ').trim();
 		} finally {
 			if (performanceMetrics != null && performanceMetrics.isEnabled()) {
-				performanceMetrics.recordNormalization(
-						System.nanoTime()
-								- started);
+				performanceMetrics.recordNormalization(System.nanoTime() - started);
 			}
 		}
 	}

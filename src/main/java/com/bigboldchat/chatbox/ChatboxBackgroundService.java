@@ -119,8 +119,7 @@ final class ChatboxBackgroundService {
 			rememberZoomState(body);
 		}
 
-		if (body.getOriginalWidth() != width || body.getOriginalHeight() != height
-				|| body.getWidthMode() != WidgetSizeMode.ABSOLUTE || body.getHeightMode() != WidgetSizeMode.ABSOLUTE) {
+		if (body.getOriginalWidth() != width || body.getOriginalHeight() != height || body.getWidthMode() != WidgetSizeMode.ABSOLUTE || body.getHeightMode() != WidgetSizeMode.ABSOLUTE) {
 			body.setSize(width, height, WidgetSizeMode.ABSOLUTE, WidgetSizeMode.ABSOLUTE);
 			result.mutations++;
 			changed = true;
@@ -230,10 +229,7 @@ final class ChatboxBackgroundService {
 	private Result stackGradientBands(Widget background, int targetHeight) {
 		final Result result = new Result();
 		final Widget[] bands = background.getDynamicChildren();
-		if (bands == null
-				|| bands.length == 0
-				|| background.getHeight() != targetHeight
-				|| targetHeight < bands.length) {
+		if (bands == null || bands.length == 0 || background.getHeight() != targetHeight || targetHeight < bands.length) {
 			return result;
 		}
 

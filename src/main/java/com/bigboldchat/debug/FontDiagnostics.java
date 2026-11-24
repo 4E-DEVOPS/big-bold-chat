@@ -79,8 +79,7 @@ public final class FontDiagnostics {
 		armed = !armed;
 		finishTrace();
 
-		log.debug(
-				"[Chat XL][Font Diagnostic] {}", armed
+		log.debug("[Chat XL][Font Diagnostic] {}", armed
 						? "ARMED"
 						: "DISARMED");
 
@@ -125,14 +124,7 @@ public final class FontDiagnostics {
 		traceFrames.push(frame);
 
 		if (isVerboseTrace()) {
-			log.debug(
-					"[Chat XL][Font Diagnostic]"
-							+ " PRE"
-							+ " | sequence={}"
-							+ " | depth={}"
-							+ " | scriptId={}"
-							+ " | intTail={}"
-							+ " | strings={}",
+			log.debug("[Chat XL][Font Diagnostic]" + " PRE" + " | sequence={}" + " | depth={}" + " | scriptId={}" + " | intTail={}" + " | strings={}",
 					frame.sequence,
 					traceFrames.size(),
 					frame.scriptId,
@@ -155,12 +147,7 @@ public final class FontDiagnostics {
 		}
 
 		if (frame.scriptId != scriptId) {
-			log.debug(
-					"[Chat XL][Font Diagnostic]"
-							+ " STACK MISMATCH"
-							+ " | expectedScriptId={}"
-							+ " | actualScriptId={}"
-							+ " | depth={}",
+			log.debug("[Chat XL][Font Diagnostic]" + " STACK MISMATCH" + " | expectedScriptId={}" + " | actualScriptId={}" + " | depth={}",
 					frame.scriptId,
 					scriptId,
 					traceFrames.size());
@@ -177,14 +164,7 @@ public final class FontDiagnostics {
 		final int mutations = logMutations(frame, after, logChanges);
 
 		if (isVerboseTrace()) {
-			log.debug(
-					"[Chat XL][Font Diagnostic]"
-							+ " POST"
-							+ " | sequence={}"
-							+ " | depth={}"
-							+ " | scriptId={}"
-							+ " | mutations={}"
-							+ " | intTail={}",
+			log.debug("[Chat XL][Font Diagnostic]" + " POST" + " | sequence={}" + " | depth={}" + " | scriptId={}" + " | mutations={}" + " | intTail={}",
 					frame.sequence,
 					traceFrames.size(),
 					frame.scriptId,
@@ -199,12 +179,7 @@ public final class FontDiagnostics {
 		if (traceMode == TraceMode.SUPPORTED && !TRACE_SUPPORTED_DETAILS) {
 			logSupportedSummary(frame, mutations);
 		} else {
-			log.debug(
-					"[Chat XL][Font Diagnostic]"
-							+ " END"
-							+ " | mode={}"
-							+ " | rootScriptId={}"
-							+ " | observedScripts={}",
+			log.debug("[Chat XL][Font Diagnostic]" + " END" + " | mode={}" + " | rootScriptId={}" + " | observedScripts={}",
 					traceMode,
 					rootScriptId,
 					traceSequence);
@@ -223,12 +198,7 @@ public final class FontDiagnostics {
 
 		if (isVerboseTrace()) {
 			log.debug("[Chat XL][Font Diagnostic]" + " ========================================");
-			log.debug(
-					"[Chat XL][Font Diagnostic]"
-							+ " START"
-							+ " | mode={}"
-							+ " | revision={}"
-							+ " | rootScriptId={}",
+			log.debug("[Chat XL][Font Diagnostic]" + " START" + " | mode={}" + " | revision={}" + " | rootScriptId={}",
 					traceMode,
 					REVISION,
 					rootScriptId);
@@ -261,15 +231,7 @@ public final class FontDiagnostics {
 		final ChatFont selected = getConfiguredFont();
 		final ChatFontProfile profile = ChatFontRegistry.get(selected);
 		if (profile == null) {
-			log.debug(
-					"[Chat XL][Font Diagnostic]"
-							+ " SUPPORTED"
-							+ " | scriptId={}"
-							+ " | font={}"
-							+ " | profile=NOT FOUND"
-							+ " | intTail={}"
-							+ " | strings={}"
-							+ " | mutations={}",
+			log.debug("[Chat XL][Font Diagnostic]" + " SUPPORTED" + " | scriptId={}" + " | font={}" + " | profile=NOT FOUND" + " | intTail={}" + " | strings={}" + " | mutations={}",
 					frame.scriptId,
 					selected,
 					frame.intTailBefore,
@@ -279,17 +241,7 @@ public final class FontDiagnostics {
 			return;
 		}
 
-		log.debug(
-				"[Chat XL][Font Diagnostic]"
-						+ " SUPPORTED"
-						+ " | scriptId={}"
-						+ " | font={}"
-						+ " | fontId={}"
-						+ " | lineAdj={}"
-						+ " | rowYOff={}"
-						+ " | intTail={}"
-						+ " | strings={}"
-						+ " | mutations={}",
+		log.debug("[Chat XL][Font Diagnostic]" + " SUPPORTED" + " | scriptId={}" + " | font={}" + " | fontId={}" + " | lineAdj={}" + " | rowYOff={}" + " | intTail={}" + " | strings={}" + " | mutations={}",
 				frame.scriptId,
 				selected,
 				selected.getFontId(),
@@ -309,13 +261,7 @@ public final class FontDiagnostics {
 			return;
 		}
 
-		log.debug(
-				"[Chat XL][Font Diagnostic]"
-						+ " PROFILE"
-						+ " | font={}"
-						+ " | fontId={}"
-						+ " | lineHeightAdjustment={}"
-						+ " | rowYOffset={}",
+		log.debug("[Chat XL][Font Diagnostic]" + " PROFILE" + " | font={}" + " | fontId={}" + " | lineHeightAdjustment={}" + " | rowYOffset={}",
 				selected,
 				selected.getFontId(),
 				profile.getLineHeightAdjustment(),
@@ -338,10 +284,7 @@ public final class FontDiagnostics {
 	 * ================================================================
 	 */
 
-	private int logMutations(
-			TraceFrame frame,
-			IdentityHashMap<Widget, WidgetState> after,
-			boolean logChanges) {
+	private int logMutations(TraceFrame frame, IdentityHashMap<Widget, WidgetState> after, boolean logChanges) {
 		if (frame == null || frame.before == null || after == null) {
 			return 0;
 		}
@@ -356,14 +299,7 @@ public final class FontDiagnostics {
 				mutationCount++;
 
 				if (logChanges) {
-					log.debug(
-							"[Chat XL][Font Diagnostic]"
-									+ " CHANGE"
-									+ " | sequence={}"
-									+ " | scriptId={}"
-									+ " | kind=NEW"
-									+ " | identity={}"
-									+ " | after={}",
+					log.debug("[Chat XL][Font Diagnostic]" + " CHANGE" + " | sequence={}" + " | scriptId={}" + " | kind=NEW" + " | identity={}" + " | after={}",
 							frame.sequence,
 							frame.scriptId,
 							System.identityHashCode(widget),
@@ -380,15 +316,7 @@ public final class FontDiagnostics {
 			mutationCount++;
 
 			if (logChanges) {
-				log.debug(
-						"[Chat XL][Font Diagnostic]"
-								+ " CHANGE"
-								+ " | sequence={}"
-								+ " | scriptId={}"
-								+ " | kind=MODIFIED"
-								+ " | identity={}"
-								+ " | before={}"
-								+ " | after={}",
+				log.debug("[Chat XL][Font Diagnostic]" + " CHANGE" + " | sequence={}" + " | scriptId={}" + " | kind=MODIFIED" + " | identity={}" + " | before={}" + " | after={}",
 						frame.sequence,
 						frame.scriptId,
 						System.identityHashCode(widget),
@@ -405,14 +333,7 @@ public final class FontDiagnostics {
 			mutationCount++;
 
 			if (logChanges) {
-				log.debug(
-						"[Chat XL][Font Diagnostic]"
-								+ " CHANGE"
-								+ " | sequence={}"
-								+ " | scriptId={}"
-								+ " | kind=REMOVED"
-								+ " | identity={}"
-								+ " | before={}",
+				log.debug("[Chat XL][Font Diagnostic]" + " CHANGE" + " | sequence={}" + " | scriptId={}" + " | kind=REMOVED" + " | identity={}" + " | before={}",
 						frame.sequence,
 						frame.scriptId,
 						System.identityHashCode(entry.getKey()),
@@ -433,26 +354,14 @@ public final class FontDiagnostics {
 		final IdentityHashMap<Widget, WidgetState> result = new IdentityHashMap<>();
 		final IdentityHashMap<Widget, Boolean> visited = new IdentityHashMap<>();
 
-		collectWidgetTree(
-				client.getWidget(InterfaceID.Chatbox.SCROLLAREA),
-				Surface.CHATBOX,
-				result,
-				visited);
+		collectWidgetTree(client.getWidget(InterfaceID.Chatbox.SCROLLAREA), Surface.CHATBOX, result, visited);
 
-		collectWidgetTree(
-				client.getWidget(InterfaceID.PM_CHAT, 0),
-				Surface.SPLIT_PRIVATE,
-				result,
-				visited);
+		collectWidgetTree(client.getWidget(InterfaceID.PM_CHAT, 0), Surface.SPLIT_PRIVATE, result, visited);
 
 		return result;
 	}
 
-	private void collectWidgetTree(
-			Widget widget,
-			Surface surface,
-			IdentityHashMap<Widget, WidgetState> result,
-			IdentityHashMap<Widget, Boolean> visited) {
+	private void collectWidgetTree(Widget widget, Surface surface, IdentityHashMap<Widget, WidgetState> result, IdentityHashMap<Widget, Boolean> visited) {
 		if (widget == null || surface == null || result == null || visited == null || visited.containsKey(widget)) {
 			return;
 		}
@@ -472,11 +381,7 @@ public final class FontDiagnostics {
 		collectWidgetArray(widget.getNestedChildren(), surface, result, visited);
 	}
 
-	private void collectWidgetArray(
-			Widget[] widgets,
-			Surface surface,
-			IdentityHashMap<Widget, WidgetState> result,
-			IdentityHashMap<Widget, Boolean> visited) {
+	private void collectWidgetArray(Widget[] widgets, Surface surface, IdentityHashMap<Widget, WidgetState> result, IdentityHashMap<Widget, Boolean> visited) {
 		if (widgets == null) {
 			return;
 		}
@@ -492,22 +397,14 @@ public final class FontDiagnostics {
 	public void dumpVisibleChatWidgets(String reason) {
 		final IdentityHashMap<Widget, WidgetState> snapshot = snapshotChatWidgets();
 
-		log.debug(
-				"[Chat XL][Font Diagnostic]"
-						+ " VISIBLE CHAT DUMP"
-						+ " | reason='{}'"
-						+ " | widgets={}",
+		log.debug("[Chat XL][Font Diagnostic]" + " VISIBLE CHAT DUMP" + " | reason='{}'" + " | widgets={}",
 				reason != null
 						? reason
 						: "",
 				snapshot.size());
 
 		for (Map.Entry<Widget, WidgetState> entry : snapshot.entrySet()) {
-			log.debug(
-					"[Chat XL][Font Diagnostic]"
-							+ " WIDGET"
-							+ " | identity={}"
-							+ " | {}",
+			log.debug("[Chat XL][Font Diagnostic]" + " WIDGET" + " | identity={}" + " | {}",
 					System.identityHashCode(entry.getKey()),
 					entry.getValue().describe());
 		}
@@ -548,10 +445,7 @@ public final class FontDiagnostics {
 
 			String text = (String) value;
 
-			text = text
-					.replace("\r\n", "\\n")
-					.replace('\r', '\n')
-					.replace("\n", "\\n");
+			text = text.replace("\r\n", "\\n").replace('\r', '\n').replace("\n", "\\n");
 
 			if (text.length() > MAX_LOGGED_STRING_LENGTH) {
 				text = text.substring(0, MAX_LOGGED_STRING_LENGTH) + "...";
@@ -570,11 +464,7 @@ public final class FontDiagnostics {
 
 		final String withLineBreaks = text.replaceAll("(?i)<br\\s*/?>", "\n");
 
-		return Text.removeTags(withLineBreaks)
-				.replace('\u00A0', ' ')
-				.replace('\u202F', ' ')
-				.replace('\u2009', ' ')
-				.trim();
+		return Text.removeTags(withLineBreaks).replace('\u00A0', ' ').replace('\u202F', ' ').replace('\u2009', ' ').trim();
 	}
 
 	/*
@@ -674,20 +564,7 @@ public final class FontDiagnostics {
 				return true;
 			}
 
-			if (surface != other.surface
-					|| id != other.id
-					|| parentId != other.parentId
-					|| !text.equals(other.text)
-					|| spriteId != other.spriteId
-					|| fontId != other.fontId
-					|| lineHeight != other.lineHeight
-					|| originalX != other.originalX
-					|| originalWidth != other.originalWidth
-					|| originalHeight != other.originalHeight
-					|| relativeX != other.relativeX
-					|| width != other.width
-					|| height != other.height
-					|| hidden != other.hidden) {
+			if (surface != other.surface || id != other.id || parentId != other.parentId || !text.equals(other.text) || spriteId != other.spriteId || fontId != other.fontId || lineHeight != other.lineHeight || originalX != other.originalX || originalWidth != other.originalWidth || originalHeight != other.originalHeight || relativeX != other.relativeX || width != other.width || height != other.height || hidden != other.hidden) {
 				return true;
 			}
 
@@ -695,30 +572,17 @@ public final class FontDiagnostics {
 		}
 
 		private String describe() {
-			return "surface="
-					+ surface
-					+ ", id="
-					+ id
-					+ ", parentId="
-					+ parentId
-					+ ", text='"
-					+ text
-					+ "'"
-					+ ", spriteId="
-					+ spriteId
-					+ ", fontId="
-					+ fontId
-					+ ", lineHeight="
-					+ lineHeight
-					+ ", original=[x="
-					+ originalX
-					+ ", y="
-					+ originalY
-					+ ", w="
-					+ originalWidth
-					+ ", h="
-					+ originalHeight
-					+ "]"
+			return "surface=" + surface
+					+ ", id=" + id
+					+ ", parentId=" + parentId
+					+ ", text='" + text + "'"
+					+ ", spriteId=" + spriteId
+					+ ", fontId=" + fontId
+					+ ", lineHeight=" + lineHeight
+					+ ", original=[x=" + originalX
+					+ ", y=" + originalY
+					+ ", w=" + originalWidth
+					+ ", h=" + originalHeight + "]"
 					+ ", relative=[x=" + relativeX + ", y=" + relativeY + "]"
 					+ ", calculated=[w=" + width + ", h=" + height + "]"
 					+ ", hidden=" + hidden;

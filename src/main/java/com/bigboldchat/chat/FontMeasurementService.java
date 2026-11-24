@@ -66,10 +66,7 @@ public final class FontMeasurementService {
 		this(client, new ChatTextNormalizer(performanceMetrics), performanceMetrics);
 	}
 
-	public FontMeasurementService(
-			Client client,
-			ChatTextNormalizer textNormalizer,
-			PerformanceMetrics performanceMetrics) {
+	public FontMeasurementService(Client client, ChatTextNormalizer textNormalizer, PerformanceMetrics performanceMetrics) {
 		this.client = client;
 		this.textNormalizer = textNormalizer != null
 				? textNormalizer
@@ -232,12 +229,8 @@ public final class FontMeasurementService {
 			nativeBodyX = lineX + nativePrefixWidth + BODY_GAP;
 			selectedBodyX = lineX + selectedPrefixLayoutWidth + BODY_GAP;
 		} else {
-			nativeChannelLayout = measureChannelPrefixLayout(nativeFont, rawPrefixComponents, intStack, intStackSize,
-					lineX, null, 0, 0, nativeFontProfile.getAccountBuildIconPadding(), 0);
-
-			selectedChannelLayout = measureChannelPrefixLayout(selectedFont, rawPrefixComponents, intStack, intStackSize,
-					lineX, selectedChatFont, fontProfile.getRankIconRightAdjustment(), fontProfile.getRankIconSizeAdjustment(),
-					fontProfile.getAccountBuildIconPadding(), fontProfile.getChannelAccountBuildIconSpacing());
+			nativeChannelLayout = measureChannelPrefixLayout(nativeFont, rawPrefixComponents, intStack, intStackSize, lineX, null, 0, 0, nativeFontProfile.getAccountBuildIconPadding(), 0);
+			selectedChannelLayout = measureChannelPrefixLayout(selectedFont, rawPrefixComponents, intStack, intStackSize, lineX, selectedChatFont, fontProfile.getRankIconRightAdjustment(), fontProfile.getRankIconSizeAdjustment(), fontProfile.getAccountBuildIconPadding(), fontProfile.getChannelAccountBuildIconSpacing());
 
 			if (nativeChannelLayout == null || selectedChannelLayout == null) {
 				return null;
@@ -379,9 +372,7 @@ public final class FontMeasurementService {
 	 * CHANNEL / RANK-ICON MEASUREMENT
 	 * ================================================================
 	 */
-	private ChannelPrefixLayout measureChannelPrefixLayout(FontTypeFace font, List<String> rawPrefixComponents,
-			int[] intStack, int intStackSize, int lineX, ChatFont glyphFont, int rankIconRightAdjustment,
-			int rankIconSizeAdjustment, int accountBuildIconPadding, int inlineIconUsernameSpacing) {
+	private ChannelPrefixLayout measureChannelPrefixLayout(FontTypeFace font, List<String> rawPrefixComponents, int[] intStack, int intStackSize, int lineX, ChatFont glyphFont, int rankIconRightAdjustment, int rankIconSizeAdjustment, int accountBuildIconPadding, int inlineIconUsernameSpacing) {
 		if (font == null || rawPrefixComponents == null || intStack == null) {
 			return null;
 		}
@@ -448,11 +439,7 @@ public final class FontMeasurementService {
 			final int spriteIdCandidate = intStack[commonPayloadStart - 3];
 			final int widthCandidate = intStack[commonPayloadStart - 2];
 			final int heightCandidate = intStack[commonPayloadStart - 1];
-			if (spriteIdCandidate >= 0
-					&& widthCandidate > 0
-					&& widthCandidate <= 32
-					&& heightCandidate > 0
-					&& heightCandidate <= 32) {
+			if (spriteIdCandidate >= 0 && widthCandidate > 0 && widthCandidate <= 32 && heightCandidate > 0 && heightCandidate <= 32) {
 				layout.rankIconSpriteId = spriteIdCandidate;
 				layout.rankIconWidth = Math.max(1, widthCandidate + rankIconSizeAdjustment);
 				layout.rankIconHeight = Math.max(1, heightCandidate + rankIconSizeAdjustment);
@@ -714,9 +701,7 @@ public final class FontMeasurementService {
 			return 1;
 		}
 
-		final String normalized = text
-				.replace("\r\n", "\n")
-				.replace('\r', '\n');
+		final String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
 		final String[] explicitLines = normalized.split("\n", -1);
 		int totalLines = 0;
 

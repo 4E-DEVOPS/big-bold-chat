@@ -70,7 +70,9 @@ public final class SideContainerDiagnostics {
 		traceFrames.clear();
 		collisionState = null;
 
-		log.debug("[Chat XL][Side Container Diagnostic] {}", armed ? "ARMED" : "DISARMED");
+		log.debug("[Chat XL][Side Container Diagnostic] {}", armed
+				? "ARMED"
+				: "DISARMED");
 
 		return true;
 	}
@@ -112,12 +114,7 @@ public final class SideContainerDiagnostics {
 		}
 
 		if (frame.scriptId != event.getScriptId()) {
-			log.debug(
-					"[Chat XL][Side Container Diagnostic]"
-							+ " STACK MISMATCH"
-							+ " | expectedScriptId={}"
-							+ " | actualScriptId={}"
-							+ " | depth={}",
+			log.debug("[Chat XL][Side Container Diagnostic]" + " STACK MISMATCH" + " | expectedScriptId={}" + " | actualScriptId={}" + " | depth={}",
 					frame.scriptId,
 					event.getScriptId(),
 					traceFrames.size());
@@ -159,17 +156,7 @@ public final class SideContainerDiagnostics {
 			return;
 		}
 
-		log.debug(
-				"[Chat XL][Side Container Diagnostic]"
-						+ " SCRIPT"
-						+ " | phase={}"
-						+ " | depth={}"
-						+ " | scriptId={}"
-						+ " | nextScriptId={}"
-						+ " | topLevel={}->{}"
-						+ " | args={}"
-						+ " | intTail={}"
-						+ " | strings={}",
+		log.debug("[Chat XL][Side Container Diagnostic]" + " SCRIPT" + " | phase={}" + " | depth={}" + " | scriptId={}" + " | nextScriptId={}" + " | topLevel={}->{}" + " | args={}" + " | intTail={}" + " | strings={}",
 				phase,
 				frame.depth,
 				frame.scriptId,
@@ -307,29 +294,7 @@ public final class SideContainerDiagnostics {
 
 		collisionState = current;
 
-		log.debug(
-				"[Chat XL][Side Container Diagnostic]"
-						+ " COLLISION"
-						+ " | scriptId={}"
-						+ " | configuredWidth={}"
-						+ " | buttonLayers={}"
-						+ " | staticLayer={}"
-						+ " | movableLayer={}"
-						+ " | staticChildren={}"
-						+ " | movableChildren={}"
-						+ " | background={}"
-						+ " | container={}"
-						+ " | map={}"
-						+ " | orbs={}"
-						+ " | mapTabs={}"
-						+ " | orbsTabs={}"
-						+ " | desired={}"
-						+ " | staticBounds={}"
-						+ " | movableBounds={}"
-						+ " | backgroundBounds={}"
-						+ " | containerBounds={}"
-						+ " | mapBounds={}"
-						+ " | orbsBounds={}",
+		log.debug("[Chat XL][Side Container Diagnostic]" + " COLLISION" + " | scriptId={}" + " | configuredWidth={}" + " | buttonLayers={}" + " | staticLayer={}" + " | movableLayer={}" + " | staticChildren={}" + " | movableChildren={}" + " | background={}" + " | container={}" + " | map={}" + " | orbs={}" + " | mapTabs={}" + " | orbsTabs={}" + " | desired={}" + " | staticBounds={}" + " | movableBounds={}" + " | backgroundBounds={}" + " | containerBounds={}" + " | mapBounds={}" + " | orbsBounds={}",
 				scriptId,
 				current.configuredWidth,
 				current.buttonLayers,
@@ -461,8 +426,7 @@ public final class SideContainerDiagnostics {
 		private final int movableChildHits;
 		private final int buttonLayers;
 
-		private CollisionState(int configuredWidth, Rectangle desired, Rectangle backgroundBounds, Rectangle staticBounds, Rectangle movableBounds,
-				Rectangle containerBounds, Rectangle mapBounds, Rectangle orbsBounds, int staticChildHits, int movableChildHits) {
+		private CollisionState(int configuredWidth, Rectangle desired, Rectangle backgroundBounds, Rectangle staticBounds, Rectangle movableBounds, Rectangle containerBounds, Rectangle mapBounds, Rectangle orbsBounds, int staticChildHits, int movableChildHits) {
 			this.configuredWidth = configuredWidth;
 			this.desired = desired;
 			this.backgroundBounds = backgroundBounds;
@@ -506,24 +470,11 @@ public final class SideContainerDiagnostics {
 			final Widget map = client.getWidget(InterfaceID.ToplevelPreEoc.MAP_CONTAINER);
 			final Widget orbs = client.getWidget(InterfaceID.ToplevelPreEoc.ORBS);
 
-			return new CollisionState(
-					configuredWidth,
-					desired,
-					visibleBounds(background),
-					visibleBounds(staticLayer),
-					visibleBounds(movableLayer),
-					visibleBounds(container),
-					visibleBounds(map),
-					visibleBounds(orbs),
-					countChildHits(desired, staticLayer),
-					countChildHits(desired, movableLayer));
+			return new CollisionState(configuredWidth, desired, visibleBounds(background), visibleBounds(staticLayer), visibleBounds(movableLayer), visibleBounds(container), visibleBounds(map), visibleBounds(orbs), countChildHits(desired, staticLayer), countChildHits(desired, movableLayer));
 		}
 
 		private boolean sameAs(CollisionState other) {
-			return other != null && configuredWidth == other.configuredWidth && backgroundHit == other.backgroundHit
-					&& staticLayerHit == other.staticLayerHit && movableLayerHit == other.movableLayerHit && containerHit == other.containerHit
-					&& mapHit == other.mapHit && orbsHit == other.orbsHit && mapTabsHit == other.mapTabsHit && orbsTabsHit == other.orbsTabsHit
-					&& staticChildHits == other.staticChildHits && movableChildHits == other.movableChildHits;
+			return other != null && configuredWidth == other.configuredWidth && backgroundHit == other.backgroundHit && staticLayerHit == other.staticLayerHit && movableLayerHit == other.movableLayerHit && containerHit == other.containerHit && mapHit == other.mapHit && orbsHit == other.orbsHit && mapTabsHit == other.mapTabsHit && orbsTabsHit == other.orbsTabsHit && staticChildHits == other.staticChildHits && movableChildHits == other.movableChildHits;
 		}
 
 		private static Rectangle visibleBounds(Widget widget) {
@@ -540,8 +491,7 @@ public final class SideContainerDiagnostics {
 				return 0;
 			}
 
-			return countChildHits(desired, parent.getStaticChildren()) + countChildHits(desired, parent.getDynamicChildren())
-					+ countChildHits(desired, parent.getNestedChildren());
+			return countChildHits(desired, parent.getStaticChildren()) + countChildHits(desired, parent.getDynamicChildren()) + countChildHits(desired, parent.getNestedChildren());
 		}
 
 		private static int countChildHits(Rectangle desired, Widget[] children) {
@@ -680,8 +630,7 @@ public final class SideContainerDiagnostics {
 				return "MISSING";
 			}
 
-			return "identity=" + identity + ", original=[" + originalX + "," + originalY + "," + originalWidth + "x" + originalHeight + "]"
-					+ ", relative=[" + relativeX + "," + relativeY + "], calculated=[" + width + "x" + height + "]";
+			return "identity=" + identity + ", original=[" + originalX + "," + originalY + "," + originalWidth + "x" + originalHeight + "]" + ", relative=[" + relativeX + "," + relativeY + "], calculated=[" + width + "x" + height + "]";
 		}
 
 		private static int childCount(Widget[] children) {
@@ -754,8 +703,7 @@ public final class SideContainerDiagnostics {
 			}
 
 			if (before == null || after == null) {
-				return "overlay=" + label + " | state=" + (before == null ? "MISSING" : before.describe()) + "->"
-						+ (after == null ? "MISSING" : after.describe());
+				return "overlay=" + label + " | state=" + (before == null ? "MISSING" : before.describe()) + "->" + (after == null ? "MISSING" : after.describe());
 			}
 
 			final StringBuilder difference = new StringBuilder();
@@ -772,8 +720,7 @@ public final class SideContainerDiagnostics {
 		}
 
 		private String describe() {
-			return "present=" + present + ", preferred=[" + preferredX + "," + preferredY + "], position=" + preferredPosition
-					+ ", bounds=[" + boundsX + "," + boundsY + "," + width + "x" + height + "]";
+			return "present=" + present + ", preferred=[" + preferredX + "," + preferredY + "], position=" + preferredPosition + ", bounds=[" + boundsX + "," + boundsY + "," + width + "x" + height + "]";
 		}
 
 		private static void appendDifference(StringBuilder builder, String name, Object before, Object after) {

@@ -12,13 +12,13 @@ public final class ChatboxControlsLayout {
 	private static final int TAB_NATIVE_WIDTH = 56;
 
 	private static final int[] TAB_NATIVE_X = {
-			458,
-			396,
-			334,
-			272,
-			210,
-			148,
-			86
+			458,	// ALL
+			396,	// GAME
+			334,	// PUBLIC
+			272,	// PRIVATE
+			210,	// CHANNEL
+			148,	// CLAN
+			86		// TRADE
 	};
 
 	private static final int[] TAB_COMPONENTS = {

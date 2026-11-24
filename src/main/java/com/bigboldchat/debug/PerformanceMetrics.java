@@ -145,8 +145,7 @@ public final class PerformanceMetrics {
 			resetWindow(System.nanoTime());
 		}
 
-		log.debug(
-				"[Chat XL][Performance] {}", enabled
+		log.debug("[Chat XL][Performance] {}", enabled
 						? "ARMED"
 						: "DISARMED");
 
@@ -484,62 +483,26 @@ public final class PerformanceMetrics {
 
 		final double elapsedSeconds = elapsedNanos / 1_000_000_000.0;
 
-		log.debug(
-				"[Chat XL][Performance] Window={}",
-				String.format(Locale.ROOT, "%.3fs", elapsedSeconds));
+		log.debug("[Chat XL][Performance] Window={}", String.format(Locale.ROOT, "%.3fs", elapsedSeconds));
 
-		log.debug(
-				"[Chat XL][Performance] PRE"
-						+ " | 199={}"
-						+ " | 203={}"
-						+ " | 4483={}",
+		log.debug("[Chat XL][Performance] PRE" + " | 199={}" + " | 203={}" + " | 4483={}",
 				formatTiming(pre199),
 				formatTiming(pre203),
 				formatTiming(pre4483));
 
-		log.debug(
-				"[Chat XL][Performance] POST"
-						+ " | 199={}"
-						+ " | 203={}"
-						+ " | 4483={}",
+		log.debug("[Chat XL][Performance] POST" + " | 199={}" + " | 203={}" + " | 4483={}",
 				formatTiming(post199),
 				formatTiming(post203),
 				formatTiming(post4483));
 
-		log.debug(
-				"[Chat XL][Performance] SERVICES"
-						+ " | Measurement={}"
-						+ " | Normalize={}"
-						+ " | FontResolve={}"
-						+ " | FontCacheHits={}"
-						+ " | FontCacheMisses={}",
+		log.debug("[Chat XL][Performance] SERVICES" + " | Measurement={}" + " | Normalize={}" + " | FontResolve={}" + " | FontCacheHits={}" + " | FontCacheMisses={}",
 				formatTiming(measurement),
 				formatTiming(normalization),
 				formatTiming(fontResolution),
 				fontCacheHits,
 				fontCacheMisses);
 
-		log.debug(
-				"[Chat XL][Performance] CORRELATION"
-						+ " | Widgets={}"
-						+ " | RowSearches={}"
-						+ " | RowCandidates={}"
-						+ " | RowIndexBuilds={}"
-						+ " | RowIndexRepairs={}"
-						+ " | RowIndexReuses={}"
-						+ " | SurfaceSearches={}"
-						+ " | FallbackSearches={}"
-						+ " | FallbackBuilds={}"
-						+ " | FallbackReuses={}"
-						+ " | RankSearches={}"
-						+ " | RankFallbacks={}"
-						+ " | RankNoSprite={}"
-						+ " | RankXMismatch={}"
-						+ " | RankYMismatch={}"
-						+ " | RankShallowRecoveries={}"
-						+ " | RankFallbackHits={}"
-						+ " | RankFallbackMisses={}"
-						+ " | RankNodes={}",
+		log.debug("[Chat XL][Performance] CORRELATION" + " | Widgets={}" + " | RowSearches={}" + " | RowCandidates={}" + " | RowIndexBuilds={}" + " | RowIndexRepairs={}" + " | RowIndexReuses={}" + " | SurfaceSearches={}" + " | FallbackSearches={}" + " | FallbackBuilds={}" + " | FallbackReuses={}" + " | RankSearches={}" + " | RankFallbacks={}" + " | RankNoSprite={}" + " | RankXMismatch={}" + " | RankYMismatch={}" + " | RankShallowRecoveries={}" + " | RankFallbackHits={}" + " | RankFallbackMisses={}" + " | RankNodes={}",
 				widgetsExamined,
 				rowSearches,
 				rowCandidates,
@@ -560,22 +523,11 @@ public final class PerformanceMetrics {
 				rankFallbackMisses,
 				rankNodesExamined);
 
-		log.debug(
-				"[Chat XL][Performance] PRESENTATION"
-						+ " | Mutations={}"
-						+ " | Revalidates={}",
+		log.debug("[Chat XL][Performance] PRESENTATION" + " | Mutations={}" + " | Revalidates={}",
 				widgetMutations,
 				revalidates);
 
-		log.debug(
-				"[Chat XL][Performance] RESIZE"
-						+ " | Apply={}"
-						+ " | Applies={}"
-						+ " | Noops={}"
-						+ " | WidthChanges={}"
-						+ " | HeightChanges={}"
-						+ " | MissingWidgets={}"
-						+ " | Restores={}",
+		log.debug("[Chat XL][Performance] RESIZE" + " | Apply={}" + " | Applies={}" + " | Noops={}" + " | WidthChanges={}" + " | HeightChanges={}" + " | MissingWidgets={}" + " | Restores={}",
 				formatTiming(resizeApply),
 				resizeApplies,
 				resizeNoops,
@@ -584,15 +536,7 @@ public final class PerformanceMetrics {
 				resizeMissingWidgets,
 				resizeRestores);
 
-		log.debug(
-				"[Chat XL][Performance] REFRESH"
-						+ " | Total={}"
-						+ " | Startup={}"
-						+ " | FontChanged={}"
-						+ " | Shutdown={}"
-						+ " | WidthChanged={}"
-						+ " | HeightChanged={}"
-						+ " | Other={}",
+		log.debug("[Chat XL][Performance] REFRESH" + " | Total={}" + " | Startup={}" + " | FontChanged={}" + " | Shutdown={}" + " | WidthChanged={}" + " | HeightChanged={}" + " | Other={}",
 				refreshChatCalls,
 				refreshStartup,
 				refreshFontChanged,
@@ -639,12 +583,7 @@ public final class PerformanceMetrics {
 			return "calls=0 avg=0.000ms max=0.000ms";
 		}
 
-		return String.format(
-				Locale.ROOT,
-				"calls=%d avg=%.6fms max=%.6fms",
-				metric.count,
-				metric.averageMilliseconds(),
-				metric.maxMilliseconds());
+		return String.format(Locale.ROOT, "calls=%d avg=%.6fms max=%.6fms", metric.count, metric.averageMilliseconds(), metric.maxMilliseconds());
 	}
 
 	private void resetWindow(long now) {

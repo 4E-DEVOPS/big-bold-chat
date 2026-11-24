@@ -131,9 +131,7 @@ public final class InputFontService {
 
 	private int targetInputAlignment(Widget input, ChatFont selectedFont, String targetText) {
 		final int nativeAlignment = inputState.nativeXTextAlignment;
-		if (selectedFont == ChatFont.PLAIN_12
-				|| nativeAlignment != WidgetTextAlignment.LEFT && nativeAlignment != WidgetTextAlignment.RIGHT
-				|| targetText == null || input.getWidth() <= 0) {
+		if (selectedFont == ChatFont.PLAIN_12 || nativeAlignment != WidgetTextAlignment.LEFT && nativeAlignment != WidgetTextAlignment.RIGHT || targetText == null || input.getWidth() <= 0) {
 			return nativeAlignment;
 		}
 

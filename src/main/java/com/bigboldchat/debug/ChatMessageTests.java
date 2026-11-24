@@ -65,7 +65,7 @@ public final class ChatMessageTests {
 		addChatTest(ChatMessageType.GAMEMESSAGE, "");
 		addChatTest(ChatMessageType.ENGINE, "");
 		addChatTest(ChatMessageType.CONSOLE, "");
-		addChatTest(ChatMessageType.BROADCAST, "", IconID.CHAIN_LINK.toString() + "ChatXL BROADCAST test.");
+		addChatTest(ChatMessageType.BROADCAST, "", IconID.CHAIN_LINK.toString() + "ChatXL BROADCAST text.");
 		addChatTest(ChatMessageType.WELCOME, "");
 		addChatTest(ChatMessageType.DIDYOUKNOW, "");
 		addChatTest(ChatMessageType.LEVELUPMESSAGE, "");
@@ -81,32 +81,14 @@ public final class ChatMessageTests {
 	 */
 
 	private void showPublicMessages() {
-		addChatTest(
-				ChatMessageType.PUBLICCHAT,
-				IconID.IRONMAN.toString() + "Player");
+		addChatTest(ChatMessageType.PUBLICCHAT, IconID.IRONMAN.toString() + "Player");
+		addChatTest(ChatMessageType.MODCHAT, IconID.PLAYER_MODERATOR.toString() + "PMod", "ChatXL PLAYER_MODERATOR text.");
+		addChatTest(ChatMessageType.MODCHAT, IconID.JAGEX_MODERATOR.toString() + "JMod", "ChatXL JAGEX_MODERATOR text.");
 
-		addChatTest(
-				ChatMessageType.MODCHAT,
-				IconID.PLAYER_MODERATOR.toString() + "PMod",
-				"ChatXL PLAYER_MODERATOR test.");
+		addChatTest(ChatMessageType.AUTOTYPER, IconID.ULTIMATE_IRONMAN.toString() + "AutoTyper");
+		addChatTest(ChatMessageType.MODAUTOTYPER, IconID.PLAYER_MODERATOR.toString() + "PMod");
 
-		addChatTest(
-				ChatMessageType.MODCHAT,
-				IconID.JAGEX_MODERATOR.toString() + "JMod",
-				"ChatXL JAGEX_MODERATOR test.");
-
-		addChatTest(
-				ChatMessageType.AUTOTYPER,
-				IconID.ULTIMATE_IRONMAN.toString() + "AutoTyper");
-
-		addChatTest(
-				ChatMessageType.MODAUTOTYPER,
-				IconID.PLAYER_MODERATOR.toString() + "PMod");
-
-		addChatTest(
-				ChatMessageType.PUBLICCHAT,
-				"Long",
-				"The quick brown fox jumped over the lazy yellow @dog who was sleeping peacefully.");
+		addChatTest(ChatMessageType.PUBLICCHAT, "Long", "The quick brown fox jumped over the lazy yellow @dog who was sleeping peacefully.");
 	}
 
 	/*
@@ -146,49 +128,17 @@ public final class ChatMessageTests {
 		final String guestRank = clanRankIcon(GUEST_RANK_SPRITE);
 		final String gimRank = clanRankIcon(GIM_RANK_SPRITE);
 
-		addChatTest(
-				ChatMessageType.FRIENDSCHAT,
-				iconTag(FRIENDS_CHAT_ICON) + "Player",
-				"ChatXL FRIENDSCHAT test.",
-				CHANNEL_NAME);
-		addChatTest(
-				ChatMessageType.FRIENDSCHATNOTIFICATION,
-				"",
-				"ChatXL FRIENDSCHATNOTIFICATION test.",
-				CHANNEL_NAME);
+		addChatTest(ChatMessageType.FRIENDSCHAT, iconTag(FRIENDS_CHAT_ICON) + "Player", "ChatXL FRIENDSCHAT text.", CHANNEL_NAME);
+		addChatTest(ChatMessageType.FRIENDSCHATNOTIFICATION, "", "ChatXL FRIENDSCHATNOTIFICATION text.", CHANNEL_NAME);
 
-		addChatTest(
-				ChatMessageType.CLAN_CHAT,
-				clanRank + IconID.IRONMAN.toString() + "Player",
-				"ChatXL CLAN_CHAT test.",
-				CHANNEL_NAME);
-		addChatTest(
-				ChatMessageType.CLAN_MESSAGE,
-				"",
-				"ChatXL CLAN_MESSAGE test.",
-				CHANNEL_NAME);
+		addChatTest(ChatMessageType.CLAN_CHAT, clanRank + IconID.IRONMAN.toString() + "Player", "ChatXL CLAN_CHAT text.", CHANNEL_NAME);
+		addChatTest(ChatMessageType.CLAN_MESSAGE, "", "ChatXL CLAN_MESSAGE text.", CHANNEL_NAME);
 
-		addChatTest(
-				ChatMessageType.CLAN_GUEST_CHAT,
-				guestRank + "Player",
-				"ChatXL CLAN_GUEST_CHAT test.",
-				CHANNEL_NAME);
-		addChatTest(
-				ChatMessageType.CLAN_GUEST_MESSAGE,
-				"",
-				"ChatXL CLAN_GUEST_MESSAGE test.",
-				CHANNEL_NAME);
+		addChatTest(ChatMessageType.CLAN_GUEST_CHAT, guestRank + "Player", "ChatXL CLAN_GUEST_CHAT text.", CHANNEL_NAME);
+		addChatTest(ChatMessageType.CLAN_GUEST_MESSAGE, "", "ChatXL CLAN_GUEST_MESSAGE text.", CHANNEL_NAME);
 
-		addChatTest(
-				ChatMessageType.CLAN_GIM_CHAT,
-				gimRank + IconID.GROUP_IRONMAN.toString() + "Player",
-				"ChatXL CLAN_GIM_CHAT test.",
-				CHANNEL_NAME);
-		addChatTest(
-				ChatMessageType.CLAN_GIM_MESSAGE,
-				"",
-				"ChatXL CLAN_GIM_MESSAGE test.",
-				CHANNEL_NAME);
+		addChatTest(ChatMessageType.CLAN_GIM_CHAT, gimRank + IconID.GROUP_IRONMAN.toString() + "Player", "ChatXL CLAN_GIM_CHAT text.", CHANNEL_NAME);
+		addChatTest(ChatMessageType.CLAN_GIM_MESSAGE, "", "ChatXL CLAN_GIM_MESSAGE text.", CHANNEL_NAME);
 	}
 
 	/*
@@ -225,7 +175,7 @@ public final class ChatMessageTests {
 	 */
 
 	private void addChatTest(ChatMessageType type, String name) {
-		addChatTest(type, name, type.name() + " test.", null);
+		addChatTest(type, name, type.name() + " text.", null);
 	}
 
 	private void addChatTest(ChatMessageType type, String name, String message) {

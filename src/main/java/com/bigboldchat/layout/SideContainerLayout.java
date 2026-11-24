@@ -225,8 +225,7 @@ public final class SideContainerLayout {
 	 * Reattaches the inventory to the currently owned row layout after an overlay reset.
 	 */
 	public Result reconcileInventoryReset() {
-		if (gameStateSuspended || nativeLayoutRunning || !pluginTwoRows || !inventoryOffsetOwned()
-				|| !inventoryUserOverride || splitSide == CollisionManager.Side.NONE) {
+		if (gameStateSuspended || nativeLayoutRunning || !pluginTwoRows || !inventoryOffsetOwned() || !inventoryUserOverride || splitSide == CollisionManager.Side.NONE) {
 			return Result.NONE;
 		}
 
@@ -240,8 +239,7 @@ public final class SideContainerLayout {
 			return Result.NONE;
 		}
 
-		if (!guardedReset && inventoryAttachment(InterfaceBounds.liveBounds(widgets.container),
-				staticRowBounds, movableRowBounds) != rowInventoryAttachment) {
+		if (!guardedReset && inventoryAttachment(InterfaceBounds.liveBounds(widgets.container), staticRowBounds, movableRowBounds) != rowInventoryAttachment) {
 			return Result.NONE;
 		}
 
@@ -255,8 +253,7 @@ public final class SideContainerLayout {
 	public boolean guardInventoryOverlayReset() {
 		final OverlayState state = inventoryOverlayState;
 		final Point target = inventoryOwnedTarget;
-		if (!pluginTwoRows || !inventoryOffsetOwned() || !inventoryUserOverride || state == null || target == null
-				|| state.overlay.getPreferredLocation() != null || state.overlay.getPreferredPosition() != null) {
+		if (!pluginTwoRows || !inventoryOffsetOwned() || !inventoryUserOverride || state == null || target == null || state.overlay.getPreferredLocation() != null || state.overlay.getPreferredPosition() != null) {
 			return false;
 		}
 
@@ -407,8 +404,7 @@ public final class SideContainerLayout {
 			return Result.NONE;
 		}
 
-		final CollisionManager.Result collision =
-				collisionManager.resolveSideRows(chatboxBounds, staticRowBounds, movableRowBounds, splitSide);
+		final CollisionManager.Result collision = collisionManager.resolveSideRows(chatboxBounds, staticRowBounds, movableRowBounds, splitSide);
 
 		if (!collision.needsTwoRows()) {
 			return pluginTwoRows
@@ -509,8 +505,7 @@ public final class SideContainerLayout {
 			return false;
 		}
 
-		return !samePoint(state.overlay.getPreferredLocation(), state.temporaryLocation)
-				|| state.overlay.getPreferredPosition() != null;
+		return !samePoint(state.overlay.getPreferredLocation(), state.temporaryLocation) || state.overlay.getPreferredPosition() != null;
 	}
 
 	/**
@@ -536,8 +531,7 @@ public final class SideContainerLayout {
 	}
 
 	private Result reassertOwnedRows(Widgets widgets, CollisionManager.Side side, CollisionManager.Source source) {
-		if (!pluginTwoRows || !oneRowKnown || staticRowBounds == null || movableRowBounds == null
-				|| side == null || side == CollisionManager.Side.NONE) {
+		if (!pluginTwoRows || !oneRowKnown || staticRowBounds == null || movableRowBounds == null || side == null || side == CollisionManager.Side.NONE) {
 			return Result.NONE;
 		}
 
@@ -599,9 +593,7 @@ public final class SideContainerLayout {
 			revalidates++;
 		}
 
-		if (!inventoryDragDetected && inventoryUserOverride && !hasManualPlacement(INVENTORY_OVERLAY)
-				&& inventoryAttachment(InterfaceBounds.liveBounds(widgets.container),
-				staticRowBounds, movableRowBounds) == rowInventoryAttachment) {
+		if (!inventoryDragDetected && inventoryUserOverride && !hasManualPlacement(INVENTORY_OVERLAY) && inventoryAttachment(InterfaceBounds.liveBounds(widgets.container), staticRowBounds, movableRowBounds) == rowInventoryAttachment) {
 			inventoryUserOverride = false;
 		}
 
@@ -610,11 +602,7 @@ public final class SideContainerLayout {
 			final int inventoryY = rowInventoryAttachment == InventoryAttachment.BELOW
 					? containerRowBounds.y + rowHeight
 					: containerRowBounds.y - rowHeight;
-			final Rectangle ownedContainerBounds = new Rectangle(
-					containerRowBounds.x,
-					inventoryY,
-					containerRowBounds.width,
-					containerRowBounds.height);
+			final Rectangle ownedContainerBounds = new Rectangle(containerRowBounds.x, inventoryY, containerRowBounds.width, containerRowBounds.height);
 			inventoryOwnedTarget = new Point(ownedContainerBounds.x, ownedContainerBounds.y);
 			if (!inventoryUserOverride) {
 				targetContainerBounds = ownedContainerBounds;
@@ -638,8 +626,7 @@ public final class SideContainerLayout {
 		final Rectangle movableOverride = movableRowOwned
 				? new Rectangle(anchorX, upperRowY, movableRowBounds.width, movableRowBounds.height)
 				: null;
-		final InterfaceBounds.Overrides overrides = new InterfaceBounds.Overrides(
-				staticOverride, movableOverride, targetContainerBounds);
+		final InterfaceBounds.Overrides overrides = new InterfaceBounds.Overrides(staticOverride, movableOverride, targetContainerBounds);
 		return new Result(mutations, revalidates, overrides);
 	}
 
@@ -871,8 +858,7 @@ public final class SideContainerLayout {
 					return false;
 				}
 
-				inventoryOverlayState = new OverlayState(overlay, widget, copy(overlay.getPreferredLocation()),
-						overlay.getPreferredPosition(), new Rectangle(currentBounds));
+				inventoryOverlayState = new OverlayState(overlay, widget, copy(overlay.getPreferredLocation()), overlay.getPreferredPosition(), new Rectangle(currentBounds));
 			}
 
 			return applyOverlayState(inventoryOverlayState, targetX, targetY);
@@ -905,8 +891,7 @@ public final class SideContainerLayout {
 			revalidates++;
 		}
 
-		if (rowInventoryAttachment != InventoryAttachment.NONE && containerRowBounds != null
-				&& forceWidgetPosition(widgets.container, containerRowBounds.x, containerRowBounds.y)) {
+		if (rowInventoryAttachment != InventoryAttachment.NONE && containerRowBounds != null && forceWidgetPosition(widgets.container, containerRowBounds.x, containerRowBounds.y)) {
 			mutations++;
 			widgets.container.revalidate();
 			revalidates++;
@@ -949,9 +934,7 @@ public final class SideContainerLayout {
 				? new Point(state.preferredLocation.x + deltaX, state.preferredLocation.y + deltaY)
 				: new Point(targetX, targetY);
 
-		final boolean alreadyApplied = samePoint(state.overlay.getPreferredLocation(), temporaryLocation)
-				&& state.overlay.getPreferredPosition() == null && state.overlay.getBounds().x == targetX
-				&& state.overlay.getBounds().y == targetY;
+		final boolean alreadyApplied = samePoint(state.overlay.getPreferredLocation(), temporaryLocation) && state.overlay.getPreferredPosition() == null && state.overlay.getBounds().x == targetX && state.overlay.getBounds().y == targetY;
 		state.temporaryLocation = new Point(temporaryLocation);
 		if (alreadyApplied) {
 			forceWidgetPosition(state.widget, targetX, targetY);
@@ -976,15 +959,13 @@ public final class SideContainerLayout {
 			return hasUserDrag(state);
 		}
 
-		return !samePoint(state.overlay.getPreferredLocation(), state.preferredLocation)
-				|| state.overlay.getPreferredPosition() != state.preferredPosition;
+		return !samePoint(state.overlay.getPreferredLocation(), state.preferredLocation) || state.overlay.getPreferredPosition() != state.preferredPosition;
 	}
 
 	private boolean adoptInventoryGuard() {
 		final Point guarded = inventoryGuardLocation;
 		final OverlayState state = inventoryOverlayState;
-		if (guarded == null || state == null || !samePoint(state.overlay.getPreferredLocation(), guarded)
-				|| state.overlay.getPreferredPosition() != null) {
+		if (guarded == null || state == null || !samePoint(state.overlay.getPreferredLocation(), guarded) || state.overlay.getPreferredPosition() != null) {
 			return false;
 		}
 
@@ -1038,9 +1019,7 @@ public final class SideContainerLayout {
 				? new Point(state.preferredLocation.x + deltaX, state.preferredLocation.y + deltaY)
 				: new Point(targetX, targetY);
 
-		final boolean alreadyApplied = samePoint(state.overlay.getPreferredLocation(), temporaryLocation)
-				&& state.overlay.getPreferredPosition() == null && state.overlay.getBounds().x == targetX
-				&& state.overlay.getBounds().y == targetY;
+		final boolean alreadyApplied = samePoint(state.overlay.getPreferredLocation(), temporaryLocation) && state.overlay.getPreferredPosition() == null && state.overlay.getBounds().x == targetX && state.overlay.getBounds().y == targetY;
 		state.temporaryLocation = new Point(temporaryLocation);
 		if (alreadyApplied) {
 			forceWidgetPosition(widget, targetX, targetY);
@@ -1107,8 +1086,7 @@ public final class SideContainerLayout {
 			return true;
 		}
 
-		final boolean originalOverlayState = samePoint(state.overlay.getPreferredLocation(), state.preferredLocation)
-				&& state.overlay.getPreferredPosition() == state.preferredPosition;
+		final boolean originalOverlayState = samePoint(state.overlay.getPreferredLocation(), state.preferredLocation) && state.overlay.getPreferredPosition() == state.preferredPosition;
 		if (!originalOverlayState) {
 			inventoryForcedPosition = false;
 			return false;
@@ -1238,8 +1216,7 @@ public final class SideContainerLayout {
 	}
 
 	private static InventoryAttachment inventoryAttachment(Rectangle containerBounds, Rectangle staticBounds, Rectangle movableBounds) {
-		if (containerBounds == null || staticBounds == null || movableBounds == null
-				|| containerBounds.isEmpty() || staticBounds.isEmpty() || movableBounds.isEmpty()) {
+		if (containerBounds == null || staticBounds == null || movableBounds == null || containerBounds.isEmpty() || staticBounds.isEmpty() || movableBounds.isEmpty()) {
 			return InventoryAttachment.NONE;
 		}
 
@@ -1247,8 +1224,7 @@ public final class SideContainerLayout {
 		stripBounds.add(movableBounds);
 		final int containerRight = containerBounds.x + containerBounds.width;
 		final int stripRight = stripBounds.x + stripBounds.width;
-		final boolean horizontallyNear = containerBounds.x <= stripRight + INVENTORY_HORIZONTAL_TOLERANCE
-				&& containerRight >= stripBounds.x - INVENTORY_HORIZONTAL_TOLERANCE;
+		final boolean horizontallyNear = containerBounds.x <= stripRight + INVENTORY_HORIZONTAL_TOLERANCE && containerRight >= stripBounds.x - INVENTORY_HORIZONTAL_TOLERANCE;
 		if (!horizontallyNear) {
 			return InventoryAttachment.NONE;
 		}
@@ -1277,8 +1253,7 @@ public final class SideContainerLayout {
 	}
 
 	private boolean inventoryOffsetOwned() {
-		return rowInventoryAttachment == InventoryAttachment.ABOVE && verticalSplit == VerticalSplit.UP && movableRowOwned
-				|| rowInventoryAttachment == InventoryAttachment.BELOW && verticalSplit == VerticalSplit.DOWN && staticRowOwned;
+		return rowInventoryAttachment == InventoryAttachment.ABOVE && verticalSplit == VerticalSplit.UP && movableRowOwned || rowInventoryAttachment == InventoryAttachment.BELOW && verticalSplit == VerticalSplit.DOWN && staticRowOwned;
 	}
 
 	private VerticalSplit chooseVerticalSplit(int rowHeight) {
