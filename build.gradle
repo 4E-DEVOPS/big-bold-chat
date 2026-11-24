@@ -29,7 +29,7 @@ dependencies {
 }
 
 group = 'com.bigboldchat'
-version = '2.5.2'
+version = '2.5.3'
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
@@ -49,6 +49,7 @@ tasks.register('run', JavaExec) {
 }
 
 tasks.register('shadowJar', Jar) {
+    description = 'Builds a bundled ChatXL JAR with test launcher and runtime dependencies.'
 	dependsOn configurations.testRuntimeClasspath
 	manifest {
 		attributes('Main-Class': pluginMainClass, 'Multi-Release': true)
@@ -86,13 +87,15 @@ tasks.withType(Test).configureEach {
 
 tasks.register('testAll') {
 	group = 'verification'
-	description = 'Runs all BigBoldChat deterministic test suites.'
+	description = 'Runs all BigBoldChat deterministic unit-test suites.'
 
 	dependsOn(
 			'testChat',
 			'testChatbox',
 			'testConfig',
+            'testDialogue',
 			'testFonts',
+            'testLayout',
 	)
 }
 
@@ -120,7 +123,7 @@ tasks.register('testChat', Test) {
 
 tasks.register('testChatbox', Test) {
 	group = 'verification'
-	description = 'Tests BigBoldChat chatbox user interface.'
+	description = 'Tests BigBoldChat chatbox geometry, placement, native modes, center ownership, restoration, and core-service boundaries.'
 
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
@@ -128,7 +131,9 @@ tasks.register('testChatbox', Test) {
 	useJUnit()
 
 	filter {
-		includeTestsMatching 'com.bigboldchat.chatbox.ChatboxResizeServiceTest'
+        includeTestsMatching 'com.bigboldchat.chatbox.ChatboxCoreServiceTest'
+        includeTestsMatching 'com.bigboldchat.chatbox.ChatboxGeometryTest'
+        includeTestsMatching 'com.bigboldchat.chatbox.ChatboxPlacementTest'
 	}
 
 	testLogging {
@@ -139,7 +144,7 @@ tasks.register('testChatbox', Test) {
 
 tasks.register('testConfig', Test) {
 	group = 'verification'
-	description = 'Tests BigBoldChat player-facing font names and RuneScape FontID mappings.'
+	description = 'Tests BigBoldChat font display names, ordering, and RuneScape font ID mappings.'
 
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
@@ -156,9 +161,33 @@ tasks.register('testConfig', Test) {
 	}
 }
 
+tasks.register('testDialogue', Test) {
+    group = 'verification'
+    description = 'Tests BigBoldChat dialogue lifecycle, fitting, adaptive centering, collision recovery, clipping, and restoration.'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    useJUnit()
+
+    filter {
+        includeTestsMatching 'com.bigboldchat.dialogue.DialogueCoreServiceTest'
+        includeTestsMatching 'com.bigboldchat.dialogue.DialogueFitSolverTest'
+        includeTestsMatching 'com.bigboldchat.dialogue.DialoguePromptsTest'
+        includeTestsMatching 'com.bigboldchat.dialogue.DialogueResizeServiceTest'
+        includeTestsMatching 'com.bigboldchat.dialogue.DialogueSessionTest'
+        includeTestsMatching 'com.bigboldchat.dialogue.DialogueViewportTest'
+    }
+
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+    }
+}
+
 tasks.register('testFonts', Test) {
 	group = 'verification'
-	description = 'Tests BigBoldChat font registry resolution, default fallback behavior, and tuned font-profile geometry and spacing values.'
+	description = 'Tests BigBoldChat font registry resolution, fallback behavior, and tuned per-font geometry and spacing profiles.'
 
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
@@ -174,4 +203,23 @@ tasks.register('testFonts', Test) {
 		events 'passed', 'skipped', 'failed'
 		exceptionFormat 'full'
 	}
+}
+
+tasks.register('testLayout', Test) {
+    group = 'verification'
+    description = 'Tests BigBoldChat collision direction, canvas clipping, obstacle recovery, and minimum viewport geometry.'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    useJUnit()
+
+    filter {
+        includeTestsMatching 'com.bigboldchat.layout.ChatboxBoundsTest'
+    }
+
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+    }
 }
