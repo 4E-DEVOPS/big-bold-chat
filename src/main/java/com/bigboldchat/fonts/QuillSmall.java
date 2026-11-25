@@ -7,7 +7,7 @@ public final class QuillSmall implements ChatFontProfile {
 	private static final int INPUT_Y_OFFSET = 1;
 
 	private static final int LINE_HEIGHT_ADJUSTMENT = 3;
-	private static final int ROW_Y_OFFSET = 0;
+	private static final int ROW_Y_OFFSET = 2; //2
 
 	private static final int PRIVATE_CHAT_GAP = -2;
 

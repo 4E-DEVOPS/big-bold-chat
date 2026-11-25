@@ -10,10 +10,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
 import net.runelite.api.FontTypeFace;
+import net.runelite.api.IndexedSprite;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetUtil;
@@ -45,6 +48,11 @@ public final class FontMeasurementService {
 	 * Separation between text and scrollbar.
 	 */
 	private static final int SCROLLBAR_PADDING = 3;
+
+	// Inline <img> tags contribute sprite pixels, not literal text characters.
+	private static final Pattern INLINE_IMAGE = Pattern.compile("<img=(\\d+)>", Pattern.CASE_INSENSITIVE);
+	private static final Pattern WRAP_TOKENS = Pattern.compile("\\S+|\\s+");
+	private static final int FALLBACK_IMAGE_SIZE = 16;
 
 	private final Client client;
 	private final ChatTextNormalizer textNormalizer;
@@ -262,7 +270,7 @@ public final class FontMeasurementService {
 
 		// Apply the selected profile's line-height adjustment.
 		final int lineHeightAdjustment = fontProfile.getLineHeightAdjustment();
-		final int selectedLineHeight = Math.max(1, nativeLineHeight + lineHeightAdjustment);
+		final int selectedLineHeight = Math.max(Math.max(1, nativeLineHeight + lineHeightAdjustment), inlineImageHeight(selectedMeasurementBody));
 
 		final int rowYOffset = fontProfile.getRowYOffset();
 
@@ -719,7 +727,7 @@ public final class FontMeasurementService {
 			return 1;
 		}
 
-		if (font.getTextWidth(text) <= maxWidth) {
+		if (inlineTextWidth(font, text) <= maxWidth) {
 			return 1;
 		}
 
@@ -728,43 +736,109 @@ public final class FontMeasurementService {
 			return 1;
 		}
 
-		final String[] words = trimmed.split("\\s+");
+		/*
+		 * Preserve the exact whitespace between tokens. Rich chat messages
+		 * frequently separate inline item icons with two spaces, which the
+		 * native renderer measures but split("\\s+") would collapse.
+		 * Leading spaces are discarded only when a new wrapped line begins.
+		 */
+		final Matcher matcher = WRAP_TOKENS.matcher(trimmed);
 		int lines = 1;
 		String currentLine = "";
+		String pendingWhitespace = "";
 
-		for (String word : words) {
-			if (word.isEmpty()) {
+		while (matcher.find()) {
+			final String token = matcher.group();
+			if (Character.isWhitespace(token.charAt(0))) {
+				pendingWhitespace = token;
 				continue;
 			}
 
-			/*
-			 * Don't hard-wrap one uninterrupted token character by character.
-			 * This applies uniformly to letters, digits, punctuation, and symbols.
-			 */
-			if (font.getTextWidth(word) > maxWidth) {
+			/* Keep a single uninterrupted oversized token intact. */
+			if (inlineTextWidth(font, token) > maxWidth) {
 				if (!currentLine.isEmpty()) {
 					lines++;
 				}
 
-				currentLine = word;
+				currentLine = token;
+				pendingWhitespace = "";
 				continue;
 			}
 
 			if (currentLine.isEmpty()) {
-				currentLine = word;
-				continue;
-			}
-
-			final String candidate = currentLine + " " + word;
-			if (font.getTextWidth(candidate) <= maxWidth) {
-				currentLine = candidate;
+				currentLine = token;
 			} else {
-				lines++;
-				currentLine = word;
+				final String candidate = currentLine + pendingWhitespace + token;
+				if (inlineTextWidth(font, candidate) <= maxWidth) {
+					currentLine = candidate;
+				} else {
+					lines++;
+					currentLine = token;
+				}
 			}
+			pendingWhitespace = "";
 		}
 
 		return Math.max(1, lines);
+	}
+
+
+	/*
+	 * FontTypeFace text measurement is not a reliable source of item-icon
+	 * widths across all mod-icon sets. Count each indexed sprite explicitly,
+	 * retaining RuneLite's normal font measurement for the remaining markup.
+	 * This is used only for chat-body wrapping, not prefix/rank positioning.
+	 */
+	private int inlineTextWidth(FontTypeFace font, String text) {
+		if (text == null || text.isEmpty()) {
+			return 0;
+		}
+
+		final Matcher matcher = INLINE_IMAGE.matcher(text);
+		if (!matcher.find()) {
+			return font.getTextWidth(text);
+		}
+
+		final StringBuilder withoutImages = new StringBuilder(text.length());
+		int totalSpriteWidth = 0;
+		int offset = 0;
+		do {
+			withoutImages.append(text, offset, matcher.start());
+			totalSpriteWidth += spriteDimension(matcher.group(1), true);
+			offset = matcher.end();
+		} while (matcher.find());
+		withoutImages.append(text, offset, text.length());
+		return font.getTextWidth(withoutImages.toString()) + totalSpriteWidth;
+	}
+
+	int inlineImageHeight(String text) {
+		if (text == null || text.isEmpty()) {
+			return 0;
+		}
+
+		final Matcher matcher = INLINE_IMAGE.matcher(text);
+		int maximum = 0;
+		while (matcher.find()) {
+			maximum = Math.max(maximum, spriteDimension(matcher.group(1), false));
+		}
+		return maximum;
+	}
+
+	private int spriteDimension(String indexText, boolean horizontal) {
+		final int index;
+		try {
+			index = Integer.parseInt(indexText);
+		} catch (NumberFormatException exception) {
+			return FALLBACK_IMAGE_SIZE;
+		}
+
+		final IndexedSprite[] sprites = client != null ? client.getModIcons() : null;
+		if (sprites == null || index < 0 || index >= sprites.length || sprites[index] == null) {
+			return FALLBACK_IMAGE_SIZE;
+		}
+
+		final int dimension = horizontal ? sprites[index].getWidth() : sprites[index].getHeight();
+		return dimension > 0 ? dimension : FALLBACK_IMAGE_SIZE;
 	}
 
 	private int ceilDiv(int numerator, int denominator) {

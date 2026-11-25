@@ -286,6 +286,22 @@ public final class FontLayoutService {
 		changed |= setOriginalWidthIfChanged(bodyWidget, state.selectedBodyWidth);
 
 		/*
+		 * The native script may round the selected row height upward because
+		 * its constructor multiplies one integer value by the native line count.
+		 * Preserve the script's row reservation, but remove excess height from
+		 * the bottom-aligned body so its first line matches the prefix baseline.
+		 * Only adjust multiline image-rich normal chat rows.
+		 */
+		if (state.scriptId == FontMeasurementService.CHAT_BODY_SCRIPT
+				&& state.selectedLines > 1
+				&& state.allocatedHeight > state.desiredHeight
+				&& state.selectedRawBodyText != null
+				&& state.selectedRawBodyText.contains("<img=")
+				&& !isSplitPrivateConstruction(state)) {
+			changed |= setOriginalHeightIfChanged(bodyWidget, state.desiredHeight);
+		}
+
+		/*
 		 * Queue component-specific body Y correction for finalize.
 		 * Script 199 uses only the PRE row-Y adjustment.
 		 */

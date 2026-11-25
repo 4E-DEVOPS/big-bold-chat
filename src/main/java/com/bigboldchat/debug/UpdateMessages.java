@@ -25,7 +25,7 @@ public final class UpdateMessages {
 			+ " Report any issues you find to Github.";
 	private static final String UNINSTALL_MESSAGE = "Thank you for using ChatXL!"
 			+ " Please submit a review/issue report on Github of your experience.";
-	private static final String UPDATE_MESSAGE = "Added dialogue and prompt font support. Resolved Quest notices and Collection Log messages (thanks to the issue report from <shad=ffffff>@Godly</shad>). Chatbox resizing UX is planned for the next update, so stay tuned!";
+	private static final String UPDATE_MESSAGE = "Added dialogue and prompt font support. Resolved clan notification and collection log messages (thanks to the issue report from <shad=ffffff>@Godly</shad>). Chatbox resizing UX is planned for the next update, so stay tuned!";
 
 	private final Client client;
 	private final ClientThread clientThread;
