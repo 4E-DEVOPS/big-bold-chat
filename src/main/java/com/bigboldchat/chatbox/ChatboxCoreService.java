@@ -36,6 +36,8 @@ public abstract class ChatboxCoreService {
 
 	public static final int CHAT_VISIBILITY = 923;
 	protected static final int CHAT_ONCHATTRANSMIT = 663;
+	private static final int CHAT_RESIZE = 924;
+	private static final int CHAT_INITIALIZE = 925;
 	protected static final int TOPLEVEL_RELAYOUT = 1972;
 	protected static final int SIDE_CONTAINER_UPDATE = 9336;
 
@@ -98,6 +100,19 @@ public abstract class ChatboxCoreService {
 	protected int lastChatGraphic = -1;
 
 	protected ScrollBaseline liveBaseline;
+	private int chatResizeDepth;
+	private Widget chatResizeArea;
+	private ChatboxLayout chatResizeLayout;
+	private int chatResizeWidth;
+	private int chatResizeHeight;
+	private int chatResizeContentHeight;
+
+	// Preserve the native scroll anchor across widget teardown, not the provisional replacement.
+	private ScrollBaseline hopScrollBaseline;
+	private int hopScrollY;
+	private int hopScrollSize;
+	private boolean hopScrollSeeded;
+	private int scrollEpoch;
 	protected GeometryState geometryState;
 	protected InterfaceBounds.Overrides collisionInterfaceOverrides;
 
@@ -353,6 +368,14 @@ public abstract class ChatboxCoreService {
 		return layout == ChatboxLayout.RESIZABLE_CLASSIC || layout == ChatboxLayout.RESIZABLE_MODERN;
 	}
 
+	protected static boolean isFixedLayout(ChatboxLayout layout) {
+		return layout == ChatboxLayout.FIXED;
+	}
+
+	private static boolean supportsScrollPreservation(ChatboxLayout layout) {
+		return isResizableLayout(layout) || isFixedLayout(layout);
+	}
+
 	protected void beginLoginStabilization() {
 		loginGeometryPending = true;
 		resetLoginSamples();
@@ -398,7 +421,14 @@ public abstract class ChatboxCoreService {
 			return;
 		}
 
-		if (layout == ChatboxLayout.FIXED) {
+		if (isFixedLayout(layout)) {
+			if (hopScrollBaseline != null) {
+				if (!isFixedScrollReady(client.getWidget(InterfaceID.Chatbox.SCROLLAREA))) {
+					return;
+				}
+				// Failsafe if the expected initialization boundary was not observed.
+				clearHopScroll();
+			}
 			cancelLoginStabilization();
 			chatboxBoundsTracker.reset();
 			modalRelayout.cancel();
@@ -441,6 +471,8 @@ public abstract class ChatboxCoreService {
 		modalRelayout.cancel();
 
 		final ResizeResult settled = applySize(width, height);
+		// Failsafe if the expected initialization boundary was not observed.
+		clearHopScroll();
 		if (settled.isApplied()) {
 			widthRefreshPending |= settled.isWidthChanged();
 			heightRefreshPending |= settled.isHeightChanged();
@@ -563,6 +595,10 @@ public abstract class ChatboxCoreService {
 	}
 
 	protected void finishLiveScroll() {
+		finishLiveScroll(false);
+	}
+
+	private void finishLiveScroll(boolean restorePosition) {
 		if (liveDepth <= 0) {
 			return;
 		}
@@ -579,13 +615,105 @@ public abstract class ChatboxCoreService {
 		liveWidthChanged = false;
 		liveHeightChanged = false;
 
-		if (widthChanged || heightChanged) {
-			restoreScrollBaseline(baseline, true);
+		if (widthChanged || heightChanged || restorePosition) {
+			restoreScrollBaseline(baseline, widthChanged || heightChanged);
+		}
 
+		if (widthChanged || heightChanged) {
 			// Queue retained-chat reconstruction for the render boundary.
 			widthRefreshPending |= widthChanged;
 			heightRefreshPending |= heightChanged;
 		}
+	}
+
+	// Native 924 can resize the viewport before its nested 1972 callbacks.
+	private void beginChatResizeScroll(ChatboxLayout layout) {
+		if (chatResizeDepth > 0) {
+			chatResizeDepth++;
+			return;
+		}
+		if (liveDepth != 0 || hopScrollBaseline != null || client.getGameState() != GameState.LOGGED_IN || isDialogueHostSessionActive()) {
+			return;
+		}
+
+		final Widget area = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
+		if (area == null || area.isHidden() || area.getWidth() <= 0 || area.getHeight() <= 0 || area.getScrollHeight() <= 0) {
+			return;
+		}
+		final int scrollY = area.getScrollY();
+		if (scrollY < 0 || scrollY > Math.max(0, area.getScrollHeight() - area.getHeight())) {
+			return;
+		}
+		// During initialization, do not treat unsynchronized provisional rows as an anchor.
+		if (loginGeometryPending && (client.getVarcIntValue(VarClientID.CHAT_LASTSCROLLPOS) != scrollY || client.getVarcIntValue(VarClientID.CHAT_LASTSCROLLSIZE) != area.getScrollHeight())) {
+			return;
+		}
+
+		chatResizeDepth = 1;
+		chatResizeArea = area;
+		chatResizeLayout = layout;
+		chatResizeWidth = area.getWidth();
+		chatResizeHeight = area.getHeight();
+		chatResizeContentHeight = area.getScrollHeight();
+		beginLiveScroll();
+	}
+
+	private void finishChatResizeScroll(ChatboxLayout layout) {
+		if (chatResizeDepth == 0) {
+			return;
+		}
+		if (chatResizeDepth > 1) {
+			chatResizeDepth--;
+			return;
+		}
+		if (liveDepth != 1) {
+			// An incomplete nested callback must not strand live-scroll ownership.
+			widthRefreshPending |= liveWidthChanged;
+			heightRefreshPending |= liveHeightChanged;
+			cancelChatResizeScroll();
+			return;
+		}
+		chatResizeDepth = 0;
+
+		final Widget area = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
+		final ScrollBaseline baseline = liveBaseline;
+		boolean restorePosition = false;
+		if (area != chatResizeArea || layout != chatResizeLayout || area == null || area.isHidden() || area.getWidth() <= 0 || area.getHeight() <= 0 || area.getScrollHeight() <= 0 || client.getGameState() != GameState.LOGGED_IN || hopScrollBaseline != null || isDialogueHostSessionActive()) {
+			// Keep any geometry refresh, but never restore into an unrelated or invalid host.
+			liveBaseline = null;
+		} else {
+			liveWidthChanged |= area.getWidth() != chatResizeWidth;
+			liveHeightChanged |= area.getHeight() != chatResizeHeight;
+			if (baseline != null) {
+				final int bottom = Math.max(0, area.getScrollHeight() - area.getHeight());
+				final int scrollY = area.getScrollY();
+				switch (baseline.position) {
+					case TOP: restorePosition = scrollY != 0;
+						break;
+					case BOTTOM: restorePosition = scrollY != bottom;
+						break;
+					case MIDDLE: restorePosition = area.getScrollHeight() == chatResizeContentHeight && scrollY + area.getHeight() != baseline.viewportBottom;
+						break;
+				}
+			}
+		}
+
+		chatResizeArea = null;
+		chatResizeLayout = null;
+		finishLiveScroll(restorePosition);
+	}
+
+	private void cancelChatResizeScroll() {
+		if (chatResizeDepth == 0) {
+			return;
+		}
+		chatResizeDepth = 0;
+		chatResizeArea = null;
+		chatResizeLayout = null;
+		liveDepth = 0;
+		liveBaseline = null;
+		liveWidthChanged = false;
+		liveHeightChanged = false;
 	}
 
 	public LiveRefresh consumeLiveRefresh() {
@@ -600,8 +728,70 @@ public abstract class ChatboxCoreService {
 		return refresh;
 	}
 
+	private void captureHopScroll() {
+		if (hopScrollBaseline != null || !supportsScrollPreservation(getLayout())) {
+			return;
+		}
+
+		final Widget area = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
+		if (area == null || area.isHidden() || area.getHeight() <= 0 || area.getScrollHeight() <= 0) {
+			return;
+		}
+
+		final int scrollY = area.getScrollY();
+		final int scrollSize = area.getScrollHeight();
+		if (scrollY < 0 || scrollY > Math.max(0, scrollSize - area.getHeight())) {
+			return;
+		}
+
+		// Invalidate any earlier baseline retained by a queued rebuild.
+		scrollEpoch++;
+		hopScrollBaseline = captureScrollBaseline(area);
+		hopScrollY = scrollY;
+		hopScrollSize = scrollSize;
+	}
+
+	private void seedHopScroll() {
+		if (hopScrollBaseline == null || hopScrollSeeded || client.getGameState() != GameState.LOGGED_IN) {
+			return;
+		}
+
+		// Native chat reconstruction adjusts the saved position for the retained history.
+		client.setVarcIntValue(VarClientID.CHAT_LASTSCROLLPOS, hopScrollY);
+		client.setVarcIntValue(VarClientID.CHAT_LASTSCROLLSIZE, hopScrollSize);
+		hopScrollSeeded = true;
+	}
+
+	private void finishHopScroll() {
+		if (hopScrollBaseline != null && hopScrollSeeded) {
+			clearHopScroll();
+		}
+	}
+
+	private void clearHopScroll() {
+		hopScrollBaseline = null;
+		hopScrollY = 0;
+		hopScrollSize = 0;
+		hopScrollSeeded = false;
+	}
+
+	// Fixed uses native geometry; only sample a fully initialized, synchronized viewport.
+	private boolean isFixedScrollReady(Widget area) {
+		if (area == null || area.isHidden() || area.getWidth() <= 0 || area.getHeight() <= 0 || area.getScrollHeight() <= 0) {
+			return false;
+		}
+
+		final int scrollY = area.getScrollY();
+		return scrollY >= 0 && scrollY <= Math.max(0, area.getScrollHeight() - area.getHeight()) && client.getVarcIntValue(VarClientID.CHAT_LASTSCROLLPOS) == scrollY && client.getVarcIntValue(VarClientID.CHAT_LASTSCROLLSIZE) == area.getScrollHeight();
+	}
+
 	public ScrollBaseline captureScrollBaseline() {
-		if (!isResizableLayout(getLayout())) {
+		if (hopScrollBaseline != null) {
+			return null;
+		}
+
+		final ChatboxLayout layout = getLayout();
+		if (!supportsScrollPreservation(layout)) {
 			return null;
 		}
 
@@ -609,7 +799,14 @@ public abstract class ChatboxCoreService {
 		if (scrollArea == null) {
 			return null;
 		}
+		if (isFixedLayout(layout) && (client.getGameState() != GameState.LOGGED_IN || !isFixedScrollReady(scrollArea))) {
+			return null;
+		}
 
+		return captureScrollBaseline(scrollArea);
+	}
+
+	private ScrollBaseline captureScrollBaseline(Widget scrollArea) {
 		final int scrollY = Math.max(0, scrollArea.getScrollY());
 		final int height = Math.max(0, scrollArea.getHeight());
 		final int bottom = Math.max(0, scrollArea.getScrollHeight() - height);
@@ -623,7 +820,7 @@ public abstract class ChatboxCoreService {
 			position = ScrollPosition.MIDDLE;
 		}
 
-		return new ScrollBaseline(position, scrollY + height);
+		return new ScrollBaseline(position, scrollY + height, scrollEpoch);
 	}
 
 	public void restoreScrollBaseline(ScrollBaseline baseline) {
@@ -635,7 +832,15 @@ public abstract class ChatboxCoreService {
 	}
 
 	protected void restoreScrollBaseline(ScrollBaseline baseline, boolean reanchor) {
-		if (baseline == null || !isResizableLayout(getLayout())) {
+		// Do not let nested initialization or an old queued rebuild replace the hop anchor.
+		if (hopScrollBaseline != null) {
+			return;
+		}
+		if (baseline != null && baseline.epoch != scrollEpoch) {
+			return;
+		}
+		final ChatboxLayout layout = getLayout();
+		if (baseline == null || !supportsScrollPreservation(layout)) {
 			return;
 		}
 
@@ -643,9 +848,12 @@ public abstract class ChatboxCoreService {
 		if (scrollArea == null) {
 			return;
 		}
+		if (isFixedLayout(layout) && (client.getGameState() != GameState.LOGGED_IN || !isFixedScrollReady(scrollArea))) {
+			return;
+		}
 
 		final int height = Math.max(0, scrollArea.getHeight());
-		if (reanchor && baseline.position != ScrollPosition.TOP) {
+		if (reanchor && isResizableLayout(layout) && baseline.position != ScrollPosition.TOP) {
 			reanchorScrollBottom(scrollArea, height);
 		}
 
@@ -1043,6 +1251,14 @@ public abstract class ChatboxCoreService {
 			return;
 		}
 
+		cancelChatResizeScroll();
+
+		if (gameState == GameState.HOPPING) {
+			captureHopScroll();
+		} else if (gameState != GameState.LOADING && gameState != GameState.LOGGED_IN) {
+			clearHopScroll();
+		}
+
 		// Discard transient tracking; RuneLite retains the saved overlay position.
 		onDialogueGameStateReset();
 		pendingNormalRestoreBounds = null;
@@ -1068,8 +1284,9 @@ public abstract class ChatboxCoreService {
 	}
 
 	protected void handleInactiveLayout(ChatboxLayout layout) {
+		cancelChatResizeScroll();
 		// Fixed restores ChatXL-owned shared geometry; UNKNOWN clears transient state only.
-		if (layout == ChatboxLayout.FIXED && resizedLayoutApplied) {
+		if (isFixedLayout(layout) && resizedLayoutApplied) {
 			restoreSharedGeometry();
 		}
 
@@ -1155,6 +1372,8 @@ public abstract class ChatboxCoreService {
 
 	// Releases owned widget geometry and restores RuneLite's native chatbox layout.
 	public void restoreNativeSize() {
+		cancelChatResizeScroll();
+		clearHopScroll();
 		// Releases a pending close guard when ChatXL is disabled mid-dialogue.
 		onDialogueNativeGeometryRestore();
 		final ChatboxLayout layout = getLayout();
@@ -1243,12 +1462,19 @@ public abstract class ChatboxCoreService {
 		}
 
 		final ChatboxLayout layout = getLayout();
+		final int scriptId = event.getScriptId();
+		if (scriptId == CHAT_INITIALIZE && supportsScrollPreservation(layout)) {
+			seedHopScroll();
+		}
+
 		if (!isResizableLayout(layout)) {
 			handleInactiveLayout(layout);
 			return ResizeResult.NOT_APPLIED;
 		}
 
-		final int scriptId = event.getScriptId();
+		if (scriptId == CHAT_RESIZE) {
+			beginChatResizeScroll(layout);
+		}
 
 		onDialogueScriptPreFired(scriptId);
 
@@ -1322,12 +1548,19 @@ public abstract class ChatboxCoreService {
 		}
 
 		final ChatboxLayout layout = getLayout();
+		final int scriptId = event.getScriptId();
+		if (scriptId == CHAT_INITIALIZE && supportsScrollPreservation(layout)) {
+			finishHopScroll();
+		}
+
 		if (!isResizableLayout(layout)) {
 			handleInactiveLayout(layout);
 			return ResizeResult.NOT_APPLIED;
 		}
 
-		final int scriptId = event.getScriptId();
+		if (scriptId == CHAT_RESIZE) {
+			finishChatResizeScroll(layout);
+		}
 		if (scriptId == CHAT_VISIBILITY) {
 			final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
 			if (nativeRevealActive && (chatArea == null || chatArea.isSelfHidden())) {
@@ -1730,6 +1963,12 @@ public abstract class ChatboxCoreService {
 	 * only an aligned normal host for durable placement updates.
 	 */
 	public void reconcileBeforeRender(int width, int height) {
+		// A synchronous script should have completed before rendering. Release an unmatched scope.
+		if (chatResizeDepth > 0) {
+			widthRefreshPending |= liveWidthChanged;
+			heightRefreshPending |= liveHeightChanged;
+			cancelChatResizeScroll();
+		}
 		final ChatboxLayout layout = getLayout();
 		if (!isResizableLayout(layout)) {
 			modalRelayout.bypass(null);
@@ -1940,10 +2179,12 @@ public abstract class ChatboxCoreService {
 	public static final class ScrollBaseline {
 		private final ScrollPosition position;
 		private final int viewportBottom;
+		private final int epoch;
 
-		private ScrollBaseline(ScrollPosition position, int viewportBottom) {
+		private ScrollBaseline(ScrollPosition position, int viewportBottom, int epoch) {
 			this.position = position;
 			this.viewportBottom = viewportBottom;
+			this.epoch = epoch;
 		}
 	}
 
