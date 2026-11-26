@@ -2,6 +2,7 @@ package com.bigboldchat.layout;
 
 import java.awt.Rectangle;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -144,6 +145,153 @@ public final class InterfaceBounds {
 			result.append(" | ").append(obstacle.getKey()).append('=').append(describeForDiagnostics(bounds)).append(desired != null && desired.intersects(bounds) ? "[HIT]" : "[CLEAR]");
 		}
 		return result.toString();
+	}
+
+	// Select the main-modal mount from the same top-level layout used by capture().
+	private static Widget mainModalMount(Client client) {
+		if (client == null || client.getComponentTable() == null) {
+			return null;
+		}
+		final int componentId;
+		switch (client.getTopLevelInterfaceId()) {
+			case InterfaceID.TOPLEVEL_OSRS_STRETCH: componentId = InterfaceID.ToplevelOsrsStretch.MAINMODAL;
+				break;
+			case InterfaceID.TOPLEVEL_PRE_EOC: componentId = InterfaceID.ToplevelPreEoc.MAINMODAL;
+				break;
+			default:
+				return null;
+		}
+		return client.getComponentTable().get(componentId) != null ? client.getWidget(componentId) : null;
+	}
+
+	// Returns the visible main-modal root, or null when absent.
+	public static Widget mainModalRoot(Client client) {
+		final Widget mount = mainModalMount(client);
+		if (mount == null || mount.isHidden()) {
+			return null;
+		}
+		final Widget[] roots = mount.getNestedChildren();
+		if (roots != null) {
+			for (Widget root : roots) {
+				if (root != null && !root.isHidden()) {
+					return root;
+				}
+			}
+		}
+		return null;
+	}
+
+	// Returns the same actual content footprint used by the collision solver.
+	public static Rectangle mainModalContentBounds(Client client) {
+		final Widget mount = mainModalMount(client);
+		if (mount == null) {
+			return null;
+		}
+		final Rectangle canvas = new Rectangle(0, 0, Math.max(0, client.getCanvasWidth()), Math.max(0, client.getCanvasHeight()));
+		return mountedContentBounds(mount, canvas);
+	}
+
+	// Other live obstacles whose movement takes precedence over modal settlement.
+	public static List<Rectangle> otherObstacleBounds(Client client) {
+		final Rectangle canvas = new Rectangle(0, 0, Math.max(0, client.getCanvasWidth()), Math.max(0, client.getCanvasHeight()));
+		if (client.getTopLevelInterfaceId() == InterfaceID.TOPLEVEL_OSRS_STRETCH) {
+			return Arrays.asList(liveBounds(client.getWidget(InterfaceID.ToplevelOsrsStretch.SIDE_MENU)), liveBounds(client.getWidget(InterfaceID.ToplevelOsrsStretch.MAP_CONTAINER)), liveBounds(client.getWidget(InterfaceID.ToplevelOsrsStretch.ORBS)), mountedObstacleBounds(client, canvas, InterfaceID.ToplevelOsrsStretch.FLOATER)
+			);
+		}
+		if (client.getTopLevelInterfaceId() == InterfaceID.TOPLEVEL_PRE_EOC) {
+			return Arrays.asList(liveBounds(client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_BACKGROUND)), liveBounds(client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_STATIC_LAYER)), liveBounds(client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_MOVABLE_LAYER)), liveBounds(client.getWidget(InterfaceID.ToplevelPreEoc.SIDE_CONTAINER)), liveBounds(client.getWidget(InterfaceID.ToplevelPreEoc.MAP_CONTAINER)), liveBounds(client.getWidget(InterfaceID.ToplevelPreEoc.ORBS)), mountedObstacleBounds(client, canvas, InterfaceID.ToplevelPreEoc.FLOATER)
+			);
+		}
+		return Collections.emptyList();
+	}
+
+	private static Rectangle mountedObstacleBounds(Client client, Rectangle canvas, int componentId) {
+		return client.getComponentTable() != null && client.getComponentTable().get(componentId) != null ? mountedContentBounds(client.getWidget(componentId), canvas) : null;
+	}
+
+	/* Tracks main-modal root identity and bounded render settlement per chatbox service.
+	 * Changes to a continuously mounted root's bounds alone do not start a hold. */
+	public static final class ModalRelayout {
+		private static final int SETTLED_RENDER_SAMPLES = 2;
+		private static final int MAX_RENDER_SAMPLES = 4;
+
+		private Object mountedRoot;
+		private boolean active;
+		private int renderSamples;
+		private int stableSamples;
+		private Rectangle previousFootprint;
+
+		public boolean needsObservation(Object root) {
+			return active || root != mountedRoot;
+		}
+
+		private void observe(Object root) {
+			if (root == mountedRoot) {
+				return;
+			}
+			mountedRoot = root;
+			if (!active) {
+				active = true;
+				renderSamples = 0;
+			}
+			/* A mount transition invalidates previous samples, even between renders.
+			 * Do not reset the total render budget during an active transaction. */
+			stableSamples = 0;
+			previousFootprint = null;
+		}
+
+		// Observe mount changes before any collision solve.
+		public boolean beforeGeometryUpdate(Object root) {
+			observe(root);
+			return active;
+		}
+
+		// Release after two stable render samples or four total samples.
+		public boolean beforeRender(Object root, Rectangle footprint) {
+			observe(root);
+			if (!active) {
+				return false;
+			}
+
+			renderSamples++;
+			final boolean ready = root == null || footprint != null;
+			if (!ready) {
+				stableSamples = 0;
+			} else if (sameFootprint(previousFootprint, footprint)) {
+				stableSamples++;
+			} else {
+				stableSamples = 1;
+			}
+			previousFootprint = footprint != null ? new Rectangle(footprint) : null;
+
+			if (stableSamples >= SETTLED_RENDER_SAMPLES || renderSamples >= MAX_RENDER_SAMPLES) {
+				active = false;
+				previousFootprint = null;
+				return true;
+			}
+			return false;
+		}
+
+		private static boolean sameFootprint(Rectangle previous, Rectangle current) {
+			return previous == null ? current == null : previous.equals(current);
+		}
+
+		// A real placement/configuration/other-obstacle change takes precedence.
+		public void bypass(Object root) {
+			cancel();
+			mountedRoot = root;
+		}
+
+		public void cancel() {
+			active = false;
+			renderSamples = 0;
+			stableSamples = 0;
+			previousFootprint = null;
+		}
+
+		public boolean isActive() {
+			return active;
+		}
 	}
 
 	private static String describeForDiagnostics(Rectangle bounds) {

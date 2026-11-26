@@ -43,6 +43,7 @@ import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.config.RuneLiteConfig;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.input.KeyManager;
@@ -73,6 +74,8 @@ public class ChatXL extends Plugin {
 	private Configurations config;
 	@Inject
 	private ConfigManager configManager;
+	@Inject
+	private RuneLiteConfig runeLiteConfig;
 	@Inject
 	private DebugManager debugManager;
 	@Inject
@@ -167,7 +170,8 @@ public class ChatXL extends Plugin {
 		privateChatLayout = new PrivateChatLayout(client, config, configManager, privateChatOverlay);
 		overlayManager.add(privateChatOverlay);
 		chatRebuildCoordinator = new ChatRebuildCoordinator(client, clientThread, config, chatboxService, performanceMetrics);
-		chatboxHotkey = new ChatboxHotkey(clientThread, config, chatboxService, keyManager, this::clearChatHistory);
+		chatboxHotkey = new ChatboxHotkey(clientThread, config, chatboxService, keyManager, this::clearChatHistory, runeLiteConfig::dragHotkey);
+		chatboxService.setOverlayHotkeyHeld(chatboxHotkey::overlayHotkeyHeld);
 		chatboxHotkey.activate();
 		fontMeasurementService = new FontMeasurementService(client, performanceMetrics);
 		fontLayoutService = new FontLayoutService(client, config, fontMeasurementService, performanceMetrics);
@@ -319,6 +323,9 @@ public class ChatXL extends Plugin {
 		}
 
 		if (event.getGameState() != GameState.LOGGED_IN) {
+			if (chatboxHotkey != null) {
+				chatboxHotkey.clearOverlayHotkey();
+			}
 			return;
 		}
 
@@ -452,6 +459,9 @@ public class ChatXL extends Plugin {
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event) {
 		debugManager.onConfigChanged(event);
+		if (chatboxHotkey != null && event != null && RuneLiteConfig.GROUP_NAME.equals(event.getGroup()) && "dragHotkey".equals(event.getKey())) {
+			chatboxHotkey.clearOverlayHotkey();
+		}
 
 		if (chatboxService != null && chatboxService.isChatboxOverlayPlacementChange(event)) {
 			/* A context-menu reset clears preferredLocation; unlike a native drag,

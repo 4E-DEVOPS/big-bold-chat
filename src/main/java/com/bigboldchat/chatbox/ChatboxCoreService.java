@@ -1,6 +1,8 @@
 package com.bigboldchat.chatbox;
 
 import java.awt.Rectangle;
+import java.util.List;
+import java.util.function.BooleanSupplier;
 
 import com.bigboldchat.debug.PerformanceMetrics;
 import com.bigboldchat.layout.ChatboxBounds;
@@ -55,6 +57,11 @@ public abstract class ChatboxCoreService {
 	protected final SideContainerLayout sideContainerLayout;
 	protected final ChatboxPlacement chatboxPlacement;
 	protected final ChatboxBounds.Tracker chatboxBoundsTracker;
+	private BooleanSupplier overlayHotkeyHeld = () -> false;
+	private final InterfaceBounds.ModalRelayout modalRelayout = new InterfaceBounds.ModalRelayout();
+	private List<Rectangle> modalOtherObstacles;
+	private boolean modalCommittedButtonsHidden;
+	private ChatboxLayout modalCommittedLayout;
 
 	protected boolean resizedLayoutApplied;
 	protected boolean manualSuppressionActive;
@@ -394,6 +401,7 @@ public abstract class ChatboxCoreService {
 		if (layout == ChatboxLayout.FIXED) {
 			cancelLoginStabilization();
 			chatboxBoundsTracker.reset();
+			modalRelayout.cancel();
 			return;
 		}
 
@@ -430,6 +438,7 @@ public abstract class ChatboxCoreService {
 		// Restart persistent collision tracking from the settled geometry.
 		cancelLoginStabilization();
 		chatboxBoundsTracker.reset();
+		modalRelayout.cancel();
 
 		final ResizeResult settled = applySize(width, height);
 		if (settled.isApplied()) {
@@ -1041,6 +1050,8 @@ public abstract class ChatboxCoreService {
 		geometryState = null;
 		chatboxPlacement.reset();
 		chatboxBoundsTracker.reset();
+		modalRelayout.bypass(null);
+		modalOtherObstacles = null;
 		collisionInterfaceOverrides = null;
 		onDialoguePromptsReset();
 		nativeRevealActive = false;
@@ -1067,6 +1078,8 @@ public abstract class ChatboxCoreService {
 		normalChatboxSaveObserved = true;
 		geometryState = null;
 		chatboxBoundsTracker.reset();
+		modalRelayout.bypass(null);
+		modalOtherObstacles = null;
 		collisionInterfaceOverrides = null;
 		onDialoguePromptsReset();
 		sideContainerLayout.reset();
@@ -1152,6 +1165,8 @@ public abstract class ChatboxCoreService {
 
 		geometryState = null;
 		chatboxBoundsTracker.reset();
+		modalRelayout.bypass(null);
+		modalOtherObstacles = null;
 		collisionInterfaceOverrides = null;
 		chatboxPlacement.reset();
 		resetChatPresentation();
@@ -1216,6 +1231,10 @@ public abstract class ChatboxCoreService {
 	}
 
 	protected void onDialoguePromptsReset() {
+	}
+
+	public void setOverlayHotkeyHeld(BooleanSupplier overlayHotkeyHeld) {
+		this.overlayHotkeyHeld = overlayHotkeyHeld;
 	}
 
 	public ResizeResult onScriptPreFired(ScriptPreFired event, int width, int height) {
@@ -1393,6 +1412,123 @@ public abstract class ChatboxCoreService {
 		return applySize(width, height);
 	}
 
+	// Reapply committed inner geometry without changing placement or collision ownership.
+	private ResizeResult reassertModalCommittedGeometry(int width, int height, ChatboxLayout layout) {
+		if (!canDeferModalGeometry(width, height, layout)) {
+			return ResizeResult.NOT_APPLIED;
+		}
+		final Widget slot = getSlot(layout);
+		final Widget universe = client.getWidget(InterfaceID.Chatbox.UNIVERSE);
+		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
+		if (slot == null || universe == null || chatArea == null) {
+			return ResizeResult.NOT_APPLIED;
+		}
+		final Widget parent = universe.getParent();
+		if (parent == null || parent.getId() != slot.getId()) {
+			return ResizeResult.NOT_APPLIED;
+		}
+
+		final Rectangle desired = geometryState.desiredBounds;
+		final Rectangle effective = geometryState.effectiveBounds;
+		// Native placement changes take precedence over modal settlement.
+		if (!desired.equals(slot.getBounds()) || !desired.equals(chatboxPlacement.hostBounds(slot))) {
+			return ResizeResult.NOT_APPLIED;
+		}
+
+		final int relativeX = Math.max(0, effective.x - desired.x);
+		final int relativeY = Math.max(0, effective.y - desired.y);
+		final int bodyHeight = ChatboxGeometry.bodyHeight(effective.height, chatboxButtonsHidden);
+		if (universe.getRelativeX() != relativeX || universe.getRelativeY() != relativeY || universe.getWidth() != effective.width || universe.getHeight() != effective.height || chatArea.getWidth() != effective.width || chatArea.getHeight() != bodyHeight || !controlsMatch(effective.width)) {
+			applyInnerGeometry(universe, chatArea, relativeX, relativeY, effective.width, effective.height, bodyHeight, !controlsMatch(effective.width));
+		}
+		return new ResizeResult(true, false, false);
+	}
+
+	// Preserve the native management fallback during resets and mouse release.
+	private boolean overlayManagementActive() {
+		return (isChatboxPointerHeld() && overlayHotkeyHeld.getAsBoolean()) || hasNativeCornerOverlays();
+	}
+
+	private boolean hasNativeCornerOverlays() {
+		return overlayManager != null && overlayManager.anyMatch(overlay -> {
+			final String name = overlay.getName();
+			return name != null && name.startsWith("CornerOverlay_");
+		});
+	}
+
+	// Only defer a modal transition while the committed geometry remains eligible.
+	private boolean canDeferModalGeometry(int width, int height, ChatboxLayout layout) {
+		return resizedLayoutApplied && geometryState != null && modalCommittedLayout == layout && modalLayoutMatches(layout) && geometryState.configuredWidth == width && geometryState.configuredHeight == height && modalCommittedButtonsHidden == chatboxButtonsHidden && (lastChatboxCanvasWidth <= 0 || (lastChatboxCanvasWidth == client.getCanvasWidth() && lastChatboxCanvasHeight == client.getCanvasHeight())) && !loginGeometryPending && !canvasResizePending && !isDialogueHostSessionActive() && !overlayManagementActive() && pendingNormalRestoreBounds == null && !manualSuppressionActive && (!nativeRefreshActive || modalRelayout.isActive()) && !controlClickPending;
+	}
+
+	private boolean modalLayoutMatches(ChatboxLayout layout) {
+		final int topLevel = client.getTopLevelInterfaceId();
+		return layout == ChatboxLayout.RESIZABLE_CLASSIC && topLevel == InterfaceID.TOPLEVEL_OSRS_STRETCH || layout == ChatboxLayout.RESIZABLE_MODERN && topLevel == InterfaceID.TOPLEVEL_PRE_EOC;
+	}
+
+	private boolean observeModalOtherObstacles() {
+		final List<Rectangle> current = InterfaceBounds.otherObstacleBounds(client);
+		final boolean unchanged = modalOtherObstacles == null || modalOtherObstacles.equals(current);
+		modalOtherObstacles = current;
+		return unchanged;
+	}
+
+	// Return the prior accepted geometry only while the shared transaction is active.
+	private ResizeResult deferModalGeometry(int width, int height, ChatboxLayout layout, InterfaceBounds.Overrides suppliedOverrides) {
+		if (!modalLayoutMatches(layout)) {
+			modalRelayout.bypass(null);
+			modalOtherObstacles = null;
+			return ResizeResult.NOT_APPLIED;
+		}
+		final Widget root = InterfaceBounds.mainModalRoot(client);
+		final boolean otherObstaclesUnchanged = observeModalOtherObstacles();
+		if (suppliedOverrides != null || !canDeferModalGeometry(width, height, layout) || !otherObstaclesUnchanged) {
+			modalRelayout.bypass(root);
+			return ResizeResult.NOT_APPLIED;
+		}
+		if (modalRelayout.beforeGeometryUpdate(root)) {
+			final ResizeResult committed = reassertModalCommittedGeometry(width, height, layout);
+			if (committed.isApplied()) {
+				return committed;
+			}
+			modalRelayout.bypass(root);
+		}
+		return ResizeResult.NOT_APPLIED;
+	}
+
+	private void reconcileModalRelayout(int width, int height, ChatboxLayout layout) {
+		if (!modalLayoutMatches(layout)) {
+			modalRelayout.bypass(null);
+			modalOtherObstacles = null;
+			return;
+		}
+		final Widget root = InterfaceBounds.mainModalRoot(client);
+		if (!modalRelayout.needsObservation(root)) {
+			return;
+		}
+		final boolean otherObstaclesUnchanged = observeModalOtherObstacles();
+		boolean solve;
+		if (!canDeferModalGeometry(width, height, layout) || !otherObstaclesUnchanged) {
+			modalRelayout.bypass(root);
+			solve = true;
+		} else {
+			solve = modalRelayout.beforeRender(root, InterfaceBounds.mainModalContentBounds(client));
+			if (!solve && modalRelayout.isActive()) {
+				if (!reassertModalCommittedGeometry(width, height, layout).isApplied()) {
+					modalRelayout.bypass(root);
+					solve = true;
+				}
+			}
+		}
+		if (solve) {
+			final ResizeResult settled = applySize(width, height);
+			if (settled.isApplied()) {
+				widthRefreshPending |= settled.isWidthChanged();
+				heightRefreshPending |= settled.isHeightChanged();
+			}
+		}
+	}
+
 	public ResizeResult applySize(int width, int height) {
 		return applySizeInternal(width, height, true, null);
 	}
@@ -1411,6 +1547,11 @@ public abstract class ChatboxCoreService {
 		if (!isResizableLayout(layout)) {
 			handleInactiveLayout(layout);
 			return ResizeResult.NOT_APPLIED;
+		}
+
+		final ResizeResult deferred = deferModalGeometry(width, height, layout, suppliedOverrides);
+		if (deferred.isApplied()) {
+			return deferred;
 		}
 
 		final Widget chatArea = client.getWidget(InterfaceID.Chatbox.CHATAREA);
@@ -1487,10 +1628,9 @@ public abstract class ChatboxCoreService {
 			effectiveBounds = new Rectangle(desiredBounds);
 			geometryState = new GeometryState(width, height, desiredBounds, effectiveBounds);
 		} else {
-			final ChatboxBounds.Result effective = ChatboxBounds.resolve(client, placement, chatboxButtonsHidden, chatboxBoundsTracker, interfaceOverrides);
-			collisionResult = effective;
-			effectiveBounds = effective.getEffectiveBounds();
-			geometryState = new GeometryState(width, height, effective.getDesiredBounds(), effectiveBounds);
+			collisionResult = ChatboxBounds.resolve(client, placement, chatboxButtonsHidden, chatboxBoundsTracker, interfaceOverrides);
+			effectiveBounds = collisionResult.getEffectiveBounds();
+			geometryState = new GeometryState(width, height, collisionResult.getDesiredBounds(), effectiveBounds);
 		}
 		onChatboxCollisionSolved(placement, interfaceOverrides, collisionResult, slot, universe, width, height, requestedWidth, requestedHeight);
 		final Rectangle hostBounds = selectChatboxHostBounds(desiredBounds, effectiveBounds);
@@ -1498,10 +1638,8 @@ public abstract class ChatboxCoreService {
 		final int hostHeight = hostBounds.height;
 		final int effectiveWidth = effectiveBounds.width;
 		final int effectiveHeight = effectiveBounds.height;
-		final int effectiveX = hostBounds.equals(effectiveBounds)
-				? 0 : Math.max(0, effectiveBounds.x - desiredBounds.x);
-		final int effectiveY = hostBounds.equals(effectiveBounds)
-				? 0 : Math.max(0, effectiveBounds.y - desiredBounds.y);
+		final int effectiveX = hostBounds.equals(effectiveBounds) ? 0 : Math.max(0, effectiveBounds.x - desiredBounds.x);
+		final int effectiveY = hostBounds.equals(effectiveBounds) ? 0 : Math.max(0, effectiveBounds.y - desiredBounds.y);
 		final int effectiveBodyHeight = ChatboxGeometry.bodyHeight(effectiveHeight, chatboxButtonsHidden);
 		final boolean temporaryHostPositionChanged = updateDialogueTemporaryHost(slot, placement, hostBounds, restoreTemporaryHost);
 		final boolean hostPositionChanged = configuredHostPositionChanged || temporaryHostPositionChanged;
@@ -1526,6 +1664,8 @@ public abstract class ChatboxCoreService {
 		syncChatPresentation();
 
 		resizedLayoutApplied = true;
+		modalCommittedButtonsHidden = chatboxButtonsHidden;
+		modalCommittedLayout = layout;
 
 		recordApply(started, widthChanged, heightChanged);
 
@@ -1592,14 +1732,24 @@ public abstract class ChatboxCoreService {
 	public void reconcileBeforeRender(int width, int height) {
 		final ChatboxLayout layout = getLayout();
 		if (!isResizableLayout(layout)) {
+			modalRelayout.bypass(null);
+			modalOtherObstacles = null;
 			clearCanvasResize();
 			return;
 		}
 
 		if (layout != ChatboxLayout.RESIZABLE_MODERN) {
-			if (lastChatboxCanvasWidth > 0 && (lastChatboxCanvasWidth != client.getCanvasWidth() || lastChatboxCanvasHeight != client.getCanvasHeight())) {
+			final boolean canvasChanged = lastChatboxCanvasWidth > 0 && (lastChatboxCanvasWidth != client.getCanvasWidth() || lastChatboxCanvasHeight != client.getCanvasHeight());
+			if (canvasChanged) {
 				markNormalChatboxPlacementDirty();
 			}
+			if (!canvasChanged && layout == ChatboxLayout.RESIZABLE_CLASSIC) {
+				reconcileModalRelayout(width, height, layout);
+			} else if (canvasChanged) {
+				modalRelayout.bypass(InterfaceBounds.mainModalRoot(client));
+				modalOtherObstacles = null;
+			}
+
 			lastChatboxCanvasWidth = Math.max(0, client.getCanvasWidth());
 			lastChatboxCanvasHeight = Math.max(0, client.getCanvasHeight());
 			clearCanvasResize();
@@ -1667,6 +1817,13 @@ public abstract class ChatboxCoreService {
 			}
 		}
 
+		if (!canvasResizePending) {
+			reconcileModalRelayout(width, height, layout);
+		} else {
+			modalRelayout.bypass(InterfaceBounds.mainModalRoot(client));
+			modalOtherObstacles = null;
+		}
+
 		// Only a settled NORMAL host is eligible to refresh the durable center.
 		reconcileNormalChatboxPlacement();
 
@@ -1723,6 +1880,8 @@ public abstract class ChatboxCoreService {
 		}
 		geometryState = null;
 		chatboxBoundsTracker.reset();
+		modalRelayout.bypass(null);
+		modalOtherObstacles = null;
 		collisionInterfaceOverrides = null;
 		final ResizeResult result = applySizeInternal(width, height, true, null);
 		if (result.isApplied()) {
