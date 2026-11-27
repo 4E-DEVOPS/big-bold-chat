@@ -11,7 +11,6 @@ import net.runelite.client.callback.ClientThread;
  * Coalesces configured chatbox geometry changes and native chat reconstruction.
  */
 public final class ChatRebuildCoordinator {
-	private final Client client;
 	private final ClientThread clientThread;
 	private final Configurations config;
 	private final ChatboxCoreService chatboxService;
@@ -42,7 +41,6 @@ public final class ChatRebuildCoordinator {
 	private int committedHeight;
 
 	public ChatRebuildCoordinator(Client client, ClientThread clientThread, Configurations config, ChatboxCoreService chatboxService, PerformanceMetrics performanceMetrics) {
-		this.client = client;
 		this.clientThread = clientThread;
 		this.config = config;
 		this.chatboxService = chatboxService;
@@ -126,8 +124,7 @@ public final class ChatRebuildCoordinator {
 				performanceMetrics.recordRefreshChat(reason);
 			}
 
-			client.refreshChat();
-			chatboxService.restoreRebuildScroll(scrollBaseline);
+			chatboxService.refreshChatPreservingScroll(scrollBaseline, true);
 		} finally {
 			refreshing = false;
 		}
@@ -340,8 +337,7 @@ public final class ChatRebuildCoordinator {
 				performanceMetrics.recordRefreshChat(resolveRefreshReason(widthChanged, heightChanged, explicitReason));
 			}
 
-			client.refreshChat();
-			chatboxService.restoreRebuildScroll(scrollBaseline);
+			chatboxService.refreshChatPreservingScroll(scrollBaseline, true);
 
 			if (trackVisibility) {
 				rememberVisibilityRefresh(explicitReason);

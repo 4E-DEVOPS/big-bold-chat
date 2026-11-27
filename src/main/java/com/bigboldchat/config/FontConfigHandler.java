@@ -1,5 +1,6 @@
 package com.bigboldchat.config;
 
+import com.bigboldchat.chatbox.ChatboxCoreService.ScrollBaseline;
 import com.bigboldchat.dialogue.DialogueCoreService;
 import com.bigboldchat.dialogue.DialogueFontService;
 import com.bigboldchat.chat.FontLayoutService;
@@ -45,44 +46,39 @@ public final class FontConfigHandler {
 			return false;
 		}
 
-		if (CHAT_FONT_KEY.equals(event.getKey())) {
-			// Invalidate cached font layout before rebuilding the chat.
-			if (layoutService != null) {
-				layoutService.refreshActiveFontState();
-				layoutService.reset();
-			}
-
-			if (performanceMetrics != null) {
-				performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.FONT_CHANGED);
-			}
-
-			clientThread.invokeLater(() -> {
-				if (active) {
-					client.refreshChat();
-					if (inputFontService != null) {
-						inputFontService.sync();
-					}
+		final boolean chatFont = CHAT_FONT_KEY.equals(event.getKey());
+		if (chatFont || INPUT_FONT_KEY.equals(event.getKey())) {
+			if (chatFont) {
+				// Invalidate cached font layout before rebuilding the chat.
+				if (layoutService != null) {
+					layoutService.refreshActiveFontState();
+					layoutService.reset();
 				}
-			});
-
-			return true;
-		}
-
-		if (INPUT_FONT_KEY.equals(event.getKey())) {
-			clientThread.invokeLater(() -> {
-				if (!active || inputFontService == null) {
-					return;
-				}
-
-				inputFontService.sync();
-
 				if (performanceMetrics != null) {
 					performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.FONT_CHANGED);
 				}
+			}
 
-				client.refreshChat();
+			clientThread.invokeLater(() -> {
+				if (!active || !chatFont && inputFontService == null) {
+					return;
+				}
+				final ScrollBaseline baseline = dialogueService != null ? dialogueService.captureReadyScrollBaseline() : null;
+				if (!chatFont) {
+					inputFontService.sync();
+					if (performanceMetrics != null) {
+						performanceMetrics.recordRefreshChat(PerformanceMetrics.RefreshReason.FONT_CHANGED);
+					}
+				}
+				if (dialogueService != null) {
+					dialogueService.refreshChatPreservingScroll(baseline, false);
+				} else {
+					client.refreshChat();
+				}
+				if (chatFont && inputFontService != null) {
+					inputFontService.sync();
+				}
 			});
-
 			return true;
 		}
 

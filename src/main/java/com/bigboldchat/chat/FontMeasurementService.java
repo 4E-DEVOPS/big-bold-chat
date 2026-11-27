@@ -32,21 +32,15 @@ public final class FontMeasurementService {
 	static final int CHAT_BODY_SCRIPT = 203;
 	static final int CHANNEL_BODY_SCRIPT = 4483;
 
-	/*
-	 * Native Script 4483 rank-icon geometry:
-	 *      [channel] +1px [icon] +1px [username]:
-	 */
+	/* Native Script 4483 rank-icon geometry:
+	 * 	[channel] +1px [icon] +1px [username] */
 	private static final int RANK_ICON_GAP = 1;
 
-	/*
-	 * Native OS separation between:
-	 *      [username] -> [message body]
-	 */
+	/* Native OS separation between:
+	 * 	[username] -> [message body] */
 	private static final int BODY_GAP = 3;
 
-	/*
-	 * Separation between text and scrollbar.
-	 */
+	//Separation between text and scrollbar.
 	private static final int SCROLLBAR_PADDING = 3;
 
 	// Inline <img> tags contribute sprite pixels, not literal text characters.
@@ -60,10 +54,8 @@ public final class FontMeasurementService {
 	// Optional performance instrumentation; null when disabled.
 	private final PerformanceMetrics performanceMetrics;
 
-	/*
-	 * Cache resolved fonts for the current plugin session.
-	 * Failed resolutions are retried on the next request.
-	 */
+	/* Cache resolved fonts for the current plugin session.
+	 * Failed resolutions are retried on the next request. */
 	private final Map<Integer, FontTypeFace> fontCache = new HashMap<>();
 
 	public FontMeasurementService(Client client) {
@@ -76,9 +68,7 @@ public final class FontMeasurementService {
 
 	public FontMeasurementService(Client client, ChatTextNormalizer textNormalizer, PerformanceMetrics performanceMetrics) {
 		this.client = client;
-		this.textNormalizer = textNormalizer != null
-				? textNormalizer
-				: new ChatTextNormalizer(performanceMetrics);
+		this.textNormalizer = textNormalizer != null ? textNormalizer : new ChatTextNormalizer(performanceMetrics);
 		this.performanceMetrics = performanceMetrics;
 	}
 

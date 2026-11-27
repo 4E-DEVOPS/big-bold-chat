@@ -30,14 +30,16 @@ import net.runelite.client.ui.overlay.OverlayManager;
  */
 
 public abstract class ChatboxCoreService {
-
 	protected static final int CHAT_VIEW_ALL = 0;
 	protected static final int CHAT_VIEW_HIDDEN = 1337;
 
 	public static final int CHAT_VISIBILITY = 923;
 	protected static final int CHAT_ONCHATTRANSMIT = 663;
+	private static final int CHAT_BUILD_HISTORY = 84;
+	private static final int CHAT_LAYOUT_CHANGE = 901;
 	private static final int CHAT_RESIZE = 924;
 	private static final int CHAT_INITIALIZE = 925;
+	private static final int MESSAGE_REBUILD_MAX_CYCLES = 3;
 	protected static final int TOPLEVEL_RELAYOUT = 1972;
 	protected static final int SIDE_CONTAINER_UPDATE = 9336;
 
@@ -113,6 +115,14 @@ public abstract class ChatboxCoreService {
 	private int hopScrollSize;
 	private boolean hopScrollSeeded;
 	private int scrollEpoch;
+	private PendingMessageRebuild pendingMessageRebuild;
+	private PendingMessageRebuild nativeTopRebuild;
+	private int nativeTopDepth;
+	private PendingMessageRebuild layoutScroll;
+	private ChatboxLayout lastScrollLayout = ChatboxLayout.UNKNOWN;
+	private Widget lastScrollArea;
+	private int lastScrollHeight;
+	private int lastScrollView;
 	protected GeometryState geometryState;
 	protected InterfaceBounds.Overrides collisionInterfaceOverrides;
 
@@ -423,7 +433,7 @@ public abstract class ChatboxCoreService {
 
 		if (isFixedLayout(layout)) {
 			if (hopScrollBaseline != null) {
-				if (!isFixedScrollReady(client.getWidget(InterfaceID.Chatbox.SCROLLAREA))) {
+				if (!isNativeScrollReady(client.getWidget(InterfaceID.Chatbox.SCROLLAREA))) {
 					return;
 				}
 				// Failsafe if the expected initialization boundary was not observed.
@@ -619,6 +629,10 @@ public abstract class ChatboxCoreService {
 			restoreScrollBaseline(baseline, widthChanged || heightChanged);
 		}
 
+		if (widthChanged && baseline != null && baseline.messageAnchor != null && pendingMessageRebuild == null) {
+			pendingMessageRebuild = createMessageRebuild(baseline, true);
+		}
+
 		if (widthChanged || heightChanged) {
 			// Queue retained-chat reconstruction for the render boundary.
 			widthRefreshPending |= widthChanged;
@@ -637,15 +651,11 @@ public abstract class ChatboxCoreService {
 		}
 
 		final Widget area = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
-		if (area == null || area.isHidden() || area.getWidth() <= 0 || area.getHeight() <= 0 || area.getScrollHeight() <= 0) {
-			return;
-		}
-		final int scrollY = area.getScrollY();
-		if (scrollY < 0 || scrollY > Math.max(0, area.getScrollHeight() - area.getHeight())) {
+		if (!hasScrollGeometry(area) || area.isHidden()) {
 			return;
 		}
 		// During initialization, do not treat unsynchronized provisional rows as an anchor.
-		if (loginGeometryPending && (client.getVarcIntValue(VarClientID.CHAT_LASTSCROLLPOS) != scrollY || client.getVarcIntValue(VarClientID.CHAT_LASTSCROLLSIZE) != area.getScrollHeight())) {
+		if (loginGeometryPending && !isNativeScrollReady(area)) {
 			return;
 		}
 
@@ -678,7 +688,7 @@ public abstract class ChatboxCoreService {
 		final Widget area = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
 		final ScrollBaseline baseline = liveBaseline;
 		boolean restorePosition = false;
-		if (area != chatResizeArea || layout != chatResizeLayout || area == null || area.isHidden() || area.getWidth() <= 0 || area.getHeight() <= 0 || area.getScrollHeight() <= 0 || client.getGameState() != GameState.LOGGED_IN || hopScrollBaseline != null || isDialogueHostSessionActive()) {
+		if (area != chatResizeArea || layout != chatResizeLayout || !hasScrollDimensions(area) || area.isHidden() || client.getGameState() != GameState.LOGGED_IN || hopScrollBaseline != null || isDialogueHostSessionActive()) {
 			// Keep any geometry refresh, but never restore into an unrelated or invalid host.
 			liveBaseline = null;
 		} else {
@@ -693,6 +703,13 @@ public abstract class ChatboxCoreService {
 					case BOTTOM: restorePosition = scrollY != bottom;
 						break;
 					case MIDDLE: restorePosition = area.getScrollHeight() == chatResizeContentHeight && scrollY + area.getHeight() != baseline.viewportBottom;
+						if (!restorePosition && !liveWidthChanged && !liveHeightChanged) {
+							// A native content-height adjustment may move the message without resizing the viewport.
+							final Integer target = resolveMessageAnchor(baseline, area);
+							if (target != null && target != scrollY) {
+								writeScrollPosition(area, target);
+							}
+						}
 						break;
 				}
 			}
@@ -764,6 +781,18 @@ public abstract class ChatboxCoreService {
 
 	private void finishHopScroll() {
 		if (hopScrollBaseline != null && hopScrollSeeded) {
+			final ScrollBaseline baseline = hopScrollBaseline;
+			final Widget area = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
+			if (client.getGameState() == GameState.LOGGED_IN && isNativeScrollReady(area)) {
+				if (baseline.position == ScrollPosition.TOP) {
+					writeScrollPosition(area, 0);
+				} else if (baseline.position == ScrollPosition.MIDDLE) {
+					final Integer target = resolveMessageAnchor(baseline, area, true, false);
+					if (target != null) {
+						writeScrollPosition(area, target);
+					}
+				}
+			}
 			clearHopScroll();
 		}
 	}
@@ -775,14 +804,17 @@ public abstract class ChatboxCoreService {
 		hopScrollSeeded = false;
 	}
 
-	// Fixed uses native geometry; only sample a fully initialized, synchronized viewport.
-	private boolean isFixedScrollReady(Widget area) {
-		if (area == null || area.isHidden() || area.getWidth() <= 0 || area.getHeight() <= 0 || area.getScrollHeight() <= 0) {
-			return false;
-		}
+	private static boolean hasScrollDimensions(Widget area) {
+		return area != null && area.getWidth() > 0 && area.getHeight() > 0 && area.getScrollHeight() > 0;
+	}
 
-		final int scrollY = area.getScrollY();
-		return scrollY >= 0 && scrollY <= Math.max(0, area.getScrollHeight() - area.getHeight()) && client.getVarcIntValue(VarClientID.CHAT_LASTSCROLLPOS) == scrollY && client.getVarcIntValue(VarClientID.CHAT_LASTSCROLLSIZE) == area.getScrollHeight();
+	private static boolean hasScrollGeometry(Widget area) {
+		return hasScrollDimensions(area) && area.getScrollY() >= 0 && area.getScrollY() <= Math.max(0, area.getScrollHeight() - area.getHeight());
+	}
+
+	// Only use a fully initialized, synchronized native viewport.
+	private boolean isNativeScrollReady(Widget area) {
+		return hasScrollGeometry(area) && !area.isHidden() && client.getVarcIntValue(VarClientID.CHAT_LASTSCROLLPOS) == area.getScrollY() && client.getVarcIntValue(VarClientID.CHAT_LASTSCROLLSIZE) == area.getScrollHeight();
 	}
 
 	public ScrollBaseline captureScrollBaseline() {
@@ -796,14 +828,22 @@ public abstract class ChatboxCoreService {
 		}
 
 		final Widget scrollArea = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
-		if (scrollArea == null) {
-			return null;
-		}
-		if (isFixedLayout(layout) && (client.getGameState() != GameState.LOGGED_IN || !isFixedScrollReady(scrollArea))) {
+		if (scrollArea == null || isFixedLayout(layout) && (client.getGameState() != GameState.LOGGED_IN || !isNativeScrollReady(scrollArea))) {
 			return null;
 		}
 
+		final PendingMessageRebuild pending = pendingGeometryRebuild();
+		if (pending != null) {
+			return pending.baseline;
+		}
+		if (pendingMessageRebuild != null && !pendingMessageRebuild.fontChange && pendingMessageRebuild.depth == 0) {
+			pendingMessageRebuild = null;
+		}
 		return captureScrollBaseline(scrollArea);
+	}
+
+	public ScrollBaseline captureReadyScrollBaseline() {
+		return client.getGameState() == GameState.LOGGED_IN && !isDialogueHostSessionActive() && isNativeScrollReady(client.getWidget(InterfaceID.Chatbox.SCROLLAREA)) ? captureScrollBaseline() : null;
 	}
 
 	private ScrollBaseline captureScrollBaseline(Widget scrollArea) {
@@ -820,67 +860,250 @@ public abstract class ChatboxCoreService {
 			position = ScrollPosition.MIDDLE;
 		}
 
-		return new ScrollBaseline(position, scrollY + height, scrollEpoch);
+		final ChatScrollAnchor anchor = position == ScrollPosition.MIDDLE && !isDialogueHostSessionActive() ? ChatScrollAnchor.capture(scrollArea, client.getVarcIntValue(VarClientID.CHAT_VIEW)) : null;
+		return new ScrollBaseline(position, scrollY + height, scrollEpoch, anchor);
 	}
 
 	public void restoreScrollBaseline(ScrollBaseline baseline) {
 		restoreScrollBaseline(baseline, false);
 	}
 
-	protected void restoreRebuildScroll(ScrollBaseline baseline) {
-		restoreScrollBaseline(baseline, true);
+	private PendingMessageRebuild pendingGeometryRebuild() {
+		final PendingMessageRebuild pending = pendingMessageRebuild;
+		return pending != null && !pending.fontChange && validMessageRebuild(pending) && (pending.depth > 0 || pending.area.getScrollY() == pending.scrollY) ? pending : null;
+	}
+
+	private PendingMessageRebuild createMessageRebuild(ScrollBaseline baseline, boolean reanchor) {
+		final Widget area = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
+		return baseline != null && (baseline.messageAnchor != null || baseline.position == ScrollPosition.TOP || !reanchor && baseline.position == ScrollPosition.BOTTOM) && baseline.epoch == scrollEpoch && canPreserveScroll(getLayout()) && hasScrollGeometry(area) && !area.isHidden() && client.getVarcIntValue(VarClientID.CHAT_VIEW) != CHAT_VIEW_HIDDEN ? new PendingMessageRebuild(baseline, area, client.getGameCycle(), client.getVarcIntValue(VarClientID.CHAT_VIEW), !reanchor) : null;
+	}
+
+	public void refreshChatPreservingScroll(ScrollBaseline baseline, boolean reanchor) {
+		final PendingMessageRebuild retained = reanchor ? pendingGeometryRebuild() : null;
+		if (retained != null) {
+			baseline = retained.baseline;
+		} else {
+			if (reanchor && pendingMessageRebuild != null && !pendingMessageRebuild.fontChange && pendingMessageRebuild.baseline == baseline) {
+				// A stale queued anchor must not overwrite a newer user scroll or chat view.
+				baseline = null;
+			}
+			pendingMessageRebuild = createMessageRebuild(baseline, reanchor);
+		}
+		final PendingMessageRebuild requested = pendingMessageRebuild;
+		client.refreshChat();
+		// Do not overwrite an anchor already resolved by a synchronous rebuild.
+		if ((requested == null || pendingMessageRebuild == requested) && (reanchor || isNativeScrollReady(client.getWidget(InterfaceID.Chatbox.SCROLLAREA)))) {
+			restoreScrollBaseline(baseline, reanchor);
+		}
+		if (pendingMessageRebuild != null && pendingMessageRebuild == requested && requested.depth == 0 && requested.area == client.getWidget(InterfaceID.Chatbox.SCROLLAREA)) {
+			requested.scrollY = requested.area.getScrollY();
+		}
+	}
+
+	// A refresh request can precede native reconstruction. Observe only the next matching 663 scope.
+	private void beginMessageRebuild() {
+		final PendingMessageRebuild pending = pendingMessageRebuild;
+		if (pending == null) {
+			return;
+		}
+		if (pending.depth > 0) {
+			pending.depth++;
+			return;
+		}
+		if (!validMessageRebuild(pending) || pending.area.getScrollY() != pending.scrollY) {
+			pendingMessageRebuild = null;
+			return;
+		}
+		pending.depth = 1;
+		pending.width = pending.area.getWidth();
+	}
+
+	private void finishMessageRebuild() {
+		final PendingMessageRebuild pending = pendingMessageRebuild;
+		if (pending == null || pending.depth == 0 || --pending.depth != 0) {
+			return;
+		}
+		pendingMessageRebuild = null;
+		if (!validMessageRebuild(pending) || !isNativeScrollReady(pending.area)) {
+			return;
+		}
+		final ScrollBaseline baseline = pending.baseline;
+		restoreTarget(baseline, pending.area, pending.fontChange, false);
+
+		// A nested relayout can change width after reconstruction has already begun.
+		// Carry the original anchor into the next refresh without extending its lifetime.
+		if (!pending.fontChange && baseline.messageAnchor != null && (pending.area.getWidth() != pending.width || widthRefreshPending)) {
+			pendingMessageRebuild = new PendingMessageRebuild(baseline, pending.area, pending.cycle, pending.view, false);
+		}
+	}
+
+	// Preserve TOP only across a native history rebuild, never across manual scrolling.
+	private void beginNativeTopRebuild() {
+		if (nativeTopDepth++ != 0) {
+			return;
+		}
+		final Widget area = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
+		if (pendingMessageRebuild != null || layoutScroll != null || controlClickPending || !canPreserveScroll(getLayout()) || !isNativeScrollReady(area) || area.getScrollY() != 0 || area.getScrollHeight() <= area.getHeight()) {
+			return;
+		}
+		final int view = client.getVarcIntValue(VarClientID.CHAT_VIEW);
+		if (view != CHAT_VIEW_HIDDEN && (lastScrollArea == null || view == lastScrollView)) {
+			nativeTopRebuild = new PendingMessageRebuild(captureScrollBaseline(area), area, client.getGameCycle(), view, false);
+		}
+	}
+
+	private void finishNativeTopRebuild() {
+		if (nativeTopDepth == 0 || --nativeTopDepth != 0) {
+			return;
+		}
+		final PendingMessageRebuild pending = nativeTopRebuild;
+		nativeTopRebuild = null;
+		if (pending == null || pendingMessageRebuild != null || layoutScroll != null || !validMessageRebuild(pending) || !isNativeScrollReady(pending.area)) {
+			return;
+		}
+		if (pending.area.getScrollY() != 0) {
+			writeScrollPosition(pending.area, 0);
+		}
+	}
+
+	private void clearNativeTopRebuild() {
+		nativeTopRebuild = null;
+		nativeTopDepth = 0;
+	}
+
+	// Script 901 can release owned resizable geometry before native 924 begins.
+	private void beginLayoutScroll(ChatboxLayout layout) {
+		if (layoutScroll != null) {
+			layoutScroll.depth++;
+			return;
+		}
+		if (!supportsScrollPreservation(lastScrollLayout) || !canPreserveScroll(layout) || isFixedLayout(lastScrollLayout) == isFixedLayout(layout) || loginGeometryPending) {
+			return;
+		}
+		final Widget area = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
+		final int view = client.getVarcIntValue(VarClientID.CHAT_VIEW);
+		// A retained viewport may be hidden by its parent during remount.
+		if (area != lastScrollArea || !hasScrollGeometry(area) || area.isSelfHidden() || view != lastScrollView || view == CHAT_VIEW_HIDDEN || !isNativeScrollReady(area) && area.getHeight() != lastScrollHeight) {
+			return;
+		}
+		// Invalidate old queued geometry baselines before capturing the outgoing viewport.
+		scrollEpoch++;
+		pendingMessageRebuild = null;
+		final ScrollBaseline baseline = captureScrollBaseline(area);
+		layoutScroll = new PendingMessageRebuild(baseline, area, client.getGameCycle(), view, false);
+		layoutScroll.depth = 1;
+	}
+
+	private void finishLayoutScroll(ChatboxLayout layout) {
+		final PendingMessageRebuild pending = layoutScroll;
+		if (pending == null || --pending.depth != 0) {
+			return;
+		}
+		layoutScroll = null;
+		if (!validMessageRebuild(pending) || isFixedLayout(lastScrollLayout) == isFixedLayout(layout)) {
+			return;
+		}
+		final Widget area = pending.area;
+		if (!hasScrollDimensions(area)) {
+			return;
+		}
+		final ScrollBaseline baseline = pending.baseline;
+		restoreTarget(baseline, area, false, true);
+		// Reuse the bounded native rebuild scope only if the width changed.
+		if (area.getWidth() != pending.width && (baseline.position != ScrollPosition.MIDDLE || baseline.messageAnchor != null)) {
+			pendingMessageRebuild = new PendingMessageRebuild(baseline, area, client.getGameCycle(), pending.view, false);
+		}
+		lastScrollLayout = layout;
+		lastScrollHeight = area.getHeight();
+		lastScrollView = pending.view;
+	}
+
+	private void clearLayoutScroll() {
+		layoutScroll = null;
+		lastScrollLayout = ChatboxLayout.UNKNOWN;
+		lastScrollArea = null;
+		lastScrollHeight = 0;
+		lastScrollView = CHAT_VIEW_HIDDEN;
+	}
+
+	private boolean canPreserveScroll(ChatboxLayout layout) {
+		return hopScrollBaseline == null && client.getGameState() == GameState.LOGGED_IN && supportsScrollPreservation(layout) && !isDialogueHostSessionActive();
+	}
+
+	private boolean validMessageRebuild(PendingMessageRebuild pending) {
+		final int elapsed = client.getGameCycle() - pending.cycle;
+		return elapsed >= 0 && elapsed <= MESSAGE_REBUILD_MAX_CYCLES && pending.baseline.epoch == scrollEpoch && canPreserveScroll(getLayout()) && pending.area == client.getWidget(InterfaceID.Chatbox.SCROLLAREA) && !pending.area.isHidden() && pending.view == client.getVarcIntValue(VarClientID.CHAT_VIEW);
 	}
 
 	protected void restoreScrollBaseline(ScrollBaseline baseline, boolean reanchor) {
 		// Do not let nested initialization or an old queued rebuild replace the hop anchor.
-		if (hopScrollBaseline != null) {
-			return;
-		}
-		if (baseline != null && baseline.epoch != scrollEpoch) {
+		if (hopScrollBaseline != null || baseline == null || baseline.epoch != scrollEpoch) {
 			return;
 		}
 		final ChatboxLayout layout = getLayout();
-		if (baseline == null || !supportsScrollPreservation(layout)) {
+		if (!supportsScrollPreservation(layout)) {
 			return;
 		}
 
 		final Widget scrollArea = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
-		if (scrollArea == null) {
-			return;
-		}
-		if (isFixedLayout(layout) && (client.getGameState() != GameState.LOGGED_IN || !isFixedScrollReady(scrollArea))) {
+		if (scrollArea == null || isFixedLayout(layout) && (client.getGameState() != GameState.LOGGED_IN || !isNativeScrollReady(scrollArea))) {
 			return;
 		}
 
+		final PendingMessageRebuild pending = pendingGeometryRebuild();
+		if (pending != null && pending.baseline == baseline && pending.depth > 0) {
+			return;
+		}
 		final int height = Math.max(0, scrollArea.getHeight());
 		if (reanchor && isResizableLayout(layout) && baseline.position != ScrollPosition.TOP) {
 			reanchorScrollBottom(scrollArea, height);
 		}
 
-		final int scrollHeight = Math.max(0, scrollArea.getScrollHeight());
-		final int bottom = Math.max(0, scrollHeight - height);
-		final int target;
+		restoreTarget(baseline, scrollArea, false, true);
+		if (pending != null && pending.baseline == baseline) {
+			pending.scrollY = scrollArea.getScrollY();
+		}
+	}
 
+	// Immediate geometry uses pixel fallback; completed native rebuilds keep their seeded position.
+	private void restoreTarget(ScrollBaseline baseline, Widget area, boolean fontChange, boolean pixelFallback) {
+		final int height = Math.max(0, area.getHeight());
+		final int bottom = Math.max(0, area.getScrollHeight() - height);
 		switch (baseline.position) {
 			case TOP:
-				target = 0;
+				writeScrollPosition(area, 0);
 				break;
 			case BOTTOM:
-				target = bottom;
+				writeScrollPosition(area, bottom);
 				break;
 			case MIDDLE:
-				target = Math.max(0, Math.min(bottom, baseline.viewportBottom - height));
+				final Integer target = resolveMessageAnchor(baseline, area, false, fontChange);
+				if (target != null) {
+					writeScrollPosition(area, target);
+				} else if (pixelFallback) {
+					writeScrollPosition(area, Math.max(0, Math.min(bottom, baseline.viewportBottom - height)));
+				}
 				break;
-			default:
-				return;
 		}
+	}
 
-		if (scrollArea.getScrollY() != target) {
-			scrollArea.setScrollY(target);
+	private Integer resolveMessageAnchor(ScrollBaseline baseline, Widget area) {
+		return resolveMessageAnchor(baseline, area, false, false);
+	}
+
+	private Integer resolveMessageAnchor(ScrollBaseline baseline, Widget area, boolean hopping, boolean fontChange) {
+		if (baseline.epoch != scrollEpoch || baseline.messageAnchor == null || isDialogueHostSessionActive()) {
+			return null;
 		}
+		return baseline.messageAnchor.resolve(area, client.getVarcIntValue(VarClientID.CHAT_VIEW), hopping, fontChange);
+	}
 
+	private void writeScrollPosition(Widget area, int target) {
+		if (area.getScrollY() != target) {
+			area.setScrollY(target);
+		}
 		client.setVarcIntValue(VarClientID.CHAT_LASTSCROLLPOS, target);
-		client.setVarcIntValue(VarClientID.CHAT_LASTSCROLLSIZE, scrollArea.getScrollHeight());
+		client.setVarcIntValue(VarClientID.CHAT_LASTSCROLLSIZE, area.getScrollHeight());
 	}
 
 	protected void reanchorScrollBottom(Widget scrollArea, int height) {
@@ -985,6 +1208,7 @@ public abstract class ChatboxCoreService {
 			return false;
 		}
 
+		pendingMessageRebuild = null;
 		controlClickPending = true;
 		return true;
 	}
@@ -1252,6 +1476,9 @@ public abstract class ChatboxCoreService {
 		}
 
 		cancelChatResizeScroll();
+		pendingMessageRebuild = null;
+		clearNativeTopRebuild();
+		clearLayoutScroll();
 
 		if (gameState == GameState.HOPPING) {
 			captureHopScroll();
@@ -1372,6 +1599,9 @@ public abstract class ChatboxCoreService {
 
 	// Releases owned widget geometry and restores RuneLite's native chatbox layout.
 	public void restoreNativeSize() {
+		pendingMessageRebuild = null;
+		clearNativeTopRebuild();
+		clearLayoutScroll();
 		cancelChatResizeScroll();
 		clearHopScroll();
 		// Releases a pending close guard when ChatXL is disabled mid-dialogue.
@@ -1463,8 +1693,17 @@ public abstract class ChatboxCoreService {
 
 		final ChatboxLayout layout = getLayout();
 		final int scriptId = event.getScriptId();
+		if (scriptId == CHAT_LAYOUT_CHANGE) {
+			beginLayoutScroll(layout);
+		}
 		if (scriptId == CHAT_INITIALIZE && supportsScrollPreservation(layout)) {
 			seedHopScroll();
+		}
+		if (scriptId == CHAT_ONCHATTRANSMIT) {
+			beginMessageRebuild();
+		}
+		if (scriptId == CHAT_ONCHATTRANSMIT || scriptId == CHAT_BUILD_HISTORY) {
+			beginNativeTopRebuild();
 		}
 
 		if (!isResizableLayout(layout)) {
@@ -1549,8 +1788,22 @@ public abstract class ChatboxCoreService {
 
 		final ChatboxLayout layout = getLayout();
 		final int scriptId = event.getScriptId();
+		final ResizeResult result = onScriptPostFired(scriptId, layout, width, height);
+		if (scriptId == CHAT_LAYOUT_CHANGE) {
+			finishLayoutScroll(getLayout());
+		}
+		return result;
+	}
+
+	private ResizeResult onScriptPostFired(int scriptId, ChatboxLayout layout, int width, int height) {
 		if (scriptId == CHAT_INITIALIZE && supportsScrollPreservation(layout)) {
 			finishHopScroll();
+		}
+		if (scriptId == CHAT_ONCHATTRANSMIT) {
+			finishMessageRebuild();
+		}
+		if (scriptId == CHAT_ONCHATTRANSMIT || scriptId == CHAT_BUILD_HISTORY) {
+			finishNativeTopRebuild();
 		}
 
 		if (!isResizableLayout(layout)) {
@@ -1963,6 +2216,10 @@ public abstract class ChatboxCoreService {
 	 * only an aligned normal host for durable placement updates.
 	 */
 	public void reconcileBeforeRender(int width, int height) {
+		clearNativeTopRebuild();
+		if (pendingMessageRebuild != null && (pendingMessageRebuild.depth != 0 || !validMessageRebuild(pendingMessageRebuild) || pendingMessageRebuild.area.getScrollY() != pendingMessageRebuild.scrollY)) {
+			pendingMessageRebuild = null;
+		}
 		// A synchronous script should have completed before rendering. Release an unmatched scope.
 		if (chatResizeDepth > 0) {
 			widthRefreshPending |= liveWidthChanged;
@@ -1970,6 +2227,17 @@ public abstract class ChatboxCoreService {
 			cancelChatResizeScroll();
 		}
 		final ChatboxLayout layout = getLayout();
+		// No layout script scope may survive to rendering; remember only a usable outgoing host.
+		layoutScroll = null;
+		final Widget scrollArea = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
+		if (client.getGameState() == GameState.LOGGED_IN && supportsScrollPreservation(layout) && !isDialogueHostSessionActive() && isNativeScrollReady(scrollArea)) {
+			lastScrollLayout = layout;
+			lastScrollArea = scrollArea;
+			lastScrollHeight = scrollArea.getHeight();
+			lastScrollView = client.getVarcIntValue(VarClientID.CHAT_VIEW);
+		} else {
+			clearLayoutScroll();
+		}
 		if (!isResizableLayout(layout)) {
 			modalRelayout.bypass(null);
 			modalOtherObstacles = null;
@@ -2180,11 +2448,34 @@ public abstract class ChatboxCoreService {
 		private final ScrollPosition position;
 		private final int viewportBottom;
 		private final int epoch;
+		private final ChatScrollAnchor messageAnchor;
 
-		private ScrollBaseline(ScrollPosition position, int viewportBottom, int epoch) {
+		private ScrollBaseline(ScrollPosition position, int viewportBottom, int epoch, ChatScrollAnchor messageAnchor) {
 			this.position = position;
 			this.viewportBottom = viewportBottom;
 			this.epoch = epoch;
+			this.messageAnchor = messageAnchor;
+		}
+	}
+
+	private static final class PendingMessageRebuild {
+		private final ScrollBaseline baseline;
+		private final Widget area;
+		private final int cycle;
+		private final int view;
+		private final boolean fontChange;
+		private int width;
+		private int scrollY;
+		private int depth;
+
+		private PendingMessageRebuild(ScrollBaseline baseline, Widget area, int cycle, int view, boolean fontChange) {
+			this.baseline = baseline;
+			this.area = area;
+			this.cycle = cycle;
+			this.view = view;
+			this.fontChange = fontChange;
+			this.width = area.getWidth();
+			this.scrollY = area.getScrollY();
 		}
 	}
 
